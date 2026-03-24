@@ -249,7 +249,7 @@ function CreateMealModal({ isOpen, onClose, onCreated, editingMeal }: CreateMeal
       const mealData = {
         name: name.trim(),
         items: items.map(({ food, servings }) => ({
-          foodId: food.id,
+          food_id: food.id,
           servings,
         })),
       };
@@ -330,7 +330,7 @@ function CreateMealModal({ isOpen, onClose, onCreated, editingMeal }: CreateMeal
                         value={sv}
                         min={0.1}
                         step={0.1}
-                        onChange={(e) => onUpdateServings(food.id, parseFloat(e.target.value) || 1)}
+                        onChange={(e) => handleUpdateServings(food.id, parseFloat(e.target.value) || 1)}
                         className="w-16 px-2 py-1.5 text-center text-sm bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
                       />
                       <span className="text-xs text-white/40 shrink-0">srv</span>
@@ -639,7 +639,7 @@ export default function MealsPage() {
             baseUnit: item.baseUnit,
             calories: item.calories,
             protein: item.protein,
-          },
+          } as Food,
           servings: item.servings,
         }))
       );
@@ -679,7 +679,7 @@ export default function MealsPage() {
       const mealData = {
         name: name.trim(),
         items: items.map(({ food, servings }) => ({
-          foodId: food.id,
+          food_id: food.id,
           servings,
         })),
       };

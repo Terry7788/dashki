@@ -24,7 +24,7 @@ router.get('/', (_req: Request, res: Response) => {
       }
 
       // For each meal, get the items
-      const meals = rows || [];
+      const meals = (rows as any[]) || [];
       if (meals.length === 0) {
         return res.json([]);
       }
@@ -54,7 +54,7 @@ router.get('/', (_req: Request, res: Response) => {
             if (err2) {
               console.error('[error] GET /api/meals/saved items', err2);
             }
-            result.push({ ...meal, items: items || [] });
+            result.push({ ...meal, items: (items as any[]) || [] });
             processed++;
             if (processed === meals.length) {
               res.json(result);

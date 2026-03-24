@@ -100,8 +100,8 @@ export function deleteSavedMeal(id: number): Promise<void> {
   return request<void>(`/api/meals/saved/${id}`, { method: 'DELETE' });
 }
 
-export function updateSavedMeal(id: number, data: { name: string; items: { foodId: number; servings: number }[] }): Promise<SavedMeal> {
-  return request<SavedMeal>(`/api/meals/saved/${id}`, { method: 'PUT', body: data });
+export function updateSavedMeal(id: number, data: { name: string; items: { food_id: number; servings: number }[] }): Promise<SavedMeal> {
+  return request<SavedMeal>(`/api/meals/saved/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 }
 
 // ─── Current Meal ─────────────────────────────────────────────────────────────
