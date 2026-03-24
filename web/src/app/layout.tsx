@@ -13,8 +13,10 @@ export const metadata: Metadata = {
   title: 'Dashki — Personal Life Dashboard',
   description:
     'Track your nutrition, fitness, todos, and more — all in one beautiful place.',
+  manifest: '/manifest.json',
   icons: {
-    icon: '/favicon.ico',
+    icon: '/web/favicon.ico',
+    apple: '/web/apple-touch-icon.png',
   },
 };
 
