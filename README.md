@@ -1,6 +1,6 @@
 # Dashki 🧭
 
-Personal life dashboard for Terry — Next.js 14 + Express + SQLite, iOS Liquid Glass aesthetic.
+Personal life dashboard 
 
 ## Stack
 
