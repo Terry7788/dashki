@@ -232,31 +232,41 @@ app.post('/api/admin/import-data', async (req: express.Request, res: express.Res
     
     if (foods && Array.isArray(foods)) {
       // Clear existing foods
-      db.run('DELETE FROM Foods', [], () => {});
+      await new Promise<void>((resolve, reject) => {
+        db.run('DELETE FROM Foods', [], (err) => err ? reject(err) : resolve());
+      });
       
-      const stmt = db.prepare('INSERT INTO Foods (name, base_amount, base_unit, calories, protein, carbs, fat, serving_size_g) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
       for (const food of foods) {
-        stmt.run([food.name, food.base_amount, food.base_unit, food.calories, food.protein, food.carbs, food.fat, food.serving_size_g], (err) => {
-          if (!err) imported++;
+        await new Promise<void>((resolve, reject) => {
+          db.run('INSERT INTO Foods (name, base_amount, base_unit, calories, protein, carbs, fat, serving_size_g) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', 
+            [food.name, food.base_amount, food.base_unit, food.calories, food.protein, food.carbs, food.fat, food.serving_size_g], 
+            (err) => { if (!err) imported++; resolve(); });
         });
       }
-      stmt.finalize();
     }
     
     if (meals && Array.isArray(meals)) {
-      db.run('DELETE FROM SavedMealItems', [], () => {});
-      db.run('DELETE FROM SavedMeals', [], () => {});
+      await new Promise<void>((resolve, reject) => {
+        db.run('DELETE FROM SavedMealItems', [], (err) => err ? reject(err) : resolve());
+      });
+      await new Promise<void>((resolve, reject) => {
+        db.run('DELETE FROM SavedMeals', [], (err) => err ? reject(err) : resolve());
+      });
       
       for (const meal of meals) {
-        db.run('INSERT INTO SavedMeals (id, name, created_at) VALUES (?, ?, ?)', 
-          [meal.id, meal.name, meal.created_at], (err) => {});
+        await new Promise<void>((resolve, reject) => {
+          db.run('INSERT INTO SavedMeals (id, name, created_at) VALUES (?, ?, ?)', 
+            [meal.id, meal.name, meal.created_at], (err) => resolve());
+        });
       }
     }
     
     if (mealItems && Array.isArray(mealItems)) {
       for (const item of mealItems) {
-        db.run('INSERT INTO SavedMealItems (id, meal_id, food_id, servings) VALUES (?, ?, ?, ?)', 
-          [item.id, item.meal_id, item.food_id, item.servings], (err) => {});
+        await new Promise<void>((resolve, reject) => {
+          db.run('INSERT INTO SavedMealItems (id, meal_id, food_id, servings) VALUES (?, ?, ?, ?)', 
+            [item.id, item.meal_id, item.food_id, item.servings], (err) => resolve());
+        });
       }
     }
     
