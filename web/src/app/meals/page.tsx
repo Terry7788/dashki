@@ -207,7 +207,7 @@ function CreateMealModal({ isOpen, onClose, onCreated, editingMeal }: CreateMeal
               baseUnit: item.baseUnit,
               calories: item.calories,
               protein: item.protein,
-            },
+            } as Food,
             servings: item.servings,
           }))
         );

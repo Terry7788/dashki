@@ -29,10 +29,19 @@ router.get('/', (_req: Request, res: Response) => {
         return res.json([]);
       }
 
-      let processed = 0;
-      const result: (typeof meals[0] & { items: unknown[] })[] = [];
+      interface MealRow {
+        id: number;
+        name: string;
+        created_at: string;
+        item_count: number;
+        total_calories: number;
+        total_protein: number;
+      }
 
-      meals.forEach((meal: typeof meals[0]) => {
+      let processed = 0;
+      const result: (MealRow & { items: unknown[] })[] = [];
+
+      meals.forEach((meal: MealRow) => {
         db.all(
           `SELECT smi.id, smi.food_id as foodId, smi.servings,
              f.name, f.base_amount as baseAmount, f.base_unit as baseUnit,
