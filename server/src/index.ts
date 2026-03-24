@@ -231,7 +231,10 @@ app.post('/api/admin/import-data', async (req: express.Request, res: express.Res
     let imported = 0;
     
     if (foods && Array.isArray(foods)) {
-      const stmt = db.prepare('INSERT OR REPLACE INTO Foods (name, base_amount, base_unit, calories, protein, carbs, fat, serving_size_g) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+      // Clear existing foods
+      db.run('DELETE FROM Foods', [], () => {});
+      
+      const stmt = db.prepare('INSERT INTO Foods (name, base_amount, base_unit, calories, protein, carbs, fat, serving_size_g) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
       for (const food of foods) {
         stmt.run([food.name, food.base_amount, food.base_unit, food.calories, food.protein, food.carbs, food.fat, food.serving_size_g], (err) => {
           if (!err) imported++;
@@ -241,15 +244,18 @@ app.post('/api/admin/import-data', async (req: express.Request, res: express.Res
     }
     
     if (meals && Array.isArray(meals)) {
+      db.run('DELETE FROM SavedMealItems', [], () => {});
+      db.run('DELETE FROM SavedMeals', [], () => {});
+      
       for (const meal of meals) {
-        db.run('INSERT OR REPLACE INTO SavedMeals (id, name, created_at) VALUES (?, ?, ?)', 
+        db.run('INSERT INTO SavedMeals (id, name, created_at) VALUES (?, ?, ?)', 
           [meal.id, meal.name, meal.created_at], (err) => {});
       }
     }
     
     if (mealItems && Array.isArray(mealItems)) {
       for (const item of mealItems) {
-        db.run('INSERT OR REPLACE INTO SavedMealItems (id, meal_id, food_id, servings) VALUES (?, ?, ?, ?)', 
+        db.run('INSERT INTO SavedMealItems (id, meal_id, food_id, servings) VALUES (?, ?, ?, ?)', 
           [item.id, item.meal_id, item.food_id, item.servings], (err) => {});
       }
     }
