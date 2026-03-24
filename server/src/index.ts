@@ -256,18 +256,47 @@ app.post('/api/admin/import-data', async (req: express.Request, res: express.Res
       
       for (const meal of meals) {
         await new Promise<void>((resolve, reject) => {
-          db.run('INSERT INTO SavedMeals (id, name, created_at) VALUES (?, ?, ?)', 
-            [meal.id, meal.name, meal.created_at], (err) => resolve());
+          db.run('INSERT INTO SavedMeals (name, created_at) VALUES (?, ?)', 
+            [meal.name, meal.created_at], (err) => resolve());
         });
       }
     }
     
     if (mealItems && Array.isArray(mealItems)) {
+      // Get the mapping of old meal IDs to new meal IDs
+      const oldMeals: any[] = (req.body || {}).meals || [];
+      const mealIdMap: Record<number, number> = {};
+      // We need to query the database to get the new meal IDs in order
+      const newMeals = await new Promise<any[]>((resolve, reject) => {
+        db.all('SELECT id, name FROM SavedMeals', [], (err, rows) => err ? reject(err) : resolve(rows));
+      });
+      
+      // Map old meal names to new IDs
+      for (let i = 0; i < oldMeals.length; i++) {
+        mealIdMap[oldMeals[i].id] = newMeals[i]?.id;
+      }
+      
+      // Get all food IDs to map old food IDs to new ones
+      const allFoods = await new Promise<any[]>((resolve, reject) => {
+        db.all('SELECT id, name FROM Foods', [], (err, rows) => err ? reject(err) : resolve(rows));
+      });
+      const oldFoods: any[] = (req.body || {}).foods || [];
+      const foodIdMap: Record<number, number> = {};
+      for (let i = 0; i < oldFoods.length; i++) {
+        // Match by name
+        const matchingFood = allFoods.find((f: any) => f.name === oldFoods[i].name);
+        foodIdMap[oldFoods[i].id] = matchingFood?.id;
+      }
+      
       for (const item of mealItems) {
-        await new Promise<void>((resolve, reject) => {
-          db.run('INSERT INTO SavedMealItems (id, meal_id, food_id, servings) VALUES (?, ?, ?, ?)', 
-            [item.id, item.meal_id, item.food_id, item.servings], (err) => resolve());
-        });
+        const newMealId = mealIdMap[item.meal_id];
+        const newFoodId = foodIdMap[item.food_id];
+        if (newMealId && newFoodId) {
+          await new Promise<void>((resolve, reject) => {
+            db.run('INSERT INTO SavedMealItems (meal_id, food_id, servings) VALUES (?, ?, ?)', 
+              [newMealId, newFoodId, item.servings], (err) => resolve());
+          });
+        }
       }
     }
     
