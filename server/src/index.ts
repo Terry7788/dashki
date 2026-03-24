@@ -9,7 +9,7 @@ import { logger } from './logger';
 import { initDb, db } from './db';
 import { setIo } from './socket';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { SEED_FOODS } = require('./seed-foods');
+const SEED_FOODS: { name: string; baseAmount: number; baseUnit: string; calories: number; protein: number | null }[] = require('./seed-foods.json');
 import foodsRouter from './routes/foods';
 import mealsRouter from './routes/meals';
 import currentMealRouter from './routes/currentMeal';
