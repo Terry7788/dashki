@@ -6,8 +6,10 @@ import { Server as SocketIOServer } from 'socket.io';
 import OpenAI from 'openai';
 import { logger } from './logger';
 
-import { initDb } from './db';
+import { initDb, db } from './db';
 import { setIo } from './socket';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { SEED_FOODS } = require('./seed-foods');
 import foodsRouter from './routes/foods';
 import mealsRouter from './routes/meals';
 import currentMealRouter from './routes/currentMeal';
@@ -239,9 +241,47 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 
 const PORT = Number(process.env.PORT) || 4001;
 
+// Seed foods from CSV data if database is empty
+async function seedFoodsIfNeeded(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    db.get('SELECT COUNT(*) as count FROM Foods', [], (err, row: { count: number } | undefined) => {
+      if (err) {
+        logger.error('[seed] Error checking food count', err);
+        return reject(err);
+      }
+      
+      if (row && row.count > 0) {
+        logger.info(`[seed] Database already has ${row.count} foods, skipping seed`);
+        return resolve();
+      }
+      
+      logger.info(`[seed] Seeding ${SEED_FOODS.length} foods into database...`);
+      
+      const stmt = db.prepare('INSERT INTO Foods (name, base_amount, base_unit, calories, protein) VALUES (?, ?, ?, ?, ?)');
+      let inserted = 0;
+      
+      for (const food of SEED_FOODS) {
+        stmt.run([food.name, food.baseAmount, food.baseUnit, food.calories, food.protein], (err) => {
+          if (!err) inserted++;
+        });
+      }
+      
+      stmt.finalize((err) => {
+        if (err) {
+          logger.error('[seed] Error seeding foods', err);
+          return reject(err);
+        }
+        logger.info(`[seed] Seeded ${inserted} foods successfully`);
+        resolve();
+      });
+    });
+  });
+}
+
 async function start() {
   try {
     await initDb();
+    await seedFoodsIfNeeded();
     server.listen(PORT, () => {
       logger.info(`[server] Dashki API running on http://localhost:${PORT}`);
     });
