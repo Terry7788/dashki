@@ -1,0 +1,241 @@
+import { Router, Request, Response } from 'express';
+import { db } from '../db';
+import { getIo } from '../socket';
+
+const router = Router();
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function toNumber(value: unknown, fallback: number | null = null): number | null {
+  if (value === undefined || value === null || value === '') return fallback;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+/**
+ * Map a raw DB row into the shape the frontend expects.
+ * We use `calories_per_100g` / `protein_per_100g` / `carbs_per_100g` / `fat_per_100g`
+ * as the primary names, but also expose `calories` and `protein` for backward compat.
+ */
+function mapFood(row: Record<string, unknown>): Record<string, unknown> {
+  const calories = row.calories as number ?? 0;
+  const protein = row.protein as number ?? 0;
+  const carbs = row.carbs as number ?? 0;
+  const fat = row.fat as number ?? 0;
+
+  return {
+    id: row.id,
+    name: row.name,
+    // Canonical per-100g names expected by frontend
+    calories_per_100g: calories,
+    protein_per_100g: protein,
+    carbs_per_100g: carbs,
+    fat_per_100g: fat,
+    serving_size_g: row.serving_size_g ?? null,
+    // Legacy / backward-compat fields
+    calories,
+    protein,
+    baseAmount: row.base_amount ?? 100,
+    baseUnit: row.base_unit ?? 'grams',
+    created_at: row.created_at,
+  };
+}
+
+const SELECT_SQL = `
+  SELECT id, name, base_amount, base_unit, calories, protein, carbs, fat, serving_size_g, created_at
+  FROM Foods
+`;
+
+// ─── GET / — list foods ───────────────────────────────────────────────────────
+
+router.get('/', (req: Request, res: Response) => {
+  const search = ((req.query.search as string) || '').trim();
+  const pattern = search ? `%${search}%` : '%';
+
+  db.all(
+    `${SELECT_SQL} WHERE name LIKE ? ORDER BY name ASC`,
+    [pattern],
+    (err, rows: Record<string, unknown>[]) => {
+      if (err) {
+        console.error('[error] GET /api/foods', err);
+        return res.status(500).json({ error: 'Failed to fetch foods' });
+      }
+      res.json((rows || []).map(mapFood));
+    }
+  );
+});
+
+// ─── GET /:id — single food ───────────────────────────────────────────────────
+
+router.get('/:id', (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id' });
+
+  db.get(
+    `${SELECT_SQL} WHERE id = ?`,
+    [id],
+    (err, row: Record<string, unknown> | undefined) => {
+      if (err) {
+        console.error('[error] GET /api/foods/:id', err);
+        return res.status(500).json({ error: 'Failed to fetch food' });
+      }
+      if (!row) return res.status(404).json({ error: 'Food not found' });
+      res.json(mapFood(row));
+    }
+  );
+});
+
+// ─── POST / — create food ─────────────────────────────────────────────────────
+
+router.post('/', (req: Request, res: Response) => {
+  const body = req.body || {};
+  const { name, baseUnit } = body;
+
+  // Accept both naming conventions from the frontend
+  const baseAmount = toNumber(body.baseAmount ?? body.base_amount) ?? 100;
+  const unit = baseUnit ?? body.base_unit ?? 'grams';
+
+  // Accept calories_per_100g or legacy calories
+  const calories = toNumber(body.calories_per_100g ?? body.calories);
+  const protein = toNumber(body.protein_per_100g ?? body.protein, null);
+  const carbs = toNumber(body.carbs_per_100g ?? body.carbs, null);
+  const fat = toNumber(body.fat_per_100g ?? body.fat, null);
+  const serving_size_g = toNumber(body.serving_size_g, null);
+
+  if (!name || calories === null) {
+    return res.status(400).json({ error: 'Missing required fields: name, calories_per_100g' });
+  }
+
+  db.run(
+    `INSERT INTO Foods (name, base_amount, base_unit, calories, protein, carbs, fat, serving_size_g)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [name, baseAmount, unit, calories, protein, carbs, fat, serving_size_g],
+    function (this: { lastID: number }, err) {
+      if (err) {
+        console.error('[error] POST /api/foods', err);
+        return res.status(500).json({ error: 'Failed to create food' });
+      }
+      const newId = this.lastID;
+      db.get(
+        `${SELECT_SQL} WHERE id = ?`,
+        [newId],
+        (err2, food: Record<string, unknown> | undefined) => {
+          if (err2) {
+            console.error('[error] POST /api/foods fetch', err2);
+            return res.status(500).json({ error: 'Failed to fetch created food' });
+          }
+          const mapped = mapFood(food!);
+          try { getIo().emit('food-created', mapped); } catch (_) { /* io not ready */ }
+          res.status(201).json(mapped);
+        }
+      );
+    }
+  );
+});
+
+// ─── PUT /:id — partial update ────────────────────────────────────────────────
+
+router.put('/:id', (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id' });
+
+  const body = req.body || {};
+  const fields: string[] = [];
+  const params: unknown[] = [];
+
+  if (body.name !== undefined) { fields.push('name = ?'); params.push(body.name); }
+
+  const rawBaseAmount = body.baseAmount ?? body.base_amount;
+  if (rawBaseAmount !== undefined) {
+    const v = toNumber(rawBaseAmount);
+    if (v === null) return res.status(400).json({ error: 'Invalid baseAmount' });
+    fields.push('base_amount = ?'); params.push(v);
+  }
+
+  if (body.baseUnit !== undefined || body.base_unit !== undefined) {
+    fields.push('base_unit = ?'); params.push(body.baseUnit ?? body.base_unit);
+  }
+
+  // Accept calories_per_100g OR legacy calories
+  const rawCalories = body.calories_per_100g ?? body.calories;
+  if (rawCalories !== undefined) {
+    const v = toNumber(rawCalories);
+    if (v === null) return res.status(400).json({ error: 'Invalid calories' });
+    fields.push('calories = ?'); params.push(v);
+  }
+
+  const rawProtein = body.protein_per_100g ?? body.protein;
+  if (rawProtein !== undefined) {
+    const v = toNumber(rawProtein, null);
+    fields.push('protein = ?'); params.push(v);
+  }
+
+  const rawCarbs = body.carbs_per_100g ?? body.carbs;
+  if (rawCarbs !== undefined) {
+    const v = toNumber(rawCarbs, null);
+    fields.push('carbs = ?'); params.push(v);
+  }
+
+  const rawFat = body.fat_per_100g ?? body.fat;
+  if (rawFat !== undefined) {
+    const v = toNumber(rawFat, null);
+    fields.push('fat = ?'); params.push(v);
+  }
+
+  if (body.serving_size_g !== undefined) {
+    const v = toNumber(body.serving_size_g, null);
+    fields.push('serving_size_g = ?'); params.push(v);
+  }
+
+  if (fields.length === 0) return res.status(400).json({ error: 'No fields to update' });
+
+  params.push(id);
+  db.run(
+    `UPDATE Foods SET ${fields.join(', ')} WHERE id = ?`,
+    params,
+    function (this: { changes: number }, err) {
+      if (err) {
+        console.error('[error] PUT /api/foods/:id', err);
+        return res.status(500).json({ error: 'Failed to update food' });
+      }
+      if (this.changes === 0) return res.status(404).json({ error: 'Food not found' });
+
+      db.get(
+        `${SELECT_SQL} WHERE id = ?`,
+        [id],
+        (err2, food: Record<string, unknown> | undefined) => {
+          if (err2) {
+            console.error('[error] PUT /api/foods/:id fetch', err2);
+            return res.status(500).json({ error: 'Failed to fetch updated food' });
+          }
+          const mapped = mapFood(food!);
+          try { getIo().emit('food-updated', mapped); } catch (_) { /* io not ready */ }
+          res.json(mapped);
+        }
+      );
+    }
+  );
+});
+
+// ─── DELETE /:id — delete food ────────────────────────────────────────────────
+
+router.delete('/:id', (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id' });
+
+  db.run(
+    'DELETE FROM Foods WHERE id = ?',
+    [id],
+    function (this: { changes: number }, err) {
+      if (err) {
+        console.error('[error] DELETE /api/foods/:id', err);
+        return res.status(500).json({ error: 'Failed to delete food' });
+      }
+      if (this.changes === 0) return res.status(404).json({ error: 'Food not found' });
+      try { getIo().emit('food-deleted', { id }); } catch (_) { /* io not ready */ }
+      res.status(204).send();
+    }
+  );
+});
+
+export default router;
