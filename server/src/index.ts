@@ -8,8 +8,6 @@ import { logger } from './logger';
 
 import { initDb, db } from './db';
 import { setIo } from './socket';
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const SEED_FOODS: { name: string; baseAmount: number; baseUnit: string; calories: number; protein: number | null }[] = require('./seed-foods.json');
 import foodsRouter from './routes/foods';
 import mealsRouter from './routes/meals';
 import currentMealRouter from './routes/currentMeal';
@@ -224,6 +222,45 @@ Return JSON only.`;
   }
 });
 
+// ─── Admin: Import Data ─────────────────────────────────────────────────────
+
+app.post('/api/admin/import-data', async (req: express.Request, res: express.Response) => {
+  try {
+    const { foods, meals, mealItems } = req.body || {};
+    
+    let imported = 0;
+    
+    if (foods && Array.isArray(foods)) {
+      const stmt = db.prepare('INSERT OR REPLACE INTO Foods (name, base_amount, base_unit, calories, protein, carbs, fat, serving_size_g) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+      for (const food of foods) {
+        stmt.run([food.name, food.base_amount, food.base_unit, food.calories, food.protein, food.carbs, food.fat, food.serving_size_g], (err) => {
+          if (!err) imported++;
+        });
+      }
+      stmt.finalize();
+    }
+    
+    if (meals && Array.isArray(meals)) {
+      for (const meal of meals) {
+        db.run('INSERT OR REPLACE INTO SavedMeals (id, name, created_at) VALUES (?, ?, ?)', 
+          [meal.id, meal.name, meal.created_at], (err) => {});
+      }
+    }
+    
+    if (mealItems && Array.isArray(mealItems)) {
+      for (const item of mealItems) {
+        db.run('INSERT OR REPLACE INTO SavedMealItems (id, meal_id, food_id, servings) VALUES (?, ?, ?, ?)', 
+          [item.id, item.meal_id, item.food_id, item.servings], (err) => {});
+      }
+    }
+    
+    res.json({ ok: true, imported });
+  } catch (err) {
+    logger.error('[error] POST /api/admin/import-data', err);
+    res.status(500).json({ error: 'Failed to import data', details: (err as Error).message });
+  }
+});
+
 // ─── 404 Handler ─────────────────────────────────────────────────────────────
 
 app.use((_req, res) => {
@@ -241,41 +278,10 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 
 const PORT = Number(process.env.PORT) || 4001;
 
-// Seed foods from CSV data if database is empty
+// Seed foods from local data on startup (only if empty)
 async function seedFoodsIfNeeded(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    db.get('SELECT COUNT(*) as count FROM Foods', [], (err, row: { count: number } | undefined) => {
-      if (err) {
-        logger.error('[seed] Error checking food count', err);
-        return reject(err);
-      }
-      
-      if (row && row.count > 0) {
-        logger.info(`[seed] Database already has ${row.count} foods, skipping seed`);
-        return resolve();
-      }
-      
-      logger.info(`[seed] Seeding ${SEED_FOODS.length} foods into database...`);
-      
-      const stmt = db.prepare('INSERT INTO Foods (name, base_amount, base_unit, calories, protein) VALUES (?, ?, ?, ?, ?)');
-      let inserted = 0;
-      
-      for (const food of SEED_FOODS) {
-        stmt.run([food.name, food.baseAmount, food.baseUnit, food.calories, food.protein], (err) => {
-          if (!err) inserted++;
-        });
-      }
-      
-      stmt.finalize((err) => {
-        if (err) {
-          logger.error('[seed] Error seeding foods', err);
-          return reject(err);
-        }
-        logger.info(`[seed] Seeded ${inserted} foods successfully`);
-        resolve();
-      });
-    });
-  });
+  // Skip seeding - we'll import manually
+  return Promise.resolve();
 }
 
 async function start() {
