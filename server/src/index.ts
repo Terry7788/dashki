@@ -227,6 +227,7 @@ Return JSON only.`;
 app.post('/api/admin/import-data', async (req: express.Request, res: express.Response) => {
   try {
     const { foods, meals, mealItems } = req.body || {};
+    logger.info('[import] Received import request', { foodsCount: foods?.length, mealsCount: meals?.length, itemsCount: mealItems?.length });
     
     let imported = 0;
     
