@@ -203,43 +203,47 @@ function TemplateFormModal({
           <p className="text-sm font-medium text-white/70 mb-2">Exercises</p>
           <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-1">
             {exercises.map((ex, idx) => (
-              <div key={idx} className="flex items-center gap-2">
+              <div key={idx} className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
                 <input
                   value={ex.name}
                   onChange={(e) => updateRow(idx, 'name', e.target.value)}
                   placeholder={`Exercise ${idx + 1}`}
-                  className="flex-1 min-w-0 px-3 py-2 bg-white/[0.06] border border-white/[0.12] rounded-xl
+                  className="flex-1 min-w-0 w-full sm:w-auto px-3 py-2 bg-white/[0.06] border border-white/[0.12] rounded-xl
                     text-white text-sm placeholder-white/30
                     focus:outline-none focus:ring-1 focus:ring-[#2E8B57]/50 transition-all"
                 />
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  <input
-                    type="number"
-                    value={ex.sets}
-                    min={1}
-                    max={20}
-                    onChange={(e) => updateRow(idx, 'sets', parseInt(e.target.value) || 3)}
-                    className="w-14 px-2 py-2 bg-white/[0.06] border border-white/[0.12] rounded-xl
-                      text-white text-sm text-center focus:outline-none focus:ring-1 focus:ring-[#2E8B57]/50"
-                  />
-                  <span className="text-white/40 text-xs">sets</span>
+                <div className="flex items-center gap-1 flex-shrink-0 w-full sm:w-auto justify-between">
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      value={ex.sets}
+                      min={1}
+                      max={20}
+                      onChange={(e) => updateRow(idx, 'sets', parseInt(e.target.value) || 3)}
+                      className="w-12 sm:w-14 px-2 py-2 bg-white/[0.06] border border-white/[0.12] rounded-xl
+                        text-white text-sm text-center focus:outline-none focus:ring-1 focus:ring-[#2E8B57]/50"
+                    />
+                    <span className="text-white/40 text-xs">sets</span>
+                  </div>
                   <span className="text-white/40 text-xs">×</span>
-                  <input
-                    type="number"
-                    value={ex.reps}
-                    min={1}
-                    max={100}
-                    onChange={(e) => updateRow(idx, 'reps', parseInt(e.target.value) || 10)}
-                    className="w-14 px-2 py-2 bg-white/[0.06] border border-white/[0.12] rounded-xl
-                      text-white text-sm text-center focus:outline-none focus:ring-1 focus:ring-[#2E8B57]/50"
-                  />
-                  <span className="text-white/40 text-xs">reps</span>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      value={ex.reps}
+                      min={1}
+                      max={100}
+                      onChange={(e) => updateRow(idx, 'reps', parseInt(e.target.value) || 10)}
+                      className="w-12 sm:w-14 px-2 py-2 bg-white/[0.06] border border-white/[0.12] rounded-xl
+                        text-white text-sm text-center focus:outline-none focus:ring-1 focus:ring-[#2E8B57]/50"
+                    />
+                    <span className="text-white/40 text-xs">reps</span>
+                  </div>
                 </div>
                 <button
                   onClick={() => removeRow(idx)}
                   disabled={exercises.length === 1}
                   className="p-1.5 rounded-lg text-white/30 hover:text-red-400 hover:bg-red-400/10
-                    disabled:opacity-20 disabled:cursor-not-allowed transition-all"
+                    disabled:opacity-20 disabled:cursor-not-allowed transition-all self-center sm:self-auto"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -472,19 +476,20 @@ function WeeklyRoutine({
 
   return (
     <>
-      <GlassCard className="mb-6">
+      <GlassCard className="mb-4 sm:mb-6">
         {/* Header */}
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-white">Weekly Routine</h2>
-          <div className="flex gap-2">
-            <GlassButton size="sm" onClick={onOpenTemplateManager}>
-              <span className="flex items-center gap-1.5">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 mb-3 sm:mb-4">
+          <h2 className="text-base sm:text-lg font-semibold text-white">Weekly Routine</h2>
+          <div className="flex gap-2 w-full sm:w-auto">
+            <GlassButton size="sm" onClick={onOpenTemplateManager} className="flex-1 sm:flex-none text-center">
+              <span className="flex items-center justify-center gap-1.5">
                 <LayoutTemplate className="w-3.5 h-3.5" />
-                Manage Workouts
+                <span className="hidden sm:inline">Manage Workouts</span>
+                <span className="sm:hidden">Manage</span>
               </span>
             </GlassButton>
-            <GlassButton size="sm" onClick={openEditModal}>
-              Edit Routine
+            <GlassButton size="sm" onClick={openEditModal} className="flex-1 sm:flex-none text-center">
+              Edit
             </GlassButton>
           </div>
         </div>
@@ -506,10 +511,10 @@ function WeeklyRoutine({
             return (
               <div
                 key={dow}
-                className={`flex-shrink-0 flex flex-col items-center gap-1 px-3 py-2.5 rounded-2xl border
+                className={`flex-shrink-0 flex flex-col items-center gap-0.5 sm:gap-1 px-2 sm:px-3 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl border
                   ${pillStyle}
                   ${isToday ? 'ring-2 ring-white/60' : ''}
-                  transition-all duration-200 min-w-[72px]`}
+                  transition-all duration-200 min-w-[56px] sm:min-w-[72px]`}
               >
                 <span className="text-xs font-semibold opacity-80">{DAY_LABELS[dow]}</span>
                 <span className="text-xs font-medium text-center leading-tight line-clamp-2">
@@ -521,11 +526,11 @@ function WeeklyRoutine({
         </div>
 
         {/* Sync button */}
-        <div className="mt-4 flex items-center gap-3">
-          <GlassButton size="sm" onClick={handleSync} disabled={syncing}>
-            <span className="flex items-center gap-1.5">
+        <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
+          <GlassButton size="sm" onClick={handleSync} disabled={syncing} className="w-full sm:w-auto">
+            <span className="flex items-center justify-center gap-1.5">
               <CalendarCheck className="w-3.5 h-3.5" />
-              {syncing ? 'Syncing…' : 'Sync to Calendar'}
+              {syncing ? 'Syncing…' : 'Sync'}
             </span>
           </GlassButton>
 
@@ -1133,13 +1138,14 @@ export default function GymPage() {
   };
 
   return (
-    <div className="px-4 md:px-6 py-8 max-w-7xl mx-auto">
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold text-white">Gym</h1>
-        <GlassButton variant="primary" onClick={() => setShowNewModal(true)}>
-          <span className="flex items-center gap-2">
+    <div className="px-3 sm:px-4 md:px-6 py-4 sm:py-6 md:py-8 max-w-7xl mx-auto">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 mb-6 sm:mb-8">
+        <h1 className="text-2xl sm:text-3xl font-bold text-white">Gym</h1>
+        <GlassButton variant="primary" onClick={() => setShowNewModal(true)} className="w-full sm:w-auto">
+          <span className="flex items-center justify-center gap-2">
             <Plus className="w-4 h-4" />
-            New Session
+            <span className="sm:hidden">New</span>
+            <span className="hidden sm:inline">New Session</span>
           </span>
         </GlassButton>
       </div>
@@ -1150,9 +1156,9 @@ export default function GymPage() {
         onOpenTemplateManager={() => setShowTemplatesManager(true)}
       />
 
-      <div className="flex flex-col lg:flex-row gap-6">
+      <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
         {/* ── Left: Session List ── */}
-        <div className="w-full lg:w-72 xl:w-80 flex-shrink-0 space-y-3">
+        <div className="w-full lg:w-72 xl:w-80 flex-shrink-0 space-y-3 order-2 lg:order-1">
           {/* Today */}
           <div>
             <p className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-2 px-1">
@@ -1165,29 +1171,30 @@ export default function GymPage() {
                 onClick={() => handleSelectSession(todaySession)}
                 className={selectedSession?.id === todaySession.id ? 'ring-1 ring-indigo-400/50' : ''}
               >
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-white font-semibold">{todaySession.name || 'Workout'}</p>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white font-semibold truncate">{todaySession.name || 'Workout'}</p>
                     <p className="text-white/50 text-xs mt-0.5">
                       {(todaySession.exercises?.length ?? 0) > 0
                         ? `${todaySession.exercises!.length} exercises`
                         : 'Tap to view'}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         setShowCompleteModal(true);
                       }}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-emerald-300/30
+                      className="inline-flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-xl border border-emerald-300/30
                         bg-emerald-500/15 text-emerald-200 text-xs font-medium backdrop-blur-xl
                         hover:bg-emerald-500/25 hover:border-emerald-200/45 transition-all duration-200"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" />
-                      Complete Workout
+                      <span className="hidden sm:inline">Complete Workout</span>
+                      <span className="sm:hidden">Done</span>
                     </button>
-                    <ChevronRight className="w-4 h-4 text-white/30" />
+                    <ChevronRight className="w-4 h-4 text-white/30 flex-shrink-0" />
                   </div>
                 </div>
               </GlassCard>
@@ -1309,7 +1316,7 @@ export default function GymPage() {
         </div>
 
         {/* ── Right: Session Detail ── */}
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 order-1 lg:order-2">
           {selectedSession ? (
             <SessionDetail
               key={selectedSession.id}

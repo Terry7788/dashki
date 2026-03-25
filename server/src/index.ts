@@ -17,6 +17,7 @@ import todoRouter from './routes/todo';
 import weightRouter from './routes/weight';
 import stepsRouter from './routes/steps';
 import calendarRouter from './routes/calendar';
+import goalsRouter from './routes/goals';
 
 // ─── App Setup ────────────────────────────────────────────────────────────────
 
@@ -120,6 +121,7 @@ app.use('/api/weight', weightRouter);
 app.use('/api/steps', stepsRouter);
 app.use('/api/auth', calendarRouter);
 app.use('/api/calendar', calendarRouter);
+app.use('/api/goals', goalsRouter);
 
 // ─── Voice Parsing ────────────────────────────────────────────────────────────
 

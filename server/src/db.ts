@@ -158,6 +158,23 @@ export function initDb(): Promise<void> {
         )
       `);
 
+      // ── Goals (user-configurable targets) ─────────────────────────────────
+      db.run(`
+        CREATE TABLE IF NOT EXISTS Goals (
+          id           INTEGER PRIMARY KEY CHECK (id = 1),
+          calories     REAL,
+          protein      REAL,
+          carbs        REAL,
+          fat          REAL,
+          steps        INTEGER,
+          weight_kg    REAL,
+          updated_at   DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // Insert default goals row (singleton)
+      db.run(`INSERT OR IGNORE INTO Goals (id) VALUES (1)`);
+
       // ── Calendar Tokens ────────────────────────────────────────────────────
       db.run(`
         CREATE TABLE IF NOT EXISTS CalendarTokens (

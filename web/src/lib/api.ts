@@ -14,6 +14,7 @@ import type {
   DailySummary,
   MealType,
   WorkoutTemplate,
+  Goals,
 } from './types';
 
 // ─── Base Configuration ───────────────────────────────────────────────────────
@@ -406,4 +407,24 @@ export function updateSteps(data: {
 
 export function getTodaySteps(): Promise<{ date: string; steps: number; id: number | null }> {
   return request('/api/steps/today');
+}
+
+// ─── Goals ───────────────────────────────────────────────────────────────────
+
+export function getGoals(): Promise<Goals> {
+  return request<Goals>('/api/goals');
+}
+
+export function updateGoals(data: {
+  calories?: number | null;
+  protein?: number | null;
+  carbs?: number | null;
+  fat?: number | null;
+  steps?: number | null;
+  weight_kg?: number | null;
+}): Promise<Goals> {
+  return request<Goals>('/api/goals', {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
 }

@@ -7,8 +7,8 @@ import GlassCard from '@/components/ui/GlassCard';
 import GlassButton from '@/components/ui/GlassButton';
 import GlassModal from '@/components/ui/GlassModal';
 import GlassInput from '@/components/ui/GlassInput';
-import { getJournalSummary, getSteps, getWeightEntries, getTodos, addWeightEntry, updateSteps, updateTodo } from '@/lib/api';
-import type { DailySummary, StepEntry, WeightEntry, Todo, GymSession } from '@/lib/types';
+import { getJournalSummary, getSteps, getWeightEntries, getTodos, addWeightEntry, updateSteps, updateTodo, getGoals } from '@/lib/api';
+import type { DailySummary, StepEntry, WeightEntry, Todo, GymSession, Goals } from '@/lib/types';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

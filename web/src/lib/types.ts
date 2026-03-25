@@ -170,6 +170,19 @@ export interface WeightEntry {
   created_at: string;
 }
 
+// ─── Goals ───────────────────────────────────────────────────────────────────
+
+export interface Goals {
+  id: number;
+  calories: number;
+  protein: number;
+  carbs: number | null;
+  fat: number | null;
+  steps: number;
+  weight_kg: number | null;
+  updated_at: string;
+}
+
 // ─── Dashboard Summary ───────────────────────────────────────────────────────
 
 export interface DailySummary {

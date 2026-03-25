@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import clsx from 'clsx';
@@ -69,8 +70,15 @@ function DesktopSidebarContent({
       {/* Logo */}
       <div className={clsx('py-7 flex items-center', collapsed ? 'justify-center px-0' : 'px-6 justify-between')}>
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-[#2E8B57] to-[#345e37] flex items-center justify-center shadow-lg shadow-[#2E8B57]/30 flex-shrink-0">
-            <span className="text-white font-bold text-base leading-none">D</span>
+          <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-[#2E8B57] to-[#345e37] flex items-center justify-center shadow-lg shadow-[#2E8B57]/30 flex-shrink-0 overflow-hidden">
+            <Image
+              src="/web/icon-192.png"
+              alt="Dashki"
+              width={36}
+              height={36}
+              className="w-full h-full object-cover"
+              unoptimized
+            />
           </div>
           {!collapsed && (
             <span className="text-xl font-bold text-[#61bc84] tracking-tight whitespace-nowrap">Dashki</span>
@@ -183,8 +191,15 @@ function MobileSidebarContent({
       {/* Logo */}
       <div className="px-6 py-7 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-[#2E8B57] to-[#345e37] flex items-center justify-center shadow-lg shadow-[#2E8B57]/30">
-            <span className="text-white font-bold text-base leading-none">D</span>
+          <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-[#2E8B57] to-[#345e37] flex items-center justify-center shadow-lg shadow-[#2E8B57]/30 overflow-hidden">
+            <Image
+              src="/web/icon-192.png"
+              alt="Dashki"
+              width={36}
+              height={36}
+              className="w-full h-full object-cover"
+              unoptimized
+            />
           </div>
           <span className="text-xl font-bold text-[#61bc84] tracking-tight">Dashki</span>
         </div>

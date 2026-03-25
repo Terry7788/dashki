@@ -12,8 +12,8 @@ import {
   Cell,
 } from 'recharts';
 import { GlassCard, GlassButton, GlassInput } from '@/components/ui';
-import { getSteps, updateSteps } from '@/lib/api';
-import type { StepEntry } from '@/lib/types';
+import { getSteps, updateSteps, getGoals, updateGoals } from '@/lib/api';
+import type { StepEntry, Goals } from '@/lib/types';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -127,17 +127,27 @@ export default function StepsPage() {
   const [stepsInput, setStepsInput] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // Goal state (localStorage)
+  // Goal state (from API)
   const [goal, setGoal] = useState<number>(DEFAULT_GOAL);
+  const [goalsLoading, setGoalsLoading] = useState(true);
   const [editingGoal, setEditingGoal] = useState(false);
   const [goalInput, setGoalInput] = useState('');
 
-  // Load goal from localStorage
+  // Load goals from API
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('dashki_steps_goal');
-      if (stored) setGoal(parseInt(stored, 10) || DEFAULT_GOAL);
-    } catch {}
+    async function loadGoals() {
+      try {
+        const data = await getGoals();
+        if (data.steps) {
+          setGoal(data.steps);
+        }
+      } catch (e) {
+        console.error('Failed to load goals:', e);
+      } finally {
+        setGoalsLoading(false);
+      }
+    }
+    loadGoals();
   }, []);
 
   const today = todayISO();
@@ -196,11 +206,17 @@ export default function StepsPage() {
     setSaving(false);
   };
 
-  const handleSaveGoal = () => {
+  const handleSaveGoal = async () => {
     const val = parseInt(goalInput, 10);
     if (!isNaN(val) && val > 0) {
-      setGoal(val);
-      try { localStorage.setItem('dashki_steps_goal', String(val)); } catch {}
+      try {
+        const updated = await updateGoals({ steps: val });
+        setGoal(updated.steps);
+      } catch (e) {
+        console.error('Failed to save goal:', e);
+        // Fallback to local state
+        setGoal(val);
+      }
     }
     setEditingGoal(false);
     setGoalInput('');

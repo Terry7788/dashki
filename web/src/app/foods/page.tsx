@@ -150,7 +150,7 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved }: FoodModalProps) {
         />
         {errors.name && <p className="text-xs text-red-400 -mt-2 pl-1">{errors.name}</p>}
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3">
           <GlassInput
             label="Base Amount"
             type="number"
@@ -163,7 +163,7 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved }: FoodModalProps) {
             <select
               value={form.base_unit}
               onChange={(e) => set('base_unit', e.target.value as BaseUnit)}
-              className="w-full px-4 py-3 bg-black/[0.04] border border-black/[0.10] text-gray-900 dark:bg-white/10 dark:border-white/20 dark:text-white rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#2E8B57]/40 focus:border-[#2E8B57]/60 transition-all duration-200"
+              className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-black/[0.04] border border-black/[0.10] text-gray-900 dark:bg-white/10 dark:border-white/20 dark:text-white rounded-xl sm:rounded-2xl text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-[#2E8B57]/40 focus:border-[#2E8B57]/60 transition-all duration-200"
             >
               <option value="grams">Grams</option>
               <option value="ml">ml</option>
@@ -172,7 +172,7 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved }: FoodModalProps) {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3">
           <div>
             <GlassInput
               label="Calories (per 100g) *"
@@ -198,7 +198,7 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved }: FoodModalProps) {
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3">
           <GlassInput
             label="Carbs (per 100g)"
             type="number"
@@ -232,7 +232,7 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved }: FoodModalProps) {
           <p className="text-sm text-red-400 bg-red-500/10 border border-red-400/20 rounded-xl px-3 py-2">{serverError}</p>
         )}
 
-        <div className="flex gap-3 pt-1">
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-1">
           <GlassButton variant="default" className="flex-1" onClick={onClose}>Cancel</GlassButton>
           <GlassButton variant="primary" className="flex-1" onClick={handleSubmit} disabled={saving}>
             {saving ? 'Saving…' : editingFood ? 'Update' : 'Add Food'}
@@ -305,7 +305,7 @@ function FoodRow({ food, onEdit, onDelete }: FoodRowProps) {
   const fat = food.fat_per_100g ?? 0;
 
   return (
-    <div className="flex items-center gap-4 px-5 py-4 rounded-3xl bg-white/[0.06] border border-white/10 hover:bg-white/[0.09] transition-all duration-200 group">
+    <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 px-3 sm:px-5 py-3 sm:py-4 rounded-2xl sm:rounded-3xl bg-white/[0.06] border border-white/10 hover:bg-white/[0.09] transition-all duration-200 group">
       <div className="flex-1 min-w-0">
         <p className="font-medium text-white truncate">{food.name}</p>
         <p className="text-xs text-white/50 mt-0.5">
@@ -316,7 +316,7 @@ function FoodRow({ food, onEdit, onDelete }: FoodRowProps) {
         </p>
       </div>
 
-      {/* Macro pills */}
+      {/* Macro pills - hidden on mobile, shown on sm+ */}
       <div className="hidden sm:flex items-center gap-2 shrink-0">
         <span className="text-xs px-2.5 py-1 rounded-xl bg-orange-500/10 border border-orange-400/20 text-orange-300">
           {carbs}g carbs
@@ -326,8 +326,8 @@ function FoodRow({ food, onEdit, onDelete }: FoodRowProps) {
         </span>
       </div>
 
-      {/* Actions */}
-      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+      {/* Actions - always visible on mobile */}
+      <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200">
         <button
           onClick={() => onEdit(food)}
           className="p-2 rounded-xl text-white/40 hover:text-indigo-300 hover:bg-indigo-500/10 transition-all duration-200"
@@ -398,30 +398,30 @@ export default function FoodsPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 animate-fade-in">
+    <div className="px-3 sm:px-4 max-w-4xl mx-auto space-y-4 sm:space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Food Database</h1>
-        <GlassButton variant="primary" onClick={handleOpenAdd}>
-          <span className="flex items-center gap-2"><Plus className="w-4 h-4" /> Add Food</span>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">Food Database</h1>
+        <GlassButton variant="primary" onClick={handleOpenAdd} className="w-full sm:w-auto">
+          <span className="flex items-center justify-center gap-2"><Plus className="w-4 h-4" /> Add Food</span>
         </GlassButton>
       </div>
 
       {/* Search */}
       <div className="relative">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-white/40 pointer-events-none" />
+        <Search className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-white/40 pointer-events-none" />
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search foods…"
-          className="w-full pl-11 pr-4 py-3 bg-black/[0.04] border border-black/[0.10] text-gray-900 placeholder-gray-400 dark:bg-white/10 dark:border-white/20 dark:text-white dark:placeholder-white/40 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#2E8B57]/40 focus:border-[#2E8B57]/60 transition-all duration-200"
+          className="w-full pl-10 sm:pl-11 pr-3 sm:pr-4 py-2.5 sm:py-3 text-sm sm:text-base bg-black/[0.04] border border-black/[0.10] text-gray-900 placeholder-gray-400 dark:bg-white/10 dark:border-white/20 dark:text-white dark:placeholder-white/40 rounded-xl sm:rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#2E8B57]/40 focus:border-[#2E8B57]/60 transition-all duration-200"
         />
       </div>
 
       {/* Stats bar */}
       {!loading && foods.length > 0 && (
-        <p className="text-sm text-gray-400 dark:text-white/40">
+        <p className="text-xs sm:text-sm text-gray-400 dark:text-white/40">
           {filteredFoods.length} of {foods.length} food{foods.length !== 1 ? 's' : ''}
         </p>
       )}
@@ -435,8 +435,8 @@ export default function FoodsPage() {
       {loading ? (
         <FoodSkeleton />
       ) : filteredFoods.length === 0 ? (
-        <GlassCard className="text-center py-12">
-          <Leaf className="w-12 h-12 text-white/20 mx-auto mb-4" />
+        <GlassCard className="text-center py-8 sm:py-12">
+          <Leaf className="w-10 h-10 sm:w-12 sm:h-12 text-white/20 mx-auto mb-3 sm:mb-4" />
           <p className="text-white/60 font-medium">
             {query ? 'No foods match your search' : 'No foods yet'}
           </p>
@@ -444,7 +444,7 @@ export default function FoodsPage() {
             {query ? 'Try a different search term' : 'Add your first food to get started'}
           </p>
           {!query && (
-            <div className="mt-6">
+            <div className="mt-4 sm:mt-6">
               <GlassButton variant="primary" onClick={handleOpenAdd}>
                 <span className="flex items-center gap-2"><Plus className="w-4 h-4" /> Add Food</span>
               </GlassButton>
