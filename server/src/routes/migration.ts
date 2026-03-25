@@ -4,6 +4,10 @@ import { db } from '../db';
 const router = Router();
 
 /**
+ * Migration endpoints for importing data from external sources
+ */
+
+/**
  * DELETE /api/migration/clear-foods
  * Clear all foods from the database
  */
