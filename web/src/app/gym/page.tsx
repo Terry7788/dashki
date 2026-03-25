@@ -495,7 +495,7 @@ function WeeklyRoutine({
         </div>
 
         {/* Day pills */}
-        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none -mx-3 px-3 sm:mx-0 sm:px-0">
           {DAY_ORDER.map((dow) => {
             const day = routine.find((r) => r.day_of_week === dow) || {
               id: null,
@@ -660,7 +660,7 @@ function SetRow({
           min={0}
           onChange={(e) => setReps(e.target.value)}
           onBlur={handleBlurReps}
-          className="w-16 bg-white/10 border border-white/10 rounded-lg px-2 py-1 text-white text-sm text-center focus:outline-none focus:ring-1 focus:ring-indigo-400/50"
+          className="w-12 sm:w-16 bg-white/10 border border-white/10 rounded-lg px-1 sm:px-2 py-1 text-white text-sm text-center focus:outline-none focus:ring-1 focus:ring-indigo-400/50"
         />
       </td>
       <td className="py-1.5 pr-2">
@@ -671,7 +671,7 @@ function SetRow({
           step={0.5}
           onChange={(e) => setWeight(e.target.value)}
           onBlur={handleBlurWeight}
-          className="w-20 bg-white/10 border border-white/10 rounded-lg px-2 py-1 text-white text-sm text-center focus:outline-none focus:ring-1 focus:ring-indigo-400/50"
+          className="w-14 sm:w-20 bg-white/10 border border-white/10 rounded-lg px-1 sm:px-2 py-1 text-white text-sm text-center focus:outline-none focus:ring-1 focus:ring-indigo-400/50"
         />
       </td>
       <td className="py-1.5 w-8">
@@ -739,8 +739,8 @@ function ExerciseCard({
 
       {/* Sets table */}
       {sets.length > 0 && (
-        <div className="mb-3 overflow-x-auto">
-          <table className="w-full">
+        <div className="mb-3 overflow-x-auto min-w-0">
+          <table className="w-full min-w-[200px]">
             <thead>
               <tr>
                 <th className="text-left text-xs text-white/40 font-medium pb-2 pr-3">Set</th>
@@ -1156,9 +1156,9 @@ export default function GymPage() {
         onOpenTemplateManager={() => setShowTemplatesManager(true)}
       />
 
-      <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
+      <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 min-w-0">
         {/* ── Left: Session List ── */}
-        <div className="w-full lg:w-72 xl:w-80 flex-shrink-0 space-y-3 order-2 lg:order-1">
+        <div className="w-full lg:w-72 xl:w-80 flex-shrink-0 space-y-3 order-2 lg:order-1 min-w-0">
           {/* Today */}
           <div>
             <p className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-2 px-1">
