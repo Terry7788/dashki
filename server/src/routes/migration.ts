@@ -74,18 +74,10 @@ router.post('/import-foods', (req: Request, res: Response) => {
           return;
         }
 
-        // Insert food - store as-is (calorie-assistant stores values per serving or per 100g)
-        // For "grams" - already per 100g. For "servings" - per serving.
-        // Just store the values as-is without conversion
-        const calPer100 = calories;
-        const proPer100 = protein ?? 0;
-        const carbPer100 = carbs ?? null;
-        const fatPer100 = fat ?? null;
-
         db.run(
           `INSERT INTO Foods (name, base_amount, base_unit, calories, protein, carbs, fat, serving_size_g)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [name, baseAmount, baseUnit, calPer100, proPer100, carbPer100, fatPer100, servingSizeG ?? baseAmount],
+          [name, baseAmount, baseUnit, calories, protein ?? 0, carbs ?? null, fat ?? null, servingSizeG ?? baseAmount],
           (insertErr) => {
             if (insertErr) {
               errors.push(`Insert error for ${name}: ${insertErr.message}`);
@@ -97,7 +89,6 @@ router.post('/import-foods', (req: Request, res: Response) => {
       });
     }
 
-    // Wait a bit for async operations, then respond
     setTimeout(() => {
       res.json({ imported, skipped, errors: errors.length > 0 ? errors : undefined });
     }, 1000);
@@ -107,7 +98,7 @@ router.post('/import-foods', (req: Request, res: Response) => {
 /**
  * POST /api/migration/import-meals
  * Import saved meals from external source
- * Body: { meals: Array<{ name, items: Array<{ name, servings }> }> }
+ * Body: { meals: Array<{ name, items: Array<{ name, servings, foodId? }> }> }
  */
 router.post('/import-meals', (req: Request, res: Response) => {
   const { meals } = req.body;
@@ -117,75 +108,73 @@ router.post('/import-meals', (req: Request, res: Response) => {
   }
 
   let imported = 0;
-  let skipped = 0;
   const errors: string[] = [];
+  let mealsProcessed = 0;
 
-  db.serialize(() => {
-    for (const meal of meals) {
-      const { name, items } = meal;
+  for (const meal of meals) {
+    const { name, items } = meal;
 
-      if (!name || !Array.isArray(items)) {
-        errors.push(`Invalid meal: ${name || 'unknown'}`);
-        continue;
+    if (!name || !Array.isArray(items)) {
+      errors.push(`Invalid meal: ${name || 'unknown'}`);
+      mealsProcessed++;
+      continue;
+    }
+
+    // Check if meal exists and delete if so
+    db.get('SELECT id FROM SavedMeals WHERE LOWER(name) = LOWER(?)', [name], (err, row) => {
+      if (err) {
+        errors.push(`DB error for ${name}: ${err.message}`);
+        mealsProcessed++;
+        checkDone();
+        return;
       }
 
-      // Check for duplicates - delete if exists and reimport
-      db.get('SELECT id FROM SavedMeals WHERE LOWER(name) = LOWER(?)', [name], (err, row) => {
-        if (err) {
-          errors.push(`DB error for ${name}: ${err.message}`);
-          return;
-        }
+      const existingId = row ? (row as { id: number }).id : null;
 
-        if (row) {
-          // Delete existing meal and items to reimport
-          const existingId = (row as { id: number }).id;
-          db.run('DELETE FROM SavedMealItems WHERE meal_id = ?', [existingId], () => {
-            db.run('DELETE FROM SavedMeals WHERE id = ?', [existingId], () => {
-              doInsert();
-            });
-          });
-        } else {
-          doInsert();
-        }
+      const finishImport = () => {
+        // Insert the meal
+        db.run('INSERT INTO SavedMeals (name) VALUES (?)', [name], (insertErr) => {
+          if (insertErr) {
+            errors.push(`Insert error for ${name}: ${insertErr.message}`);
+            mealsProcessed++;
+            checkDone();
+            return;
+          }
 
-        function doInsert() {
-          // Insert meal
-          db.run('INSERT INTO SavedMeals (name) VALUES (?)', [name], (insertErr) => {
-            if (insertErr) {
-              errors.push(`Insert error for ${name}: ${insertErr.message}`);
+          // Get new meal ID
+          db.get('SELECT last_insert_rowid() as id', [], (getErr, mealRow) => {
+            if (getErr || !mealRow) {
+              errors.push(`Could not get meal ID for ${name}`);
+              mealsProcessed++;
+              checkDone();
               return;
             }
 
-            // Get the inserted ID
-            db.get('SELECT last_insert_rowid() as id', [], (getErr, mealRow) => {
-              if (getErr || !mealRow) {
-                errors.push(`Could not get meal ID for ${name}`);
-                return;
-              }
+            const mealId = (mealRow as { id: number }).id;
 
-              const mealId = (mealRow as { id: number }).id;
-
-            // Insert items
+            // Insert all items
             let itemsProcessed = 0;
             for (const item of items) {
-              // Support both { name } and { foodId } formats
-              const foodId = item.foodId || (item.name ? null : null);
-              
-              const findFood = item.foodId 
-                ? Promise.resolve(item.foodId)
-                : new Promise<number>((resolve) => {
-                    db.get('SELECT id FROM Foods WHERE LOWER(name) = LOWER(?)', [item.name], (foodErr, foodRow) => {
-                      resolve(foodRow ? (foodRow as { id: number }).id : null);
-                    });
+              // Use foodId if provided, otherwise look up by name
+              const lookupFood = (cb: (foodId: number | null) => void) => {
+                if (item.foodId) {
+                  cb(item.foodId);
+                } else if (item.name) {
+                  db.get('SELECT id FROM Foods WHERE LOWER(name) = LOWER(?)', [item.name], (foodErr, foodRow) => {
+                    cb(foodRow ? (foodRow as { id: number }).id : null);
                   });
-              
-              findFood.then(foundId => {
-                if (!foundId) {
-                  errors.push(`Food not found for item: ${item.name || item.foodId} in meal ${name}`);
+                } else {
+                  cb(null);
+                }
+              };
+
+              lookupFood((foodId) => {
+                if (!foodId) {
+                  errors.push(`Food not found: ${item.name || item.foodId}`);
                 } else {
                   db.run(
                     'INSERT INTO SavedMealItems (meal_id, food_id, servings) VALUES (?, ?, ?)',
-                    [mealId, foundId, item.servings ?? 1],
+                    [mealId, foodId, item.servings ?? 1],
                     (itemErr) => {
                       if (itemErr) {
                         errors.push(`Item insert error: ${itemErr.message}`);
@@ -197,19 +186,32 @@ router.post('/import-meals', (req: Request, res: Response) => {
                 itemsProcessed++;
                 if (itemsProcessed === items.length) {
                   imported++;
+                  mealsProcessed++;
+                  checkDone();
                 }
               });
             }
           });
-        }
-      });
-    }
+        });
+      };
 
-    // Give time for async operations
-    setTimeout(() => {
-      res.json({ imported, skipped, errors: errors.length > 0 ? errors : undefined });
-    }, 2000);
-  });
+      if (existingId) {
+        db.run('DELETE FROM SavedMealItems WHERE meal_id = ?', [existingId], () => {
+          db.run('DELETE FROM SavedMeals WHERE id = ?', [existingId], finishImport);
+        });
+      } else {
+        finishImport();
+      }
+    });
+  }
+
+  function checkDone() {
+    if (mealsProcessed === meals.length) {
+      setTimeout(() => {
+        res.json({ imported, errors: errors.length > 0 ? errors : undefined });
+      }, 500);
+    }
+  }
 });
 
 export default router;
