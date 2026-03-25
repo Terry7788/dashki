@@ -18,6 +18,7 @@ import weightRouter from './routes/weight';
 import stepsRouter from './routes/steps';
 import calendarRouter from './routes/calendar';
 import goalsRouter from './routes/goals';
+import migrationRouter from './routes/migration';
 
 // ─── App Setup ────────────────────────────────────────────────────────────────
 
@@ -122,6 +123,7 @@ app.use('/api/steps', stepsRouter);
 app.use('/api/auth', calendarRouter);
 app.use('/api/calendar', calendarRouter);
 app.use('/api/goals', goalsRouter);
+app.use('/api/migration', migrationRouter);
 
 // ─── Voice Parsing ────────────────────────────────────────────────────────────
 
