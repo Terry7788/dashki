@@ -18,6 +18,26 @@ router.delete('/clear-foods', (req: Request, res: Response) => {
 });
 
 /**
+ * DELETE /api/migration/clear-meals
+ * Clear all saved meals from the database
+ */
+router.delete('/clear-meals', (req: Request, res: Response) => {
+  db.run('DELETE FROM SavedMealItems', (err) => {
+    if (err) {
+      console.error('[error] DELETE /api/migration/clear-meals', err);
+      return res.status(500).json({ error: 'Failed to clear meal items' });
+    }
+    db.run('DELETE FROM SavedMeals', (err2) => {
+      if (err2) {
+        console.error('[error] DELETE /api/migration/clear-meals', err2);
+        return res.status(500).json({ error: 'Failed to clear meals' });
+      }
+      res.json({ success: true, message: 'All meals cleared' });
+    });
+  });
+});
+
+/**
  * POST /api/migration/import-foods
  * Import foods from external source (calorie-assistant)
  * Body: { foods: Array<{ name, baseAmount, baseUnit, calories, protein, carbs?, fat? }> }
