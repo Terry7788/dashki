@@ -71,8 +71,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         />
 
         {/* Main content area — offset managed via CSS sidebar-offset class */}
-        <main className="flex-1 sidebar-offset pb-6 md:pb-0 min-h-screen animate-fade-in">
-          <div className="w-full px-4 sm:px-6 lg:px-8 py-6 pt-16 md:pt-6">
+        <main className="flex-1 sidebar-offset pb-6 md:pb-0 min-h-screen min-w-0 animate-fade-in">
+          <div className="w-full max-w-full px-4 sm:px-6 lg:px-8 py-6 pt-16 md:pt-6 overflow-x-hidden">
             {children}
           </div>
         </main>

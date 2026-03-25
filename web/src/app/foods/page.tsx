@@ -398,7 +398,7 @@ export default function FoodsPage() {
   }
 
   return (
-    <div className="px-3 sm:px-4 max-w-4xl mx-auto space-y-4 sm:space-y-6 animate-fade-in">
+    <div className="px-3 sm:px-4 max-w-4xl mx-auto space-y-4 sm:space-y-6 animate-fade-in w-full max-w-full overflow-hidden">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">Food Database</h1>

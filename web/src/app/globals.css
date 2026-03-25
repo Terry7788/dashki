@@ -90,12 +90,14 @@ html:not(.dark) [style*="color: var(--text-100)"] { color: #111111; }
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     scroll-behavior: smooth;
+    overflow-x: hidden;
   }
 
   body {
     @apply min-h-screen;
     color: var(--text-100);
     background-color: var(--bg-100);
+    overflow-x: hidden;
   }
 
   /* Scrollbar */

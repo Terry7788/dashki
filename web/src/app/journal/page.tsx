@@ -730,9 +730,9 @@ export default function JournalPage() {
   const isToday = dateStr === toISODate(new Date());
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in w-full max-w-full overflow-x-hidden px-3 sm:px-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between w-full">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Food Journal</h1>
       </div>
 

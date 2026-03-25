@@ -495,7 +495,7 @@ function WeeklyRoutine({
         </div>
 
         {/* Day pills */}
-        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none -mx-3 px-3 sm:mx-0 sm:px-0">
+        <div className="flex gap-2 pb-1 scrollbar-none -mx-3 px-3 sm:mx-0 sm:px-0 overflow-x-auto min-w-0">
           {DAY_ORDER.map((dow) => {
             const day = routine.find((r) => r.day_of_week === dow) || {
               id: null,
@@ -1138,8 +1138,8 @@ export default function GymPage() {
   };
 
   return (
-    <div className="px-3 sm:px-4 md:px-6 py-4 sm:py-6 md:py-8 max-w-7xl mx-auto">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 mb-6 sm:mb-8">
+    <div className="px-3 sm:px-4 md:px-6 py-4 sm:py-6 md:py-8 max-w-7xl mx-auto w-full overflow-x-hidden">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 mb-6 sm:mb-8 w-full">
         <h1 className="text-2xl sm:text-3xl font-bold text-white">Gym</h1>
         <GlassButton variant="primary" onClick={() => setShowNewModal(true)} className="w-full sm:w-auto">
           <span className="flex items-center justify-center gap-2">
@@ -1156,9 +1156,9 @@ export default function GymPage() {
         onOpenTemplateManager={() => setShowTemplatesManager(true)}
       />
 
-      <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 min-w-0">
+      <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 min-w-0 w-full max-w-full overflow-hidden">
         {/* ── Left: Session List ── */}
-        <div className="w-full lg:w-72 xl:w-80 flex-shrink-0 space-y-3 order-2 lg:order-1 min-w-0">
+        <div className="w-full lg:w-64 xl:w-72 flex-shrink-0 space-y-3 order-2 lg:order-1 min-w-0 max-w-full">
           {/* Today */}
           <div>
             <p className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-2 px-1">
@@ -1316,7 +1316,7 @@ export default function GymPage() {
         </div>
 
         {/* ── Right: Session Detail ── */}
-        <div className="flex-1 min-w-0 order-1 lg:order-2">
+        <div className="flex-1 min-w-0 order-1 lg:order-2 w-full max-w-full overflow-hidden">
           {selectedSession ? (
             <SessionDetail
               key={selectedSession.id}
