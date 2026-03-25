@@ -40,15 +40,13 @@ router.post('/import-foods', (req: Request, res: Response) => {
           return;
         }
 
-        // Insert food - store per-100g values
-        const calPer100 = baseUnit === 'grams' ? calories : (calories / baseAmount) * 100;
-        const proPer100 = baseUnit === 'grams' ? (protein ?? 0) : ((protein ?? 0) / baseAmount) * 100;
-        const carbPer100 = carbs !== undefined 
-          ? (baseUnit === 'grams' ? carbs : (carbs / baseAmount) * 100)
-          : null;
-        const fatPer100 = fat !== undefined
-          ? (baseUnit === 'grams' ? fat : (fat / baseAmount) * 100)
-          : null;
+        // Insert food - store as-is (calorie-assistant stores values per serving or per 100g)
+        // For "grams" - already per 100g. For "servings" - per serving.
+        // Just store the values as-is without conversion
+        const calPer100 = calories;
+        const proPer100 = protein ?? 0;
+        const carbPer100 = carbs ?? null;
+        const fatPer100 = fat ?? null;
 
         db.run(
           `INSERT INTO Foods (name, base_amount, base_unit, calories, protein, carbs, fat, serving_size_g)
