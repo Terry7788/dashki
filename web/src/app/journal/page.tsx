@@ -49,7 +49,8 @@ const BASE_URL =
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function toISODate(d: Date): string {
-  return d.toISOString().split('T')[0];
+  // Use en-CA locale for YYYY-MM-DD in local time (not UTC like toISOString())
+  return d.toLocaleString('en-CA').split(',')[0];
 }
 
 function formatDateLabel(d: Date): string {

@@ -26,13 +26,14 @@ interface CalculatorState {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  // Use en-CA locale for YYYY-MM-DD in local time (not UTC like toISOString())
+  return new Date().toLocaleString('en-CA').split(',')[0];
 }
 
 function subtractDays(days: number): string {
   const d = new Date();
   d.setDate(d.getDate() - days);
-  return d.toISOString().slice(0, 10);
+  return d.toLocaleString('en-CA').split(',')[0];
 }
 
 function formatDayLabel(iso: string): string {

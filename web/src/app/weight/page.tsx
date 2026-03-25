@@ -29,7 +29,8 @@ async function deleteWeightEntry(id: number): Promise<void> {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  // Use en-CA locale for YYYY-MM-DD in local time (not UTC like toISOString())
+  return new Date().toLocaleString('en-CA').split(',')[0];
 }
 
 function formatDateShort(iso: string): string {

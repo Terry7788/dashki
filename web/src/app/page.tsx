@@ -20,7 +20,8 @@ function getGreeting(): string {
 }
 
 function todayISO(): string {
-  return new Date().toISOString().split('T')[0];
+  // Use en-CA locale for YYYY-MM-DD in local time (not UTC like toISOString())
+  return new Date().toLocaleString('en-CA').split(',')[0];
 }
 
 function formatDate(dateStr: string): string {
