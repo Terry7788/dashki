@@ -4,6 +4,20 @@ import { db } from '../db';
 const router = Router();
 
 /**
+ * DELETE /api/migration/clear-foods
+ * Clear all foods from the database
+ */
+router.delete('/clear-foods', (req: Request, res: Response) => {
+  db.run('DELETE FROM Foods', (err) => {
+    if (err) {
+      console.error('[error] DELETE /api/migration/clear-foods', err);
+      return res.status(500).json({ error: 'Failed to clear foods' });
+    }
+    res.json({ success: true, message: 'All foods cleared' });
+  });
+});
+
+/**
  * POST /api/migration/import-foods
  * Import foods from external source (calorie-assistant)
  * Body: { foods: Array<{ name, baseAmount, baseUnit, calories, protein, carbs?, fat? }> }
