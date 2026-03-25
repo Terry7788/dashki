@@ -14,8 +14,8 @@ function toNumber(value: unknown, fallback: number | null = null): number | null
 
 /**
  * Map a raw DB row into the shape the frontend expects.
- * The DB stores values per serving (based on baseAmount). 
- * We calculate per-100g values for the frontend.
+ * The DB stores values per serving (based on baseAmount/baseUnit). 
+ * We calculate per-100g values only when baseUnit is 'grams'.
  */
 function mapFood(row: Record<string, unknown>): Record<string, unknown> {
   const baseAmount = row.base_amount as number ?? 100;
@@ -25,23 +25,30 @@ function mapFood(row: Record<string, unknown>): Record<string, unknown> {
   const carbs = row.carbs as number ?? 0;
   const fat = row.fat as number ?? 0;
 
-  // Calculate per-100g values
-  const factor = baseUnit === 'grams' ? (baseAmount / 100) : (baseAmount > 0 ? (100 / baseAmount) : 1);
-  const caloriesPer100 = baseUnit === 'grams' ? calories : Math.round(calories * factor);
-  const proteinPer100 = baseUnit === 'grams' ? protein : Math.round(protein * factor * 10) / 10;
-  const carbsPer100 = baseUnit === 'grams' ? carbs : Math.round((carbs ?? 0) * factor * 10) / 10;
-  const fatPer100 = baseUnit === 'grams' ? fat : Math.round((fat ?? 0) * factor * 10) / 10;
+  // Only calculate per-100g when baseUnit is 'grams'
+  // For 'servings', 'ml', etc. - keep original values
+  let caloriesPer100 = calories;
+  let proteinPer100 = protein;
+  let carbsPer100 = carbs;
+  let fatPer100 = fat;
+  
+  if (baseUnit === 'grams' && baseAmount !== 100) {
+    // Convert from baseAmount to per-100g
+    const factor = baseAmount / 100;
+    caloriesPer100 = Math.round(calories * factor * 10) / 10;
+    proteinPer100 = Math.round(protein * factor * 10) / 10;
+    carbsPer100 = Math.round((carbs ?? 0) * factor * 10) / 10;
+    fatPer100 = Math.round((fat ?? 0) * factor * 10) / 10;
+  }
 
   return {
     id: row.id,
     name: row.name,
-    // Per-100g values for frontend calculations
     calories_per_100g: caloriesPer100,
     protein_per_100g: proteinPer100,
     carbs_per_100g: carbsPer100,
     fat_per_100g: fatPer100,
     serving_size_g: row.serving_size_g ?? (baseUnit === 'grams' ? baseAmount : null),
-    // Raw values per serving
     calories,
     protein,
     carbs,
