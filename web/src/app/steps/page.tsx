@@ -15,6 +15,14 @@ import { GlassCard, GlassButton, GlassInput } from '@/components/ui';
 import { getSteps, updateSteps, getGoals, updateGoals } from '@/lib/api';
 import type { StepEntry, Goals } from '@/lib/types';
 
+// ─── Step Calculator State ──────────────────────────────────────────────────
+
+interface CalculatorState {
+  time: string;
+  speed: string;
+  height: string;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function todayISO(): string {
@@ -132,6 +140,33 @@ export default function StepsPage() {
   const [goalsLoading, setGoalsLoading] = useState(true);
   const [editingGoal, setEditingGoal] = useState(false);
   const [goalInput, setGoalInput] = useState('');
+
+  // Step Calculator state
+  const [calc, setCalc] = useState<CalculatorState>({
+    time: '',
+    speed: '5.0',
+    height: '183',
+  });
+  const [calculatedSteps, setCalculatedSteps] = useState(0);
+
+  // Step calculator logic (same formula as Calorie Assistant)
+  useEffect(() => {
+    const timeNum = parseFloat(calc.time);
+    const speedNum = parseFloat(calc.speed);
+    const heightNum = parseFloat(calc.height);
+
+    if (timeNum > 0 && speedNum > 0 && heightNum > 0) {
+      const timeInHours = timeNum / 60;
+      const distanceKm = speedNum * timeInHours;
+      const distanceM = distanceKm * 1000;
+      const stepLengthCm = 0.415 * heightNum;
+      const stepLengthM = stepLengthCm / 100;
+      const steps = distanceM / stepLengthM;
+      setCalculatedSteps(Math.round(steps));
+    } else {
+      setCalculatedSteps(0);
+    }
+  }, [calc]);
 
   // Load goals from API
   useEffect(() => {
@@ -257,6 +292,100 @@ export default function StepsPage() {
           </div>
         </GlassCard>
       )}
+
+      {/* ── Step Calculator ── */}
+      <GlassCard>
+        <h2 className="text-white font-semibold mb-4">Calculate Steps</h2>
+        
+        {/* Quick Time Buttons */}
+        <div className="mb-4">
+          <p className="text-white/50 text-xs mb-2">Quick Time</p>
+          <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+            {[5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60].map((minutes) => (
+              <button
+                key={minutes}
+                onClick={() => setCalc((prev) => ({ ...prev, time: String(minutes) }))}
+                className={`px-2 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  calc.time === String(minutes)
+                    ? 'bg-indigo-500 text-white'
+                    : 'bg-white/5 text-white/60 hover:bg-white/10'
+                }`}
+              >
+                {minutes}m
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Input Fields */}
+        <div className="space-y-4">
+          <GlassInput
+            label="Walking Time (minutes)"
+            type="number"
+            placeholder="Enter time in minutes"
+            value={calc.time}
+            onChange={(e) => setCalc((prev) => ({ ...prev, time: e.target.value }))}
+            min={0}
+            step={1}
+          />
+          <GlassInput
+            label="Walking Speed (km/h)"
+            type="number"
+            placeholder="Enter speed"
+            value={calc.speed}
+            onChange={(e) => setCalc((prev) => ({ ...prev, speed: e.target.value }))}
+            min={0}
+            step={0.1}
+          />
+          <GlassInput
+            label="Height (cm)"
+            type="number"
+            placeholder="Enter height"
+            value={calc.height}
+            onChange={(e) => setCalc((prev) => ({ ...prev, height: e.target.value }))}
+            min={0}
+            step={1}
+          />
+        </div>
+
+        {/* Calculated Result */}
+        {calculatedSteps > 0 && (
+          <div className="mt-4 p-4 bg-indigo-500/20 rounded-xl border border-indigo-500/30">
+            <p className="text-white/60 text-xs mb-1 text-center">Estimated Steps</p>
+            <p className="text-white text-2xl font-bold text-center">
+              {calculatedSteps.toLocaleString()}
+            </p>
+            <p className="text-white/40 text-xs text-center mt-1">
+              Walking {calc.time} min at {calc.speed} km/h
+            </p>
+          </div>
+        )}
+
+        {/* Action Buttons */}
+        <div className="flex gap-3 mt-4">
+          <GlassButton
+            variant="primary"
+            onClick={() => {
+              setCalc({ time: '', speed: '5.0', height: '183' });
+            }}
+            className="flex-1"
+          >
+            Reset
+          </GlassButton>
+          {calculatedSteps > 0 && (
+            <GlassButton
+              variant="primary"
+              onClick={() => {
+                setStepsInput(String(calculatedSteps));
+                setDate(todayISO());
+              }}
+              className="flex-1"
+            >
+              Log as Today
+            </GlassButton>
+          )}
+        </div>
+      </GlassCard>
 
       {/* ── Progress Ring ── */}
       <GlassCard>
