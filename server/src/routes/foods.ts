@@ -14,29 +14,40 @@ function toNumber(value: unknown, fallback: number | null = null): number | null
 
 /**
  * Map a raw DB row into the shape the frontend expects.
- * We use `calories_per_100g` / `protein_per_100g` / `carbs_per_100g` / `fat_per_100g`
- * as the primary names, but also expose `calories` and `protein` for backward compat.
+ * The DB stores values per serving (based on baseAmount). 
+ * We calculate per-100g values for the frontend.
  */
 function mapFood(row: Record<string, unknown>): Record<string, unknown> {
+  const baseAmount = row.base_amount as number ?? 100;
+  const baseUnit = row.base_unit as string ?? 'grams';
   const calories = row.calories as number ?? 0;
   const protein = row.protein as number ?? 0;
   const carbs = row.carbs as number ?? 0;
   const fat = row.fat as number ?? 0;
 
+  // Calculate per-100g values
+  const factor = baseUnit === 'grams' ? (baseAmount / 100) : (baseAmount > 0 ? (100 / baseAmount) : 1);
+  const caloriesPer100 = baseUnit === 'grams' ? calories : Math.round(calories * factor);
+  const proteinPer100 = baseUnit === 'grams' ? protein : Math.round(protein * factor * 10) / 10;
+  const carbsPer100 = baseUnit === 'grams' ? carbs : Math.round((carbs ?? 0) * factor * 10) / 10;
+  const fatPer100 = baseUnit === 'grams' ? fat : Math.round((fat ?? 0) * factor * 10) / 10;
+
   return {
     id: row.id,
     name: row.name,
-    // Canonical per-100g names expected by frontend
-    calories_per_100g: calories,
-    protein_per_100g: protein,
-    carbs_per_100g: carbs,
-    fat_per_100g: fat,
-    serving_size_g: row.serving_size_g ?? null,
-    // Legacy / backward-compat fields
+    // Per-100g values for frontend calculations
+    calories_per_100g: caloriesPer100,
+    protein_per_100g: proteinPer100,
+    carbs_per_100g: carbsPer100,
+    fat_per_100g: fatPer100,
+    serving_size_g: row.serving_size_g ?? (baseUnit === 'grams' ? baseAmount : null),
+    // Raw values per serving
     calories,
     protein,
-    baseAmount: row.base_amount ?? 100,
-    baseUnit: row.base_unit ?? 'grams',
+    carbs,
+    fat,
+    baseAmount,
+    baseUnit,
     created_at: row.created_at,
   };
 }
