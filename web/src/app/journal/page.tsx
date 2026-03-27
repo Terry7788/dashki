@@ -146,6 +146,11 @@ function JournalSkeleton() {
 
 // ─── Food Picker (shared between Foods tab & Meals) ────────────────────────
 
+interface SelectedFood {
+  food: Food;
+  servings: number;
+}
+
 interface FoodPickerProps {
   onAdd: (food: Food, servings: number) => void;
 }
@@ -154,8 +159,7 @@ function FoodPicker({ onAdd }: FoodPickerProps) {
   const [query, setQuery] = useState('');
   const [foods, setFoods] = useState<Food[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selected, setSelected] = useState<Food | null>(null);
-  const [servings, setServings] = useState('1');
+  const [selectedFoods, setSelectedFoods] = useState<SelectedFood[]>([]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load all foods on mount, then filter by search
@@ -176,71 +180,155 @@ function FoodPicker({ onAdd }: FoodPickerProps) {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [query]);
 
-  function handleConfirm() {
-    if (!selected) return;
-    const sv = parseFloat(servings) || 1;
-    onAdd(selected, sv);
-    setSelected(null);
-    setServings('1');
+  function toggleFood(food: Food) {
+    const existing = selectedFoods.find((sf) => sf.food.id === food.id);
+    if (existing) {
+      setSelectedFoods(selectedFoods.filter((sf) => sf.food.id !== food.id));
+    } else {
+      setSelectedFoods([...selectedFoods, { food, servings: 1 }]);
+    }
+  }
+
+  function updateServingsForFood(foodId: number, newServings: string) {
+    const numServings = newServings === '' ? 0 : parseFloat(newServings);
+    setSelectedFoods(selectedFoods.map((sf) =>
+      sf.food.id === foodId ? { ...sf, servings: isNaN(numServings) ? 0 : numServings } : sf
+    ));
+  }
+
+  function isFoodSelected(foodId: number): boolean {
+    return selectedFoods.some((sf) => sf.food.id === foodId);
+  }
+
+  function getSelectedFood(foodId: number): SelectedFood | undefined {
+    return selectedFoods.find((sf) => sf.food.id === foodId);
+  }
+
+  function handleAddAll() {
+    for (const { food, servings } of selectedFoods) {
+      onAdd(food, servings);
+    }
+    setSelectedFoods([]);
     setQuery('');
   }
 
-  if (selected) {
-    const { calories, protein } = calcNutrition(selected, parseFloat(servings) || 1);
-    return (
-      <div className="space-y-4">
-        <button
-          onClick={() => setSelected(null)}
-          className="flex items-center gap-2 text-sm text-white/50 hover:text-white transition-colors"
-        >
-          <ChevronLeft className="w-4 h-4" /> Back to search
-        </button>
-        <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-1">
-          <p className="font-semibold text-white">{selected.name}</p>
-          <p className="text-sm text-white/50">
-            {calories} kcal · {protein}g protein per serving
-          </p>
-        </div>
-        <GlassInput
-          label="Servings"
-          type="number"
-          value={servings}
-          onChange={(e) => setServings(e.target.value)}
-          min={0.1}
-          step={0.1}
-        />
-        <GlassButton variant="primary" className="w-full" onClick={handleConfirm}>
-          Add to Journal
-        </GlassButton>
-      </div>
-    );
-  }
+  // Calculate totals
+  const totalCalories = selectedFoods.reduce((sum, sf) => sum + calcNutrition(sf.food, sf.servings).calories, 0);
+  const totalProtein = selectedFoods.reduce((sum, sf) => sum + calcNutrition(sf.food, sf.servings).protein, 0);
 
   return (
     <div className="space-y-3">
-      <GlassInput
-        placeholder="Search foods…"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-      />
-      <div className="max-h-64 overflow-y-auto space-y-1 pr-1">
+      {/* Selected summary bar - always visible at top when there are selections */}
+      {selectedFoods.length > 0 && (
+        <div className="p-3 rounded-2xl bg-indigo-500/20 border border-indigo-400/30">
+          <p className="text-sm font-medium text-white">
+            {selectedFoods.length} selected · {Math.round(totalCalories)} kcal · {totalProtein.toFixed(1)}g protein
+          </p>
+          <div className="flex flex-wrap gap-1 mt-2">
+            {selectedFoods.map((sf) => (
+              <span
+                key={sf.food.id}
+                className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-white/10 rounded-full text-white/80"
+              >
+                {sf.food.name}
+                <button
+                  onClick={() => toggleFood(sf.food)}
+                  className="hover:text-red-400"
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="relative">
+        <GlassInput
+          placeholder="Search foods…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        {query && (
+          <button
+            onClick={() => setQuery('')}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white"
+          >
+            ×
+          </button>
+        )}
+      </div>
+      <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
         {loading && <p className="text-center text-white/40 text-sm py-4">Searching…</p>}
         {!loading && foods.length === 0 && (
           <p className="text-center text-white/40 text-sm py-4">No foods found</p>
         )}
-        {foods.map((food) => (
-          <button
-            key={food.id}
-            onClick={() => setSelected(food)}
-            className="w-full flex items-center justify-between px-4 py-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 transition-all duration-200 text-left"
-          >
-            <span className="text-sm font-medium text-white truncate">{food.name}</span>
-            <span className="text-xs text-white/50 ml-3 shrink-0">
-              {foodCalories(food)} kcal · {foodProtein(food)}g pro
-            </span>
-          </button>
-        ))}
+        {foods.map((food) => {
+          const selected = getSelectedFood(food.id);
+          const isSelected = !!selected;
+          return (
+            <div
+              key={food.id}
+              className={`rounded-2xl border transition-all duration-200 ${
+                isSelected
+                  ? 'bg-indigo-500/20 border-indigo-400/50'
+                  : 'bg-white/5 hover:bg-white/10 border-white/10'
+              }`}
+            >
+              <button
+                onClick={() => toggleFood(food)}
+                className="w-full flex items-center justify-between px-4 py-3 text-left"
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                    isSelected ? 'border-indigo-400 bg-indigo-400' : 'border-white/30'
+                  }`}>
+                    {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
+                  </div>
+                  <span className="text-sm font-medium text-white truncate">{food.name}</span>
+                </div>
+                <span className="text-xs text-white/50 shrink-0">
+                  {foodCalories(food)} kcal · {foodProtein(food)}g pro
+                </span>
+              </button>
+              {/* Inline servings input for selected foods */}
+              {isSelected && (
+                <div className="px-4 pb-3 flex items-center gap-2">
+                  <span className="text-xs text-white/50">Servings:</span>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.1}
+                      value={selected.servings === 0 ? '' : selected.servings}
+                      onChange={(e) => updateServingsForFood(food.id, e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                      placeholder="-"
+                      className="w-20 px-2 pr-6 py-1 text-sm bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
+                    />
+                    <button
+                      onClick={(e) => { e.stopPropagation(); updateServingsForFood(food.id, ''); }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-white/30 hover:text-white text-xs"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <span className="text-xs text-indigo-300">
+                    {Math.round(calcNutrition(food, selected.servings).calories)} kcal
+                  </span>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
+
+      {/* Add all button */}
+      {selectedFoods.length > 0 && (
+        <GlassButton variant="primary" className="w-full" onClick={handleAddAll}>
+          Add {selectedFoods.length} Food{selectedFoods.length > 1 ? 's' : ''} to Journal
+        </GlassButton>
+      )}
     </div>
   );
 }
@@ -353,7 +441,7 @@ function AddFoodModal({ isOpen, onClose, mealType, date, onAdded }: AddFoodModal
       title={`Add to ${MEAL_LABELS[mealType]}`}
       size="lg"
     >
-      <div className="space-y-4" style={{ maxHeight: '85vh' }}>
+      <div className="space-y-4" style={{ maxHeight: '92vh' }}>
         {/* Tabs */}
         <div className="flex gap-2 p-1 rounded-2xl bg-white/5 border border-white/10">
           <button className={tabClass('foods')} onClick={() => setTab('foods')}>🍎 Foods</button>
@@ -784,7 +872,7 @@ export default function JournalPage() {
           <div className="relative shrink-0">
             <ProgressRing value={totalCalories} max={goals.calories} size={72} stroke={6} color="#6366f1" />
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-xs font-bold leading-tight">{Math.round(totalCalories)}</span>
+              <span className="text-sm font-bold leading-tight">{Math.round(totalCalories)}</span>
               <span className="text-[10px] text-gray-400 dark:text-white/40">kcal</span>
             </div>
           </div>
@@ -794,7 +882,7 @@ export default function JournalPage() {
             <div>
               <div className="flex items-end justify-between mb-1">
                 <span className="text-sm text-gray-500 dark:text-white/60">Calories</span>
-                <span className="text-sm font-semibold">
+                <span className="text-base font-bold">
                   {Math.round(totalCalories)} <span className="text-gray-400 dark:text-white/40 font-normal">/ {goals.calories}</span>
                 </span>
               </div>
@@ -810,7 +898,7 @@ export default function JournalPage() {
             <div>
               <div className="flex items-end justify-between mb-1">
                 <span className="text-sm text-gray-500 dark:text-white/60">Protein</span>
-                <span className="text-sm font-semibold">
+                <span className="text-base font-bold">
                   {Math.round(totalProtein * 10) / 10}g <span className="text-gray-400 dark:text-white/40 font-normal">/ {goals.protein}g</span>
                 </span>
               </div>

@@ -3,8 +3,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, Pencil, Trash2, Search, Leaf } from 'lucide-react';
 import { GlassCard, GlassButton, GlassInput, GlassModal } from '@/components/ui';
-import { getFoods, createFood, updateFood, deleteFood } from '@/lib/api';
-import type { Food } from '@/lib/types';
+import { getFoods, createFood, updateFood, deleteFood, addJournalEntry } from '@/lib/api';
+import type { Food, MealType } from '@/lib/types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -31,6 +31,14 @@ const defaultForm = (): FoodFormData => ({
   fat_per_100g: '',
   serving_size_g: '',
 });
+
+const MEAL_TYPES: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
+const MEAL_LABELS: Record<MealType, string> = {
+  breakfast: 'Breakfast',
+  lunch: 'Lunch',
+  dinner: 'Dinner',
+  snack: 'Snack',
+};
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -67,13 +75,17 @@ interface FoodModalProps {
   onClose: () => void;
   editingFood: Food | null;
   onSaved: (food: Food, isEdit: boolean) => void;
+  onAddToJournal?: (food: Food, mealType: MealType, servings: number) => void;
 }
 
-function FoodModal({ isOpen, onClose, editingFood, onSaved }: FoodModalProps) {
+function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: FoodModalProps) {
   const [form, setForm] = useState<FoodFormData>(defaultForm());
   const [errors, setErrors] = useState<FormErrors>({});
   const [saving, setSaving] = useState(false);
   const [serverError, setServerError] = useState('');
+  const [addToJournal, setAddToJournal] = useState(false);
+  const [journalMealType, setJournalMealType] = useState<MealType>('breakfast');
+  const [journalServings, setJournalServings] = useState('1');
 
   useEffect(() => {
     if (editingFood) {
@@ -92,6 +104,9 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved }: FoodModalProps) {
     }
     setErrors({});
     setServerError('');
+    setAddToJournal(false);
+    setJournalMealType('breakfast');
+    setJournalServings('1');
   }, [editingFood, isOpen]);
 
   function set(field: keyof FoodFormData, value: string) {
@@ -101,7 +116,7 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved }: FoodModalProps) {
     }
   }
 
-  async function handleSubmit() {
+  async function handleSubmit(addToJournalAfterSave: boolean = false) {
     const errs = validate(form);
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
@@ -126,6 +141,11 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved }: FoodModalProps) {
         food = await createFood(payload);
         onSaved(food, false);
       }
+
+      if (addToJournalAfterSave && onAddToJournal) {
+        onAddToJournal(food, journalMealType, parseFloat(journalServings) || 1);
+      }
+
       onClose();
     } catch (e: unknown) {
       setServerError(e instanceof Error ? e.message : 'Failed to save');
@@ -142,28 +162,60 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved }: FoodModalProps) {
       size="md"
     >
       <div className="space-y-4">
-        <GlassInput
-          label="Food Name *"
-          placeholder="e.g. Chicken Breast"
-          value={form.name}
-          onChange={(e) => set('name', e.target.value)}
-        />
+        <div className="relative">
+          <GlassInput
+            label="Food Name *"
+            placeholder="e.g. Chicken Breast"
+            value={form.name}
+            onChange={(e) => set('name', e.target.value)}
+          />
+          {form.name && (
+            <button
+              type="button"
+              onClick={() => set('name', '')}
+              className="absolute right-3 top-9 text-white/40 hover:text-white"
+            >
+              ×
+            </button>
+          )}
+        </div>
         {errors.name && <p className="text-xs text-red-400 -mt-2 pl-1">{errors.name}</p>}
 
         <div className="grid grid-cols-2 gap-2 sm:gap-3">
-          <GlassInput
-            label="Base Amount"
-            type="number"
-            value={form.base_amount}
-            onChange={(e) => set('base_amount', e.target.value)}
-            min={1}
-          />
+          <div className="relative">
+            <GlassInput
+              label="Base Amount"
+              type="number"
+              inputMode="decimal"
+              value={form.base_amount}
+              onChange={(e) => set('base_amount', e.target.value)}
+              min={1}
+            />
+            {form.base_amount && (
+              <button
+                type="button"
+                onClick={() => set('base_amount', '')}
+                className="absolute right-3 top-9 text-white/40 hover:text-white"
+              >
+                ×
+              </button>
+            )}
+          </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-gray-500 dark:text-white/60 pl-1">Unit</label>
             <select
               value={form.base_unit}
-              onChange={(e) => set('base_unit', e.target.value as BaseUnit)}
-              className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-black/[0.04] border border-black/[0.10] text-gray-900 dark:bg-white/10 dark:border-white/20 dark:text-white rounded-xl sm:rounded-2xl text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-[#2E8B57]/40 focus:border-[#2E8B57]/60 transition-all duration-200"
+              onChange={(e) => {
+                const newUnit = e.target.value as BaseUnit;
+                // Auto-adjust base amount when switching units
+                if (newUnit === 'servings') {
+                  set('base_amount', '1');
+                } else if (newUnit === 'grams' || newUnit === 'ml') {
+                  set('base_amount', '100');
+                }
+                set('base_unit', newUnit);
+              }}
+              className="w-full h-[46px] px-3 sm:px-4 bg-black/[0.04] border border-black/[0.10] text-gray-900 dark:bg-white/10 dark:border-white/20 dark:text-white rounded-xl sm:rounded-2xl text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-[#2E8B57]/40 focus:border-[#2E8B57]/60 transition-all duration-200"
             >
               <option value="grams">Grams</option>
               <option value="ml">ml</option>
@@ -173,70 +225,183 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved }: FoodModalProps) {
         </div>
 
         <div className="grid grid-cols-2 gap-2 sm:gap-3">
-          <div>
+          <div className="relative">
             <GlassInput
               label="Calories (per 100g) *"
               type="number"
+              inputMode="numeric"
               value={form.calories_per_100g}
               onChange={(e) => set('calories_per_100g', e.target.value)}
               min={0}
               step={0.1}
               placeholder="0"
             />
+            {form.calories_per_100g && (
+              <button
+                type="button"
+                onClick={() => set('calories_per_100g', '')}
+                className="absolute right-3 top-9 text-white/40 hover:text-white"
+              >
+                ×
+              </button>
+            )}
             {errors.calories_per_100g && (
               <p className="text-xs text-red-400 mt-1 pl-1">{errors.calories_per_100g}</p>
             )}
           </div>
-          <GlassInput
-            label="Protein (per 100g)"
-            type="number"
-            value={form.protein_per_100g}
-            onChange={(e) => set('protein_per_100g', e.target.value)}
-            min={0}
-            step={0.1}
-            placeholder="0"
-          />
+          <div className="relative">
+            <GlassInput
+              label="Protein (per 100g)"
+              type="number"
+              inputMode="numeric"
+              value={form.protein_per_100g}
+              onChange={(e) => set('protein_per_100g', e.target.value)}
+              min={0}
+              step={0.1}
+              placeholder="0"
+            />
+            {form.protein_per_100g && (
+              <button
+                type="button"
+                onClick={() => set('protein_per_100g', '')}
+                className="absolute right-3 top-9 text-white/40 hover:text-white"
+              >
+                ×
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-2 sm:gap-3">
-          <GlassInput
-            label="Carbs (per 100g)"
-            type="number"
-            value={form.carbs_per_100g}
-            onChange={(e) => set('carbs_per_100g', e.target.value)}
-            min={0}
-            step={0.1}
-            placeholder="0"
-          />
-          <GlassInput
-            label="Fat (per 100g)"
-            type="number"
-            value={form.fat_per_100g}
-            onChange={(e) => set('fat_per_100g', e.target.value)}
-            min={0}
-            step={0.1}
-            placeholder="0"
-          />
+          <div className="relative">
+            <GlassInput
+              label="Carbs (per 100g)"
+              type="number"
+              inputMode="numeric"
+              value={form.carbs_per_100g}
+              onChange={(e) => set('carbs_per_100g', e.target.value)}
+              min={0}
+              step={0.1}
+              placeholder="0"
+            />
+            {form.carbs_per_100g && (
+              <button
+                type="button"
+                onClick={() => set('carbs_per_100g', '')}
+                className="absolute right-3 top-9 text-white/40 hover:text-white"
+              >
+                ×
+              </button>
+            )}
+          </div>
+          <div className="relative">
+            <GlassInput
+              label="Fat (per 100g)"
+              type="number"
+              inputMode="numeric"
+              value={form.fat_per_100g}
+              onChange={(e) => set('fat_per_100g', e.target.value)}
+              min={0}
+              step={0.1}
+              placeholder="0"
+            />
+            {form.fat_per_100g && (
+              <button
+                type="button"
+                onClick={() => set('fat_per_100g', '')}
+                className="absolute right-3 top-9 text-white/40 hover:text-white"
+              >
+                ×
+              </button>
+            )}
+          </div>
         </div>
 
-        <GlassInput
-          label="Serving Size (g) — optional"
-          type="number"
-          value={form.serving_size_g}
-          onChange={(e) => set('serving_size_g', e.target.value)}
-          min={1}
-          placeholder="e.g. 30 for 1 slice"
-        />
+        <div className="relative">
+          <GlassInput
+            label="Serving Size (g) — optional"
+            type="number"
+            inputMode="numeric"
+            value={form.serving_size_g}
+            onChange={(e) => set('serving_size_g', e.target.value)}
+            min={1}
+            placeholder="e.g. 30 for 1 slice"
+          />
+          {form.serving_size_g && (
+            <button
+              type="button"
+              onClick={() => set('serving_size_g', '')}
+              className="absolute right-3 top-9 text-white/40 hover:text-white"
+            >
+              ×
+            </button>
+          )}
+        </div>
 
         {serverError && (
           <p className="text-sm text-red-400 bg-red-500/10 border border-red-400/20 rounded-xl px-3 py-2">{serverError}</p>
         )}
 
+        {/* Add to Journal option - only for new foods */}
+        {!editingFood && onAddToJournal && (
+          <div className="p-3 rounded-2xl bg-white/5 border border-white/10 space-y-3">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <div
+                onClick={() => setAddToJournal(!addToJournal)}
+                className={`w-10 h-6 rounded-full transition-all duration-200 border ${
+                  addToJournal
+                    ? 'bg-[#2E8B57]/30 border-[#2E8B57]/50'
+                    : 'bg-white/10 border-white/20'
+                }`}
+              >
+                <div
+                  className={`w-5 h-5 rounded-full bg-white shadow-md transform transition-transform duration-200 ${
+                    addToJournal ? 'translate-x-4.5' : 'translate-x-0.5'
+                  }`}
+                />
+              </div>
+              <span className="text-sm text-white">Add to Food Journal</span>
+            </label>
+            {addToJournal && (
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-sm font-medium text-gray-500 dark:text-white/60 pl-1">Meal</label>
+                  <select
+                    value={journalMealType}
+                    onChange={(e) => setJournalMealType(e.target.value as MealType)}
+                    className="w-full h-[46px] px-3 sm:px-4 bg-black/[0.04] border border-black/[0.10] text-gray-900 dark:bg-white/10 dark:border-white/20 dark:text-white rounded-xl sm:rounded-2xl text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-[#2E8B57]/40 focus:border-[#2E8B57]/60 transition-all duration-200"
+                  >
+                    {MEAL_TYPES.map((m) => (
+                      <option key={m} value={m}>{MEAL_LABELS[m]}</option>
+                    ))}
+                  </select>
+                </div>
+                <GlassInput
+                  label="Servings"
+                  type="number"
+                  inputMode="decimal"
+                  value={journalServings}
+                  onChange={(e) => setJournalServings(e.target.value)}
+                  min={0}
+                  step={0.1}
+                  placeholder="1"
+                />
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-1">
           <GlassButton variant="default" className="flex-1" onClick={onClose}>Cancel</GlassButton>
-          <GlassButton variant="primary" className="flex-1" onClick={handleSubmit} disabled={saving}>
-            {saving ? 'Saving…' : editingFood ? 'Update' : 'Add Food'}
-          </GlassButton>
+          {addToJournal ? (
+            <GlassButton variant="primary" className="flex-1" onClick={() => handleSubmit(true)} disabled={saving}>
+              {saving ? 'Saving…' : 'Add Food & Log'}
+            </GlassButton>
+          ) : (
+            <GlassButton variant="primary" className="flex-1" onClick={() => handleSubmit(false)} disabled={saving}>
+              {saving ? 'Saving…' : 'Add Food'}
+            </GlassButton>
+          )}
         </div>
       </div>
     </GlassModal>
@@ -397,6 +562,22 @@ export default function FoodsPage() {
     setFoods((prev) => prev.filter((f) => f.id !== id));
   }
 
+  function handleAddToJournal(food: Food, mealType: MealType, servings: number) {
+    const today = new Date().toLocaleString('en-CA').split(',')[0]; // YYYY-MM-DD in local time
+    const calories = (food.calories_per_100g ?? food.calories ?? 0) * servings;
+    const protein = (food.protein_per_100g ?? food.protein ?? 0) * servings;
+    
+    addJournalEntry({
+      date: today,
+      meal_type: mealType,
+      food_id: food.id,
+      food_name_snapshot: food.name,
+      servings,
+      calories_snapshot: Math.round(calories),
+      protein_snapshot: Math.round(protein * 10) / 10,
+    }).catch((e: unknown) => console.error('Failed to add to journal:', e));
+  }
+
   return (
     <div className="px-3 sm:px-4 max-w-4xl mx-auto space-y-4 sm:space-y-6 animate-fade-in w-full max-w-full overflow-hidden">
       {/* Header */}
@@ -470,6 +651,7 @@ export default function FoodsPage() {
         onClose={() => setModalOpen(false)}
         editingFood={editingFood}
         onSaved={handleSaved}
+        onAddToJournal={handleAddToJournal}
       />
       <DeleteModal
         isOpen={!!deletingFood}

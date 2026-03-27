@@ -7,6 +7,7 @@ interface GlassInputProps {
   value: string | number;
   onChange: (e: ChangeEvent<HTMLInputElement>) => void;
   type?: InputHTMLAttributes<HTMLInputElement>['type'];
+  inputMode?: InputHTMLAttributes<HTMLInputElement>['inputMode'];
   className?: string;
   name?: string;
   id?: string;
@@ -24,6 +25,7 @@ export default function GlassInput({
   value,
   onChange,
   type = 'text',
+  inputMode,
   className,
   name,
   id,
@@ -50,6 +52,7 @@ export default function GlassInput({
         id={inputId}
         name={name}
         type={type}
+        inputMode={inputMode}
         value={value}
         onChange={onChange}
         placeholder={placeholder}

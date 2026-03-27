@@ -135,6 +135,7 @@ export default function StepsPage() {
   const [date, setDate] = useState(todayISO());
   const [stepsInput, setStepsInput] = useState('');
   const [saving, setSaving] = useState(false);
+  const [savingCalc, setSavingCalc] = useState(false); // For calculator "Log as Today"
 
   // Goal state (from API)
   const [goal, setGoal] = useState<number>(DEFAULT_GOAL);
@@ -230,7 +231,11 @@ export default function StepsPage() {
     if (isNaN(val) || val < 0) return;
     setSaving(true);
     try {
-      const entry = await updateSteps({ date, steps: val });
+      // Always add to existing steps for this date
+      const existingEntry = entries.find((e) => e.date === date);
+      const finalSteps = existingEntry ? existingEntry.steps + val : val;
+      
+      const entry = await updateSteps({ date, steps: finalSteps });
       setEntries((prev) => {
         const next = prev.filter((e) => e.date !== entry.date);
         return [...next, entry];
@@ -240,6 +245,27 @@ export default function StepsPage() {
       setError(e.message || 'Failed to update steps');
     }
     setSaving(false);
+  };
+
+  const handleLogAsToday = async () => {
+    if (calculatedSteps <= 0) return;
+    setSavingCalc(true);
+    try {
+      const today = todayISO();
+      const existingEntry = entries.find((e) => e.date === today);
+      const finalSteps = existingEntry ? existingEntry.steps + calculatedSteps : calculatedSteps;
+      
+      const entry = await updateSteps({ date: today, steps: finalSteps });
+      setEntries((prev) => {
+        const next = prev.filter((e) => e.date !== entry.date);
+        return [...next, entry];
+      });
+      // Reset calculator
+      setCalc({ time: '', speed: '5.0', height: '183' });
+    } catch (e: any) {
+      setError(e.message || 'Failed to log steps');
+    }
+    setSavingCalc(false);
   };
 
   const handleSaveGoal = async () => {
@@ -376,13 +402,11 @@ export default function StepsPage() {
           {calculatedSteps > 0 && (
             <GlassButton
               variant="primary"
-              onClick={() => {
-                setStepsInput(String(calculatedSteps));
-                setDate(todayISO());
-              }}
+              onClick={handleLogAsToday}
+              disabled={savingCalc}
               className="flex-1"
             >
-              Log as Today
+              {savingCalc ? 'Adding...' : 'Log as Today'}
             </GlassButton>
           )}
         </div>
@@ -416,11 +440,11 @@ export default function StepsPage() {
             className="w-full sm:w-44"
           />
           <GlassInput
-            label="Steps"
+            label="Steps to add"
             type="number"
             min={0}
             step={100}
-            placeholder="e.g. 8500"
+            placeholder="e.g. 3000"
             value={stepsInput}
             onChange={(e) => setStepsInput(e.target.value)}
             className="flex-1"
@@ -431,7 +455,7 @@ export default function StepsPage() {
             disabled={saving || !stepsInput}
             className="flex-shrink-0"
           >
-            {saving ? 'Saving…' : 'Update Steps'}
+            {saving ? 'Saving…' : 'Add Steps'}
           </GlassButton>
         </div>
         {error && <p className="text-red-400 text-sm mt-3">{error}</p>}
