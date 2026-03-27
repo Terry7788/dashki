@@ -21,9 +21,11 @@ export default function MobileHeader({ onMenuToggle }: MobileHeaderProps) {
       {/* Logo / Title */}
       <div className="flex-1 flex items-center justify-center">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-[#2E8B57] to-[#345e37] flex items-center justify-center shadow-lg shadow-[#2E8B57]/30">
-            <span className="text-white font-bold text-sm leading-none">D</span>
-          </div>
+          <img 
+            src="/web/icon-192.png" 
+            alt="Dashki" 
+            className="w-7 h-7 rounded-lg"
+          />
           <span className="text-lg font-bold text-[#61bc84] tracking-tight">Dashki</span>
         </div>
       </div>
