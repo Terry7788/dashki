@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Loader2 } from 'lucide-react';
 import { GlassCard, GlassButton, GlassInput, GlassModal } from '@/components/ui';
 import {
@@ -11,6 +11,7 @@ import {
   getSavedMeals,
 } from '@/lib/api';
 import type { JournalEntry, MealType, Food, SavedMeal } from '@/lib/types';
+import { useSocketEvent } from '@/lib/useSocketEvent';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -764,7 +765,7 @@ export default function JournalPage() {
 
   const dateStr = toISODate(currentDate);
 
-  useEffect(() => {
+  const fetchEntries = useCallback(() => {
     setLoading(true);
     setError('');
     getJournalEntries({ date: dateStr })
@@ -772,6 +773,14 @@ export default function JournalPage() {
       .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to load'))
       .finally(() => setLoading(false));
   }, [dateStr]);
+
+  useEffect(() => {
+    fetchEntries();
+  }, [fetchEntries]);
+
+  useSocketEvent('journal-entry-created', fetchEntries);
+  useSocketEvent('journal-entry-updated', fetchEntries);
+  useSocketEvent('journal-entry-deleted', fetchEntries);
 
   useEffect(() => {
     if (showDateInput) dateInputRef.current?.showPicker?.();

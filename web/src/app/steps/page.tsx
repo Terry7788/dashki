@@ -14,6 +14,7 @@ import {
 import { GlassCard, GlassButton, GlassInput } from '@/components/ui';
 import { getSteps, updateSteps, getGoals, updateGoals } from '@/lib/api';
 import type { StepEntry, Goals } from '@/lib/types';
+import { useSocketEvent } from '@/lib/useSocketEvent';
 
 // ─── Step Calculator State ──────────────────────────────────────────────────
 
@@ -203,6 +204,7 @@ export default function StepsPage() {
   }, [weekStart]);
 
   useEffect(() => { loadData(); }, [loadData]);
+  useSocketEvent('steps-updated', loadData);
 
   // Today's steps
   const todayEntry = useMemo(

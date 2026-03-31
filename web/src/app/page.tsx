@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { Scale, Footprints, Flame, Dumbbell, Plus, Check } from 'lucide-react';
 import GlassCard from '@/components/ui/GlassCard';
@@ -8,6 +8,7 @@ import GlassButton from '@/components/ui/GlassButton';
 import GlassModal from '@/components/ui/GlassModal';
 import GlassInput from '@/components/ui/GlassInput';
 import { getJournalSummary, getSteps, getWeightEntries, getTodos, addWeightEntry, updateSteps, updateTodo, getGoals } from '@/lib/api';
+import { useSocketEvent } from '@/lib/useSocketEvent';
 import type { DailySummary, StepEntry, WeightEntry, Todo, GymSession, Goals } from '@/lib/types';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -243,37 +244,48 @@ export default function DashboardPage() {
   const [stepsInput, setStepsInput] = useState('');
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    async function fetchAll() {
-      setLoading(true);
-      try {
-        const [summaryData, stepsData, weightData, todosData, goalsData] = await Promise.allSettled([
-          getJournalSummary(today),
-          getSteps({ date: today }),
-          getWeightEntries({ limit: 1 }),
-          getTodos({ upcoming: true }),
-          getGoals(),
-        ]);
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [summaryData, stepsData, weightData, todosData, goalsData] = await Promise.allSettled([
+        getJournalSummary(today),
+        getSteps({ date: today }),
+        getWeightEntries({ limit: 1 }),
+        getTodos({ upcoming: true }),
+        getGoals(),
+      ]);
 
-        if (summaryData.status === 'fulfilled') setSummary(summaryData.value);
-        if (stepsData.status === 'fulfilled') {
-          const arr = stepsData.value;
-          setSteps(arr.length > 0 ? arr[0] : null);
-        }
-        if (weightData.status === 'fulfilled') {
-          const arr = weightData.value;
-          setLatestWeight(arr.length > 0 ? arr[0] : null);
-        }
-        if (todosData.status === 'fulfilled') {
-          setTodos(todosData.value.slice(0, 5));
-        }
-        if (goalsData.status === 'fulfilled') setGoals(goalsData.value);
-      } finally {
-        setLoading(false);
+      if (summaryData.status === 'fulfilled') setSummary(summaryData.value);
+      if (stepsData.status === 'fulfilled') {
+        const arr = stepsData.value;
+        setSteps(arr.length > 0 ? arr[0] : null);
       }
+      if (weightData.status === 'fulfilled') {
+        const arr = weightData.value;
+        setLatestWeight(arr.length > 0 ? arr[0] : null);
+      }
+      if (todosData.status === 'fulfilled') {
+        setTodos(todosData.value.slice(0, 5));
+      }
+      if (goalsData.status === 'fulfilled') setGoals(goalsData.value);
+    } finally {
+      setLoading(false);
     }
-    fetchAll();
   }, [today]);
+
+  useEffect(() => {
+    fetchAll();
+  }, [fetchAll]);
+
+  useSocketEvent('journal-entry-created', fetchAll);
+  useSocketEvent('journal-entry-deleted', fetchAll);
+  useSocketEvent('steps-updated', fetchAll);
+  useSocketEvent('weight-updated', fetchAll);
+  useSocketEvent('weight-deleted', fetchAll);
+  useSocketEvent('todo-created', fetchAll);
+  useSocketEvent('todo-updated', fetchAll);
+  useSocketEvent('todo-deleted', fetchAll);
+  useSocketEvent('goals-updated', fetchAll);
 
   // Fetch gym data separately so it doesn't block the main dashboard
   useEffect(() => {

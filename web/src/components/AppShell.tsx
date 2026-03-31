@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import Sidebar from '@/components/Sidebar';
 import MobileHeader from '@/components/MobileHeader';
+import { getPreferences, updatePreferences } from '@/lib/api';
+import { getSocket } from '@/lib/socket';
 
 const THEME_KEY = 'dashki-theme';
 
@@ -10,27 +12,58 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(true);
 
-  // Load persisted theme on mount
-  useEffect(() => {
-    const stored = localStorage.getItem(THEME_KEY);
-    const isDark = stored !== 'light'; // default to dark
-    setDarkMode(isDark);
+  function applyTheme(isDark: boolean) {
     if (isDark) {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
     }
+  }
+
+  // Load persisted theme on mount, sync from DB, and listen for cross-device changes
+  useEffect(() => {
+    // 1. Apply localStorage theme immediately (anti-flash, same as inline script)
+    const stored = localStorage.getItem(THEME_KEY);
+    const isDark = stored !== 'light';
+    setDarkMode(isDark);
+    applyTheme(isDark);
+
+    // 2. Sync from DB (may differ if another device changed the theme)
+    getPreferences()
+      .then((prefs) => {
+        const dbIsDark = prefs.theme !== 'light';
+        if (dbIsDark !== isDark) {
+          setDarkMode(dbIsDark);
+          applyTheme(dbIsDark);
+          localStorage.setItem(THEME_KEY, prefs.theme);
+        }
+      })
+      .catch(() => {
+        // Server unavailable — localStorage value is fine
+      });
+
+    // 3. Listen for real-time theme changes from other devices
+    const socket = getSocket();
+    const onPreferencesUpdated = ({ theme }: { theme: 'dark' | 'light' }) => {
+      const incoming = theme !== 'light';
+      setDarkMode(incoming);
+      applyTheme(incoming);
+      localStorage.setItem(THEME_KEY, theme);
+    };
+    socket.on('preferences-updated', onPreferencesUpdated);
+
+    return () => {
+      socket.off('preferences-updated', onPreferencesUpdated);
+    };
   }, []);
 
   function toggleTheme() {
     const next = !darkMode;
     setDarkMode(next);
-    localStorage.setItem(THEME_KEY, next ? 'dark' : 'light');
-    if (next) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
+    const themeVal: 'dark' | 'light' = next ? 'dark' : 'light';
+    localStorage.setItem(THEME_KEY, themeVal);
+    applyTheme(next);
+    updatePreferences({ theme: themeVal }).catch(() => {});
   }
 
   return (

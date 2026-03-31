@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../db';
+import { getIo } from '../socket';
 
 const router = Router();
 
@@ -104,6 +105,7 @@ router.post('/', (req: Request, res: Response) => {
             console.error('[error] POST /api/steps fetch', err2);
             return res.status(500).json({ error: 'Failed to fetch step entry' });
           }
+          try { getIo().emit('steps-updated', entry); } catch (_) {}
           res.status(201).json(entry);
         }
       );

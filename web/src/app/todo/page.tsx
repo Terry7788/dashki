@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { GlassCard, GlassButton, GlassInput, GlassModal } from '@/components/ui';
 import { getTodos, createTodo, updateTodo, deleteTodo } from '@/lib/api';
 import type { Todo } from '@/lib/types';
+import { useSocketEvent } from '@/lib/useSocketEvent';
 import { Trash2, Plus, CheckSquare } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -348,13 +349,21 @@ export default function TodoPage() {
 
   // ── Fetch ────────────────────────────────────────────────────────────────
 
-  useEffect(() => {
+  const fetchTodos = useCallback(() => {
     setLoading(true);
     getTodos()
       .then((data) => setTodos(sortTodos(data)))
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    fetchTodos();
+  }, [fetchTodos]);
+
+  useSocketEvent('todo-created', fetchTodos);
+  useSocketEvent('todo-updated', fetchTodos);
+  useSocketEvent('todo-deleted', fetchTodos);
 
   // ── Actions ──────────────────────────────────────────────────────────────
 

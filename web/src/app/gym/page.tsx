@@ -17,6 +17,7 @@ import {
   startSessionFromTemplate,
   completeGymSession,
 } from '@/lib/api';
+import { useSocketEvent } from '@/lib/useSocketEvent';
 import type {
   GymSession,
   GymExercise,
@@ -1051,6 +1052,10 @@ export default function GymPage() {
     loadTemplates();
     loadRoutine();
   }, [loadSessions, loadTemplates, loadRoutine]);
+
+  useSocketEvent('gym-session-created', loadSessions);
+  useSocketEvent('gym-session-updated', loadSessions);
+  useSocketEvent('gym-data-changed', loadSessions);
 
   const todaySession = sessions.find((s) => s.date === today && (s.status ?? 'active') === 'active');
   const pastSessions = sessions.filter(

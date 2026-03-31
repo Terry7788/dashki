@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, Trash2, UtensilsCrossed, Search, ChevronLeft, BookOpen, Pencil, X } from 'lucide-react';
 import { GlassCard, GlassButton, GlassInput, GlassModal } from '@/components/ui';
 import { getSavedMeals, createSavedMeal, updateSavedMeal, deleteSavedMeal, addJournalEntry } from '@/lib/api';
 import type { SavedMeal, Food, MealType } from '@/lib/types';
+import { useSocketEvent } from '@/lib/useSocketEvent';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -702,12 +703,20 @@ export default function MealsPage() {
     }
   }
 
-  useEffect(() => {
+  const fetchMeals = useCallback(() => {
     getSavedMeals()
       .then(setMeals)
       .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to load'))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    fetchMeals();
+  }, [fetchMeals]);
+
+  useSocketEvent('saved-meal-created', fetchMeals);
+  useSocketEvent('saved-meal-updated', fetchMeals);
+  useSocketEvent('saved-meal-deleted', fetchMeals);
 
   function handleCreated(meal: SavedMeal) {
     setMeals((prev) => [meal, ...prev]);

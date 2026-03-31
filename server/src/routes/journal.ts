@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../db';
+import { getIo } from '../socket';
 
 const router = Router();
 
@@ -150,6 +151,7 @@ router.post('/', (req: Request, res: Response) => {
             console.error('[error] POST /api/journal fetch', err2);
             return res.status(500).json({ error: 'Failed to fetch created entry' });
           }
+          try { getIo().emit('journal-entry-created', entry); } catch (_) {}
           res.status(201).json(entry);
         }
       );
@@ -209,6 +211,7 @@ router.put('/:id', (req: Request, res: Response) => {
             console.error('[error] PUT /api/journal/:id fetch', err2);
             return res.status(500).json({ error: 'Failed to fetch updated entry' });
           }
+          try { getIo().emit('journal-entry-updated', entry); } catch (_) {}
           res.json(entry);
         }
       );
@@ -231,6 +234,7 @@ router.delete('/:id', (req: Request, res: Response) => {
         return res.status(500).json({ error: 'Failed to delete journal entry' });
       }
       if (this.changes === 0) return res.status(404).json({ error: 'Journal entry not found' });
+      try { getIo().emit('journal-entry-deleted', { id }); } catch (_) {}
       res.status(204).send();
     }
   );
