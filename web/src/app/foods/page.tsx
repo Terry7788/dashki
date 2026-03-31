@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, Pencil, Trash2, Search, Leaf } from 'lucide-react';
 import { GlassCard, GlassButton, GlassInput, GlassModal } from '@/components/ui';
 import { getFoods, createFood, updateFood, deleteFood, addJournalEntry } from '@/lib/api';
 import type { Food, MealType } from '@/lib/types';
+import { useSocketEvent } from '@/lib/useSocketEvent';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -525,12 +526,20 @@ export default function FoodsPage() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [debouncedQuery, setDebouncedQuery] = useState('');
 
-  useEffect(() => {
+  const fetchFoods = useCallback(() => {
     getFoods()
       .then(setFoods)
       .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to load'))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    fetchFoods();
+  }, [fetchFoods]);
+
+  useSocketEvent('food-created', fetchFoods);
+  useSocketEvent('food-updated', fetchFoods);
+  useSocketEvent('food-deleted', fetchFoods);
 
   // Debounce search
   useEffect(() => {

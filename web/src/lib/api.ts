@@ -428,3 +428,16 @@ export function updateGoals(data: {
     body: JSON.stringify(data),
   });
 }
+
+// ─── Preferences ─────────────────────────────────────────────────────────────
+
+export function getPreferences(): Promise<{ theme: 'dark' | 'light' }> {
+  return request<{ theme: 'dark' | 'light' }>('/api/preferences');
+}
+
+export function updatePreferences(data: { theme: 'dark' | 'light' }): Promise<{ theme: 'dark' | 'light' }> {
+  return request<{ theme: 'dark' | 'light' }>('/api/preferences', {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}

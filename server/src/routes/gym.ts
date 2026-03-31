@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../db';
+import { getIo } from '../socket';
 
 const router = Router();
 
@@ -134,6 +135,7 @@ function createSession(req: Request, res: Response): void {
             console.error('[error] POST /api/gym/sessions fetch', err2);
             return res.status(500).json({ error: 'Failed to fetch created session' });
           }
+          try { getIo().emit('gym-session-created', session); } catch (_) {}
           res.status(201).json(session);
         }
       );
@@ -192,6 +194,7 @@ function updateSession(req: Request, res: Response): void {
           if (err2) {
             return res.status(500).json({ error: 'Failed to fetch updated session' });
           }
+          try { getIo().emit('gym-session-updated', session); } catch (_) {}
           res.json(session);
         }
       );
@@ -223,6 +226,7 @@ function deleteSession(req: Request, res: Response): void {
         return res.status(500).json({ error: 'Failed to delete gym session' });
       }
       if (this.changes === 0) return res.status(404).json({ error: 'Session not found' });
+      try { getIo().emit('gym-data-changed', {}); } catch (_) {}
       res.status(204).send();
     }
   );
@@ -272,6 +276,7 @@ function addExercise(req: Request, res: Response): void {
             if (err3) {
               return res.status(500).json({ error: 'Failed to fetch created exercise' });
             }
+            try { getIo().emit('gym-data-changed', {}); } catch (_) {}
             res.status(201).json(exercise);
           }
         );
@@ -339,6 +344,7 @@ router.delete('/exercises/:id', (req: Request, res: Response) => {
         return res.status(500).json({ error: 'Failed to delete exercise' });
       }
       if (this.changes === 0) return res.status(404).json({ error: 'Exercise not found' });
+      try { getIo().emit('gym-data-changed', {}); } catch (_) {}
       res.status(204).send();
     }
   );
@@ -384,6 +390,7 @@ router.post('/exercises/:exerciseId/sets', (req: Request, res: Response) => {
           [newId],
           (err3, set) => {
             if (err3) return res.status(500).json({ error: 'Failed to fetch created set' });
+            try { getIo().emit('gym-data-changed', {}); } catch (_) {}
             res.status(201).json(set);
           }
         );
@@ -435,6 +442,7 @@ router.put('/sets/:id', (req: Request, res: Response) => {
         [id],
         (err2, set) => {
           if (err2) return res.status(500).json({ error: 'Failed to fetch updated set' });
+          try { getIo().emit('gym-data-changed', {}); } catch (_) {}
           res.json(set);
         }
       );
@@ -457,6 +465,7 @@ router.delete('/sets/:id', (req: Request, res: Response) => {
         return res.status(500).json({ error: 'Failed to delete set' });
       }
       if (this.changes === 0) return res.status(404).json({ error: 'Set not found' });
+      try { getIo().emit('gym-data-changed', {}); } catch (_) {}
       res.status(204).send();
     }
   );

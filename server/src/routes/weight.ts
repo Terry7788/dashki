@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../db';
+import { getIo } from '../socket';
 
 const router = Router();
 
@@ -91,6 +92,7 @@ router.post('/', (req: Request, res: Response) => {
             console.error('[error] POST /api/weight fetch', err2);
             return res.status(500).json({ error: 'Failed to fetch weight entry' });
           }
+          try { getIo().emit('weight-updated', entry); } catch (_) {}
           res.status(201).json(entry);
         }
       );
@@ -113,6 +115,7 @@ router.delete('/:id', (req: Request, res: Response) => {
         return res.status(500).json({ error: 'Failed to delete weight entry' });
       }
       if (this.changes === 0) return res.status(404).json({ error: 'Weight entry not found' });
+      try { getIo().emit('weight-deleted', { id }); } catch (_) {}
       res.status(204).send();
     }
   );

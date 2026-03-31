@@ -175,6 +175,16 @@ export function initDb(): Promise<void> {
       // Insert default goals row (singleton)
       db.run(`INSERT OR IGNORE INTO Goals (id) VALUES (1)`);
 
+      // ── User Preferences ───────────────────────────────────────────────────
+      db.run(`
+        CREATE TABLE IF NOT EXISTS UserPreferences (
+          id    INTEGER PRIMARY KEY CHECK (id = 1),
+          theme TEXT NOT NULL DEFAULT 'dark'
+        )
+      `);
+
+      db.run(`INSERT OR IGNORE INTO UserPreferences (id) VALUES (1)`);
+
       // ── Calendar Tokens ────────────────────────────────────────────────────
       db.run(`
         CREATE TABLE IF NOT EXISTS CalendarTokens (

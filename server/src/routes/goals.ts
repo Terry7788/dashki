@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../db';
+import { getIo } from '../socket';
 
 const router = Router();
 
@@ -153,6 +154,7 @@ router.put('/', (req: Request, res: Response) => {
           updated_at: row!.updated_at,
         };
 
+        try { getIo().emit('goals-updated', goals); } catch (_) {}
         res.json(goals);
       }
     );

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   LineChart,
   Line,
@@ -13,6 +13,7 @@ import {
 import { GlassCard, GlassButton, GlassInput } from '@/components/ui';
 import { getWeightEntries, addWeightEntry } from '@/lib/api';
 import type { WeightEntry } from '@/lib/types';
+import { useSocketEvent } from '@/lib/useSocketEvent';
 import { Scale, Trash2 } from 'lucide-react';
 
 // ─── Inline API helper ────────────────────────────────────────────────────────
@@ -83,22 +84,25 @@ export default function WeightPage() {
   const [weightKg, setWeightKg] = useState('');
   const [logging, setLogging] = useState(false);
 
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await getWeightEntries();
-        // Sort ascending by date
-        const sorted = [...data].sort((a, b) => a.date.localeCompare(b.date));
-        setEntries(sorted);
-      } catch (e: any) {
-        setError(e.message || 'Failed to load weight data');
-      }
-      setLoading(false);
+  const loadEntries = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await getWeightEntries();
+      const sorted = [...data].sort((a, b) => a.date.localeCompare(b.date));
+      setEntries(sorted);
+    } catch (e: any) {
+      setError(e.message || 'Failed to load weight data');
     }
-    load();
+    setLoading(false);
   }, []);
+
+  useEffect(() => {
+    loadEntries();
+  }, [loadEntries]);
+
+  useSocketEvent('weight-updated', loadEntries);
+  useSocketEvent('weight-deleted', loadEntries);
 
   // ── Derived stats ──
   const stats = useMemo(() => {

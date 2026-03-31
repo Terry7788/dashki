@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../db';
+import { getIo } from '../socket';
 
 const router = Router();
 
@@ -71,6 +72,7 @@ router.post('/', (req: Request, res: Response) => {
             console.error('[error] POST /api/todos fetch', err2);
             return res.status(500).json({ error: 'Failed to fetch created todo' });
           }
+          try { getIo().emit('todo-created', todo); } catch (_) {}
           res.status(201).json(todo);
         }
       );
@@ -123,6 +125,7 @@ router.put('/:id', (req: Request, res: Response) => {
             console.error('[error] PUT /api/todos/:id fetch', err2);
             return res.status(500).json({ error: 'Failed to fetch updated todo' });
           }
+          try { getIo().emit('todo-updated', todo); } catch (_) {}
           res.json(todo);
         }
       );
@@ -145,6 +148,7 @@ router.delete('/:id', (req: Request, res: Response) => {
         return res.status(500).json({ error: 'Failed to delete todo' });
       }
       if (this.changes === 0) return res.status(404).json({ error: 'Todo not found' });
+      try { getIo().emit('todo-deleted', { id }); } catch (_) {}
       res.status(204).send();
     }
   );
