@@ -725,18 +725,18 @@ export default function MealsPage() {
         {/* No backdrop - app stays visible */}
         
         {/* Modal - responsive: full width mobile, 60% desktop */}
-        <div className="relative w-full sm:w-[90%] sm:max-w-[60%] h-[95vh] sm:h-[90vh] bg-[#1a1a1a]/95 backdrop-blur-xl border border-white/10 rounded-2xl sm:rounded-3xl flex flex-col sm:flex-row overflow-hidden">
+        <div className="relative w-full sm:w-[90%] sm:max-w-[78%] h-[95vh] sm:h-[90vh] bg-[#fffefb] dark:bg-[#1a1a1a]/95 dark:backdrop-blur-xl border border-[#cccbc8]/50 dark:border-white/10 rounded-2xl sm:rounded-3xl flex flex-col sm:flex-row overflow-hidden shadow-sm dark:shadow-2xl">
           {/* Close button */}
           <button
             onClick={() => { setCreateOpen(false); setEditingMeal(null); }}
-            className="absolute top-3 right-3 sm:top-4 sm:right-4 p-2 rounded-xl text-white/40 hover:text-white hover:bg-white/10 z-10"
+            className="absolute top-3 right-3 sm:top-4 sm:right-4 p-2 rounded-xl text-[#313d44]/50 hover:text-[#1d1c1c] hover:bg-[#d4eaf7]/50 dark:text-white/40 dark:hover:text-white dark:hover:bg-white/10 z-10"
           >
             <X className="w-5 h-5" />
           </button>
 
           {/* Left: Meal Details - 70% on desktop, full width on mobile */}
-          <div className="w-full sm:w-[70%] p-4 sm:p-6 border-b sm:border-b-0 sm:border-r border-white/10 overflow-y-auto">
-            <h2 className="text-xl font-bold text-white mb-6">
+          <div className="w-full sm:w-[70%] p-4 sm:p-6 border-b sm:border-b-0 sm:border-r border-[#cccbc8]/50 dark:border-white/10 overflow-y-auto">
+            <h2 className="text-xl font-bold text-[#1d1c1c] dark:text-white mb-6">
               {editingMeal ? 'Edit Meal' : 'Create Meal'}
             </h2>
             
@@ -758,25 +758,25 @@ export default function MealsPage() {
 
               {/* Totals */}
               {items.length > 0 && (
-                <div className="flex gap-4 px-4 py-3 rounded-2xl bg-white/5 border border-white/10">
+                <div className="flex gap-4 px-4 py-3 rounded-2xl bg-[#f5f4f1] dark:bg-white/5 border border-[#cccbc8]/50 dark:border-white/10">
                   <div className="text-center flex-1">
-                    <p className="text-xs text-white/40">Calories</p>
-                    <p className="font-bold text-white">{Math.round(totalCalories)}</p>
+                    <p className="text-xs text-[#313d44]/60 dark:text-white/40">Calories</p>
+                    <p className="font-bold text-[#1d1c1c] dark:text-white">{Math.round(totalCalories)}</p>
                   </div>
-                  <div className="w-px bg-white/10" />
+                  <div className="w-px bg-[#cccbc8]/50 dark:bg-white/10" />
                   <div className="text-center flex-1">
-                    <p className="text-xs text-white/40">Protein</p>
-                    <p className="font-bold text-white">{Math.round(totalProtein * 10) / 10}g</p>
+                    <p className="text-xs text-[#313d44]/60 dark:text-white/40">Protein</p>
+                    <p className="font-bold text-[#1d1c1c] dark:text-white">{Math.round(totalProtein * 10) / 10}g</p>
                   </div>
                 </div>
               )}
 
               {/* Added Foods List */}
               <div className="flex-1 min-h-0">
-                <p className="text-sm font-medium text-white/60 pl-1 mb-2">Added Foods ({items.length})</p>
-                <div className="bg-white/5 border border-white/10 rounded-2xl p-4 h-full overflow-y-auto space-y-2">
+                <p className="text-sm font-medium text-[#313d44]/60 dark:text-white/60 pl-1 mb-2">Added Foods ({items.length})</p>
+                <div className="bg-[#f5f4f1] dark:bg-white/5 border border-[#cccbc8]/50 dark:border-white/10 rounded-2xl p-4 h-full overflow-y-auto space-y-2">
                   {items.length === 0 ? (
-                    <p className="text-white/40 text-sm text-center py-6">No foods added yet</p>
+                    <p className="text-[#313d44]/40 dark:text-white/40 text-sm text-center py-6">No foods added yet</p>
                   ) : (
                     items.map(({ food, servings: sv }) => {
                       const { calories, protein } = calcNutrition(food, sv);
@@ -786,8 +786,8 @@ export default function MealsPage() {
                           className="flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-500/10 border border-indigo-400/20"
                         >
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-white truncate">{food.name}</p>
-                            <p className="text-xs text-white/50">{calories} kcal · {protein}g</p>
+                            <p className="text-sm font-medium text-[#1d1c1c] dark:text-white truncate">{food.name}</p>
+                            <p className="text-xs text-[#313d44]/50 dark:text-white/50">{calories} kcal · {protein}g</p>
                           </div>
                           <input
                             type="number"
@@ -795,11 +795,11 @@ export default function MealsPage() {
                             min={0.1}
                             step={0.1}
                             onChange={(e) => handleUpdateServings(food.id, parseFloat(e.target.value) || 1)}
-                            className="w-14 px-1 py-1 text-center text-sm bg-white/10 border border-white/20 rounded-lg text-white"
+                            className="w-14 px-1 py-1 text-center text-sm bg-[#e8e7e4] dark:bg-white/10 border border-[#cccbc8] dark:border-white/20 rounded-lg text-[#1d1c1c] dark:text-white"
                           />
                           <button
                             onClick={() => handleRemove(food.id)}
-                            className="p-1 rounded-lg text-white/30 hover:text-red-400"
+                            className="p-1 rounded-lg text-[#313d44]/30 hover:text-red-500 dark:text-white/30 dark:hover:text-red-400"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -816,7 +816,7 @@ export default function MealsPage() {
 
               {/* Mobile only: Search & Add Foods */}
               <div className="sm:hidden">
-                <p className="text-sm font-medium text-white/60 pl-1 mb-2">Search & Add Foods</p>
+                <p className="text-sm font-medium text-[#313d44]/60 dark:text-white/60 pl-1 mb-2">Search & Add Foods</p>
                 <div className="mb-4">
                   <FoodPickerForMeal
                     items={items}
@@ -839,8 +839,8 @@ export default function MealsPage() {
           </div>
 
           {/* Right: Search & Add Foods - only shown on desktop */}
-          <div className="hidden sm:block sm:w-[30%] p-6 bg-[#111111] flex flex-col h-full">
-            <h3 className="text-lg font-semibold text-white mb-4 shrink-0">Search & Add Foods</h3>
+          <div className="hidden sm:block sm:w-[30%] p-6 bg-[#f5f4f1] dark:bg-[#111111] flex flex-col h-full">
+            <h3 className="text-lg font-semibold text-[#1d1c1c] dark:text-white mb-4 shrink-0">Search & Add Foods</h3>
             <div className="flex-1 overflow-y-auto min-h-0">
               <FoodPickerForMeal
                 items={items}

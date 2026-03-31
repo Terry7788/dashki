@@ -10,9 +10,10 @@
     },
     {
       "name": "Dashki Server (Express)",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
-      "port": 4001
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "cd server && npm run dev"],
+      "port": 4001,
+      "autoPort": true
     }
   ]
 }

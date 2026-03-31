@@ -74,7 +74,7 @@ export default function GlassModal({
           'bg-[#fffefb] border border-[#cccbc8]/50 text-[#1d1c1c]',
           // Dark
           'dark:bg-[#1a1a1a]/95 dark:border-white/[0.08] dark:text-white',
-          'backdrop-blur-xl rounded-3xl shadow-2xl',
+          'dark:backdrop-blur-xl rounded-3xl shadow-sm dark:shadow-2xl',
           sizeClasses[size]
         )}
       >
