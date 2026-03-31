@@ -205,7 +205,7 @@ function MobileSidebarContent({
         </div>
         <button
           onClick={onClose}
-          className="p-2 rounded-xl text-white/50 hover:text-white hover:bg-white/10 transition-all duration-200"
+          className="p-2 rounded-xl text-[#313d44]/60 hover:text-[#1d1c1c] hover:bg-[#d4eaf7]/60 dark:text-white/50 dark:hover:text-white dark:hover:bg-white/10 transition-all duration-200"
           aria-label="Close menu"
         >
           <X className="w-5 h-5" />
@@ -213,7 +213,7 @@ function MobileSidebarContent({
       </div>
 
       {/* Divider */}
-      <div className="mx-4 h-px bg-white/[0.08]" />
+      <div className="mx-4 h-px bg-[#cccbc8]/50 dark:bg-white/[0.08]" />
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
@@ -228,19 +228,19 @@ function MobileSidebarContent({
               className={clsx(
                 'flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 group',
                 active
-                  ? 'bg-[#2E8B57]/20 border-l-2 border-[#2E8B57] text-[#61bc84] shadow-sm pl-[14px]'
-                  : 'text-white/60 hover:text-white hover:bg-white/[0.06] border border-transparent'
+                  ? 'bg-[#00668c]/15 dark:bg-[#2E8B57]/20 border-l-2 border-[#00668c] dark:border-[#2E8B57] text-[#00668c] dark:text-[#61bc84] shadow-sm pl-[14px]'
+                  : 'text-[#313d44] dark:text-white/60 hover:text-[#1d1c1c] dark:hover:text-white hover:bg-[#d4eaf7]/60 dark:hover:bg-white/[0.06] border border-transparent'
               )}
             >
               <Icon
                 className={clsx(
                   'w-5 h-5 flex-shrink-0 transition-colors duration-200',
-                  active ? 'text-[#61bc84]' : 'text-white/50 group-hover:text-white/80'
+                  active ? 'text-[#00668c] dark:text-[#61bc84]' : 'text-[#313d44]/60 dark:text-white/50 group-hover:text-[#1d1c1c] dark:group-hover:text-white/80'
                 )}
               />
-              <span className="text-sm font-medium text-white">{item.label}</span>
+              <span className="text-sm font-medium text-[#313d44] dark:text-white">{item.label}</span>
               {active && (
-                <div className="ml-auto w-1.5 h-1.5 rounded-full bg-[#61bc84]" />
+                <div className="ml-auto w-1.5 h-1.5 rounded-full bg-[#00668c] dark:bg-[#61bc84]" />
               )}
             </Link>
           );
@@ -249,13 +249,13 @@ function MobileSidebarContent({
 
       {/* Footer */}
       <div className="px-6 pb-6 flex items-center justify-between">
-        <div className="text-xs text-white/25">
+        <div className="text-xs text-[#313d44]/50 dark:text-white/25">
           Dashki v0.1.0
         </div>
         <button
           onClick={onToggleTheme}
           title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-          className="p-2 rounded-xl text-white/40 hover:text-yellow-300 hover:bg-white/10 transition-all duration-200"
+          className="p-2 rounded-xl text-[#313d44]/70 dark:text-white/40 hover:text-[#1d1c1c] dark:hover:text-yellow-300 hover:bg-[#d4eaf7]/60 dark:hover:bg-white/10 transition-all duration-200"
           aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
         >
           {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
