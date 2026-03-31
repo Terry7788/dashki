@@ -12,6 +12,7 @@ interface GlassModalProps {
   title: string;
   children: ReactNode;
   size?: ModalSize;
+  minHeight?: string;
 }
 
 const sizeClasses: Record<ModalSize, string> = {
@@ -27,6 +28,7 @@ export default function GlassModal({
   title,
   children,
   size = 'md',
+  minHeight,
 }: GlassModalProps) {
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -67,6 +69,7 @@ export default function GlassModal({
         className={clsx(
           'relative w-full animate-scale-in flex flex-col',
           'max-h-[90vh]',
+          minHeight,
           // Light
           'bg-white/95 border border-black/[0.08] text-gray-900',
           // Dark

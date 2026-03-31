@@ -258,7 +258,7 @@ function FoodPicker({ onAdd }: FoodPickerProps) {
           </button>
         )}
       </div>
-      <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
+      <div className="max-h-96 overflow-y-auto space-y-2 pr-1">
         {loading && <p className="text-center text-white/40 text-sm py-4">Searching…</p>}
         {!loading && foods.length === 0 && (
           <p className="text-center text-white/40 text-sm py-4">No foods found</p>
@@ -440,8 +440,9 @@ function AddFoodModal({ isOpen, onClose, mealType, date, onAdded }: AddFoodModal
       onClose={onClose}
       title={`Add to ${MEAL_LABELS[mealType]}`}
       size="lg"
+      minHeight="min-h-[600px]"
     >
-      <div className="space-y-4" style={{ maxHeight: '92vh' }}>
+      <div className="space-y-4">
         {/* Tabs */}
         <div className="flex gap-2 p-1 rounded-2xl bg-white/5 border border-white/10">
           <button className={tabClass('foods')} onClick={() => setTab('foods')}>🍎 Foods</button>
