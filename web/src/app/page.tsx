@@ -196,6 +196,29 @@ function GymWidget({ data, loading }: { data: GymWidgetData | null; loading: boo
   );
 }
 
+// ─── Progress Ring ────────────────────────────────────────────────────────────
+
+function ProgressRing({ value, max, size = 64, stroke = 5, color = '#6366f1' }: {
+  value: number; max: number; size?: number; stroke?: number; color?: string;
+}) {
+  const r = (size - stroke * 2) / 2;
+  const circ = 2 * Math.PI * r;
+  const pct = Math.min(value / max, 1);
+  const offset = circ * (1 - pct);
+  return (
+    <svg width={size} height={size} className="rotate-[-90deg]">
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth={stroke} />
+      <circle
+        cx={size / 2} cy={size / 2} r={r} fill="none"
+        stroke={color} strokeWidth={stroke}
+        strokeDasharray={circ} strokeDashoffset={offset}
+        strokeLinecap="round"
+        style={{ transition: 'stroke-dashoffset 0.5s ease' }}
+      />
+    </svg>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -206,6 +229,7 @@ export default function DashboardPage() {
   const [steps, setSteps] = useState<StepEntry | null>(null);
   const [latestWeight, setLatestWeight] = useState<WeightEntry | null>(null);
   const [todos, setTodos] = useState<Todo[]>([]);
+  const [goals, setGoals] = useState<Goals>({ id: 0, calories: 2000, protein: 150, carbs: null, fat: null, steps: 10000, weight_kg: null, updated_at: '' });
   const [fadingIds, setFadingIds] = useState<Set<number>>(new Set());
 
   // Gym widget
@@ -223,11 +247,12 @@ export default function DashboardPage() {
     async function fetchAll() {
       setLoading(true);
       try {
-        const [summaryData, stepsData, weightData, todosData] = await Promise.allSettled([
+        const [summaryData, stepsData, weightData, todosData, goalsData] = await Promise.allSettled([
           getJournalSummary(today),
           getSteps({ date: today }),
           getWeightEntries({ limit: 1 }),
           getTodos({ upcoming: true }),
+          getGoals(),
         ]);
 
         if (summaryData.status === 'fulfilled') setSummary(summaryData.value);
@@ -242,6 +267,7 @@ export default function DashboardPage() {
         if (todosData.status === 'fulfilled') {
           setTodos(todosData.value.slice(0, 5));
         }
+        if (goalsData.status === 'fulfilled') setGoals(goalsData.value);
       } finally {
         setLoading(false);
       }
@@ -355,7 +381,7 @@ export default function DashboardPage() {
       <div className="lg:grid lg:grid-cols-3 xl:grid-cols-[2fr_1fr] lg:gap-6 xl:gap-8 space-y-6 lg:space-y-0">
 
         {/* ── LEFT COLUMN (lg: 2/3 width) ─────────────────────── */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 xl:col-span-1 space-y-6">
 
           {/* Stats — 2 cols mobile, 4 cols xl */}
           <div
@@ -411,9 +437,6 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Gym Widget — below stats, left column */}
-          <GymWidget data={gymData} loading={gymLoading} />
-
           {/* Today's Journal / Food log preview */}
           <div
             className="animate-fade-in-up"
@@ -424,32 +447,58 @@ export default function DashboardPage() {
             </h2>
             <GlassCard>
               {loading ? (
-                <div className="space-y-3">
-                  <div className="skeleton h-4 w-3/4" />
-                  <div className="skeleton h-4 w-1/2" />
-                  <div className="skeleton h-4 w-2/3" />
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4">
+                    <div className="skeleton w-16 h-16 rounded-full shrink-0" />
+                    <div className="flex-1 space-y-3">
+                      <div className="skeleton h-4 w-3/4" />
+                      <div className="skeleton h-1.5 w-full rounded-full" />
+                      <div className="skeleton h-4 w-1/2" />
+                      <div className="skeleton h-1.5 w-full rounded-full" />
+                    </div>
+                  </div>
                 </div>
               ) : summary ? (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-white/60">Calories</span>
-                    <span className="text-sm font-semibold text-white">{Math.round(summary.calories)} kcal</span>
+                <div className="flex items-center gap-5">
+                  {/* Calories ring */}
+                  <div className="relative shrink-0">
+                    <ProgressRing value={summary.calories} max={goals.calories} size={68} stroke={6} color="#6366f1" />
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span className="text-xs font-bold leading-tight">{Math.round(summary.calories)}</span>
+                      <span className="text-[9px] text-white/40">kcal</span>
+                    </div>
                   </div>
-                  <div className="w-full h-1.5 rounded-full bg-white/[0.08] overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-[#2E8B57]"
-                      style={{ width: `${Math.min(100, (summary.calories / 2000) * 100)}%` }}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-white/60">Protein</span>
-                    <span className="text-sm font-semibold text-white">{Math.round(summary.protein)} g</span>
-                  </div>
-                  <div className="w-full h-1.5 rounded-full bg-white/[0.08] overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-[#2E8B57]"
-                      style={{ width: `${Math.min(100, (summary.protein / 150) * 100)}%` }}
-                    />
+                  <div className="flex-1 space-y-3">
+                    {/* Calories bar */}
+                    <div>
+                      <div className="flex items-end justify-between mb-1">
+                        <span className="text-sm text-white/60">Calories</span>
+                        <span className="text-sm font-bold text-white">
+                          {Math.round(summary.calories)} <span className="text-white/40 font-normal">/ {goals.calories}</span>
+                        </span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-indigo-500 to-blue-500 rounded-full transition-all duration-500"
+                          style={{ width: `${Math.min((summary.calories / goals.calories) * 100, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                    {/* Protein bar */}
+                    <div>
+                      <div className="flex items-end justify-between mb-1">
+                        <span className="text-sm text-white/60">Protein</span>
+                        <span className="text-sm font-bold text-white">
+                          {Math.round(summary.protein)}g <span className="text-white/40 font-normal">/ {goals.protein}g</span>
+                        </span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-500"
+                          style={{ width: `${Math.min((summary.protein / goals.protein) * 100, 100)}%` }}
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -459,6 +508,9 @@ export default function DashboardPage() {
               )}
             </GlassCard>
           </div>
+
+          {/* Gym Widget — below journal, left column */}
+          <GymWidget data={gymData} loading={gymLoading} />
 
         </div>
 
