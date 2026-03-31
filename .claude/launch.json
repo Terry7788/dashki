@@ -1,0 +1,18 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Dashki Web (Next.js)",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "cd web && npm run dev"],
+      "port": 3000,
+      "autoPort": true
+    },
+    {
+      "name": "Dashki Server (Express)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 4001
+    }
+  ]
+}

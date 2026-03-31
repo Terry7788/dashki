@@ -21,60 +21,65 @@
 
 /* ── Light mode overrides ── */
 html:not(.dark) {
-  --text-100: #2d2d2d;
-  --text-200: #4b5563;
-  --bg-100: #f9fafb;
-  --bg-200: #f3f4f6;
-  --bg-300: #e5e7eb;
-  --glass-bg: rgba(255, 255, 255, 0.85);
-  --glass-border: rgba(0, 0, 0, 0.1);
-  --glass-hover: rgba(255, 255, 255, 0.9);
+  --primary-100: #d4eaf7;
+  --primary-200: #b6ccd8;
+  --primary-300: #3b3c3d;
+  --accent-100: #71c4ef;
+  --accent-200: #00668c;
+  --text-100: #1d1c1c;
+  --text-200: #313d44;
+  --bg-100: #fffefb;
+  --bg-200: #f5f4f1;
+  --bg-300: #cccbc8;
+  --glass-bg: rgba(255, 254, 251, 0.88);
+  --glass-border: rgba(204, 203, 200, 0.55);
+  --glass-hover: rgba(255, 254, 251, 0.96);
   color-scheme: light;
 }
 
 /* ── Light mode: force readable text ── */
 html:not(.dark) body {
-  color: #2d2d2d;
-  background-color: #f9fafb;
+  color: #1d1c1c;
+  background-color: #fffefb;
 }
 
 /* Override white utility classes to readable dark colors in light mode */
-html:not(.dark) .text-white { color: #2d2d2d !important; }
-html:not(.dark) .text-white\/90 { color: #374151 !important; }
-html:not(.dark) .text-white\/80 { color: #4b5563 !important; }
-html:not(.dark) .text-white\/70 { color: #6b7280 !important; }
-html:not(.dark) .text-white\/60 { color: #6b7280 !important; }
-html:not(.dark) .text-white\/50 { color: #9ca3af !important; }
-html:not(.dark) .text-white\/40 { color: #9ca3af !important; }
-html:not(.dark) .text-white\/30 { color: #d1d5db !important; }
-html:not(.dark) .text-white\/25 { color: #e5e7eb !important; }
-html:not(.dark) .text-white\/20 { color: #e5e7eb !important; }
-html:not(.dark) .text-white\/10 { color: rgba(17,17,17,0.1) !important; }
+html:not(.dark) .text-white { color: #1d1c1c !important; }
+html:not(.dark) .text-white\/90 { color: #313d44 !important; }
+html:not(.dark) .text-white\/80 { color: #313d44 !important; }
+html:not(.dark) .text-white\/70 { color: #4a5560 !important; }
+html:not(.dark) .text-white\/60 { color: #4a5560 !important; }
+html:not(.dark) .text-white\/50 { color: #7a8a95 !important; }
+html:not(.dark) .text-white\/40 { color: #9aabb5 !important; }
+html:not(.dark) .text-white\/30 { color: #b6ccd8 !important; }
+html:not(.dark) .text-white\/25 { color: #cccbc8 !important; }
+html:not(.dark) .text-white\/20 { color: #cccbc8 !important; }
+html:not(.dark) .text-white\/10 { color: rgba(29,28,28,0.1) !important; }
 
-html:not(.dark) .border-white\/10 { border-color: rgba(0,0,0,0.1) !important; }
-html:not(.dark) .border-white\/15 { border-color: rgba(0,0,0,0.12) !important; }
-html:not(.dark) .border-white\/20 { border-color: rgba(0,0,0,0.15) !important; }
-html:not(.dark) .border-white\/\[0\.08\] { border-color: rgba(0,0,0,0.08) !important; }
-html:not(.dark) .border-white\/\[0\.12\] { border-color: rgba(0,0,0,0.12) !important; }
+html:not(.dark) .border-white\/10 { border-color: rgba(204,203,200,0.45) !important; }
+html:not(.dark) .border-white\/15 { border-color: rgba(204,203,200,0.55) !important; }
+html:not(.dark) .border-white\/20 { border-color: rgba(204,203,200,0.65) !important; }
+html:not(.dark) .border-white\/\[0\.08\] { border-color: rgba(204,203,200,0.4) !important; }
+html:not(.dark) .border-white\/\[0\.12\] { border-color: rgba(204,203,200,0.5) !important; }
 
-html:not(.dark) .bg-white\/\[0\.04\] { background-color: rgba(0,0,0,0.03) !important; }
-html:not(.dark) .bg-white\/\[0\.05\] { background-color: rgba(0,0,0,0.03) !important; }
-html:not(.dark) .bg-white\/\[0\.06\] { background-color: rgba(0,0,0,0.04) !important; }
-html:not(.dark) .bg-white\/\[0\.07\] { background-color: rgba(0,0,0,0.05) !important; }
-html:not(.dark) .bg-white\/\[0\.08\] { background-color: rgba(0,0,0,0.05) !important; }
-html:not(.dark) .bg-white\/\[0\.09\] { background-color: rgba(0,0,0,0.06) !important; }
-html:not(.dark) .bg-white\/5 { background-color: rgba(0,0,0,0.04) !important; }
-html:not(.dark) .bg-white\/10 { background-color: rgba(0,0,0,0.06) !important; }
-html:not(.dark) .bg-white\/15 { background-color: rgba(0,0,0,0.08) !important; }
-html:not(.dark) .bg-white\/20 { background-color: rgba(0,0,0,0.10) !important; }
-html:not(.dark) .bg-white\/70 { background-color: rgba(255,255,255,0.95) !important; }
-html:not(.dark) .bg-white\/95 { background-color: rgba(255,255,255,0.98) !important; }
+html:not(.dark) .bg-white\/\[0\.04\] { background-color: rgba(212,234,247,0.18) !important; }
+html:not(.dark) .bg-white\/\[0\.05\] { background-color: rgba(212,234,247,0.22) !important; }
+html:not(.dark) .bg-white\/\[0\.06\] { background-color: rgba(212,234,247,0.28) !important; }
+html:not(.dark) .bg-white\/\[0\.07\] { background-color: rgba(212,234,247,0.34) !important; }
+html:not(.dark) .bg-white\/\[0\.08\] { background-color: rgba(212,234,247,0.38) !important; }
+html:not(.dark) .bg-white\/\[0\.09\] { background-color: rgba(212,234,247,0.44) !important; }
+html:not(.dark) .bg-white\/5 { background-color: rgba(212,234,247,0.22) !important; }
+html:not(.dark) .bg-white\/10 { background-color: rgba(212,234,247,0.38) !important; }
+html:not(.dark) .bg-white\/15 { background-color: rgba(212,234,247,0.52) !important; }
+html:not(.dark) .bg-white\/20 { background-color: rgba(212,234,247,0.65) !important; }
+html:not(.dark) .bg-white\/70 { background-color: rgba(255,254,251,0.95) !important; }
+html:not(.dark) .bg-white\/95 { background-color: rgba(255,254,251,0.98) !important; }
 
-html:not(.dark) .placeholder-white\/40::placeholder { color: rgba(17,17,17,0.35) !important; }
+html:not(.dark) .placeholder-white\/40::placeholder { color: rgba(49,61,68,0.4) !important; }
 
 /* Fix select/input backgrounds in light mode (used in gym/foods forms) */
 html:not(.dark) .bg-white\/10 select,
-html:not(.dark) select.bg-white\/10 { background-color: rgba(255,255,255,0.9) !important; color: #111 !important; }
+html:not(.dark) select.bg-white\/10 { background-color: #f5f4f1 !important; color: #1d1c1c !important; }
 
 /* Ensure inline styled text-white elements become readable */
 html:not(.dark) [style*="color: var(--text-100)"] { color: #111111; }
@@ -131,7 +136,7 @@ html:not(.dark) [style*="color: var(--text-100)"] { color: #111111; }
   }
 
   html:not(.dark) .skeleton {
-    background-color: #e5e7eb;
+    background-color: #cccbc8;
   }
 
   .skeleton::after {
@@ -243,24 +248,24 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
 
 /* Light mode date picker */
 html:not(.dark) input[type="date"] {
-  background-color: rgba(0, 0, 0, 0.06);
-  border-color: rgba(0, 0, 0, 0.12);
-  color: #2d2d2d;
+  background-color: #f5f4f1;
+  border-color: rgba(204, 203, 200, 0.7);
+  color: #1d1c1c;
 }
 
 html:not(.dark) input[type="date"]:hover {
-  background-color: rgba(0, 0, 0, 0.1);
-  border-color: rgba(0, 0, 0, 0.2);
+  background-color: #d4eaf7;
+  border-color: #b6ccd8;
 }
 
 html:not(.dark) input[type="date"]:focus {
-  border-color: #2E8B57;
-  box-shadow: 0 0 0 3px rgba(46, 139, 87, 0.15);
+  border-color: #00668c;
+  box-shadow: 0 0 0 3px rgba(0, 102, 140, 0.15);
 }
 
 html:not(.dark) input[type="date"]::-webkit-calendar-picker-indicator {
   filter: invert(0);
-  opacity: 0.4;
+  opacity: 0.45;
 }
 
 /* Hide default date icon and add custom */

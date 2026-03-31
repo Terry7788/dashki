@@ -66,11 +66,11 @@ function DesktopSidebarContent({
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#1a2a1e]/95 dark:bg-[#1a2a1e]/95 bg-[#e8f5e9]/95 dark:backdrop-blur-xl backdrop-blur-xl border-r border-[#2E8B57]/40 dark:border-[#2E8B57]/40 border-[#2E8B57]/30 light-sidebar">
+    <div className="flex flex-col h-full bg-[#d4eaf7]/95 dark:bg-[#1a2a1e]/95 backdrop-blur-xl border-r border-[#b6ccd8]/60 dark:border-[#2E8B57]/40">
       {/* Logo */}
       <div className={clsx('py-7 flex items-center', collapsed ? 'justify-center px-0' : 'px-6 justify-between')}>
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-[#2E8B57] to-[#345e37] flex items-center justify-center shadow-lg shadow-[#2E8B57]/30 flex-shrink-0 overflow-hidden">
+          <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-[#00668c] to-[#004d6e] dark:from-[#2E8B57] dark:to-[#345e37] flex items-center justify-center shadow-lg shadow-[#00668c]/30 dark:shadow-[#2E8B57]/30 flex-shrink-0 overflow-hidden">
             <Image
               src="/web/icon-192.png"
               alt="Dashki"
@@ -81,13 +81,13 @@ function DesktopSidebarContent({
             />
           </div>
           {!collapsed && (
-            <span className="text-xl font-bold text-[#61bc84] tracking-tight whitespace-nowrap">Dashki</span>
+            <span className="text-xl font-bold text-[#00668c] dark:text-[#61bc84] tracking-tight whitespace-nowrap">Dashki</span>
           )}
         </div>
       </div>
 
       {/* Divider */}
-      <div className="mx-4 h-px bg-white/[0.08]" />
+      <div className="mx-4 h-px bg-[#cccbc8]/50 dark:bg-white/[0.08]" />
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto overflow-x-hidden">
@@ -104,22 +104,22 @@ function DesktopSidebarContent({
                 collapsed ? 'justify-center px-0 py-3' : 'gap-3 px-4 py-3',
                 active
                   ? collapsed
-                    ? 'bg-[#2E8B57]/20 text-[#61bc84] shadow-sm'
-                    : 'bg-[#2E8B57]/20 border-l-2 border-[#2E8B57] text-[#61bc84] shadow-sm pl-[14px]'
-                  : 'text-gray-600 dark:text-white/60 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/[0.06] border border-transparent'
+                    ? 'bg-[#00668c]/15 dark:bg-[#2E8B57]/20 text-[#00668c] dark:text-[#61bc84] shadow-sm'
+                    : 'bg-[#00668c]/15 dark:bg-[#2E8B57]/20 border-l-2 border-[#00668c] dark:border-[#2E8B57] text-[#00668c] dark:text-[#61bc84] shadow-sm pl-[14px]'
+                  : 'text-[#313d44] dark:text-white/60 hover:text-[#1d1c1c] dark:hover:text-white hover:bg-[#d4eaf7]/60 dark:hover:bg-white/[0.06] border border-transparent'
               )}
             >
               <Icon
                 className={clsx(
                   'w-5 h-5 flex-shrink-0 transition-colors duration-200',
-                  active ? 'text-[#61bc84]' : 'text-gray-500 dark:text-white/50 group-hover:text-gray-700 dark:group-hover:text-white/80'
+                  active ? 'text-[#00668c] dark:text-[#61bc84]' : 'text-[#313d44]/60 dark:text-white/50 group-hover:text-[#1d1c1c] dark:group-hover:text-white/80'
                 )}
               />
               {!collapsed && (
                 <>
-                  <span className="text-sm font-medium text-gray-700 dark:text-white">{item.label}</span>
+                  <span className="text-sm font-medium text-[#313d44] dark:text-white">{item.label}</span>
                   {active && (
-                    <div className="ml-auto w-1.5 h-1.5 rounded-full bg-[#61bc84]" />
+                    <div className="ml-auto w-1.5 h-1.5 rounded-full bg-[#00668c] dark:bg-[#61bc84]" />
                   )}
                 </>
               )}
@@ -131,7 +131,7 @@ function DesktopSidebarContent({
       {/* Footer / Toggle */}
       <div className="px-3 pb-6 flex flex-col items-center gap-2">
         {!collapsed && (
-          <div className="text-xs text-gray-400 dark:text-white/25 text-center w-full px-3">
+          <div className="text-xs text-[#313d44]/50 dark:text-white/25 text-center w-full px-3">
             Dashki v0.1.0
           </div>
         )}
@@ -142,7 +142,7 @@ function DesktopSidebarContent({
           title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
           className={clsx(
             'flex items-center justify-center rounded-2xl p-2 transition-all duration-200',
-            'text-gray-500 dark:text-white/40 hover:text-yellow-600 dark:hover:text-yellow-300 hover:bg-gray-100 dark:hover:bg-white/[0.08]',
+            'text-[#313d44]/70 dark:text-white/40 hover:text-[#1d1c1c] dark:hover:text-yellow-300 hover:bg-[#d4eaf7]/60 dark:hover:bg-white/[0.08]',
             collapsed ? 'w-10 h-10' : 'w-full h-10'
           )}
           aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
@@ -156,7 +156,7 @@ function DesktopSidebarContent({
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           className={clsx(
             'flex items-center justify-center rounded-2xl p-2 transition-all duration-200',
-            'text-gray-500 dark:text-white/40 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/[0.08]',
+            'text-[#313d44]/70 dark:text-white/40 hover:text-[#1d1c1c] dark:hover:text-white hover:bg-[#d4eaf7]/60 dark:hover:bg-white/[0.08]',
             collapsed ? 'w-10 h-10' : 'w-full h-10'
           )}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -187,11 +187,11 @@ function MobileSidebarContent({
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#1a2a1e]/95 backdrop-blur-xl border-r border-[#2E8B57]/40">
+    <div className="flex flex-col h-full bg-[#d4eaf7]/95 dark:bg-[#1a2a1e]/95 backdrop-blur-xl border-r border-[#b6ccd8]/60 dark:border-[#2E8B57]/40">
       {/* Logo */}
       <div className="px-6 py-7 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-[#2E8B57] to-[#345e37] flex items-center justify-center shadow-lg shadow-[#2E8B57]/30 overflow-hidden">
+          <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-[#00668c] to-[#004d6e] dark:from-[#2E8B57] dark:to-[#345e37] flex items-center justify-center shadow-lg shadow-[#00668c]/30 dark:shadow-[#2E8B57]/30 overflow-hidden">
             <Image
               src="/web/icon-192.png"
               alt="Dashki"
@@ -201,7 +201,7 @@ function MobileSidebarContent({
               unoptimized
             />
           </div>
-          <span className="text-xl font-bold text-[#61bc84] tracking-tight">Dashki</span>
+          <span className="text-xl font-bold text-[#00668c] dark:text-[#61bc84] tracking-tight">Dashki</span>
         </div>
         <button
           onClick={onClose}

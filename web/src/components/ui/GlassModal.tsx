@@ -71,7 +71,7 @@ export default function GlassModal({
           'max-h-[90vh]',
           minHeight,
           // Light
-          'bg-white/95 border border-black/[0.08] text-gray-900',
+          'bg-[#fffefb]/97 border border-[#cccbc8]/55 text-[#1d1c1c]',
           // Dark
           'dark:bg-[#1a1a1a]/95 dark:border-white/[0.08] dark:text-white',
           'backdrop-blur-xl rounded-3xl shadow-2xl',
@@ -79,16 +79,16 @@ export default function GlassModal({
         )}
       >
         {/* Header — fixed height, never scrolls */}
-        <div className="flex-shrink-0 flex items-center justify-between px-6 py-5 border-b border-black/[0.06] dark:border-white/[0.08]">
+        <div className="flex-shrink-0 flex items-center justify-between px-6 py-5 border-b border-[#cccbc8]/45 dark:border-white/[0.08]">
           <h2
             id="modal-title"
-            className="text-lg font-semibold text-gray-900 dark:text-white"
+            className="text-lg font-semibold text-[#1d1c1c] dark:text-white"
           >
             {title}
           </h2>
           <button
             onClick={onClose}
-            className="p-2 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-black/5 dark:text-white/50 dark:hover:text-white dark:hover:bg-white/10 transition-all duration-200"
+            className="p-2 rounded-xl text-[#313d44]/55 hover:text-[#1d1c1c] hover:bg-[#d4eaf7]/50 dark:text-white/50 dark:hover:text-white dark:hover:bg-white/10 transition-all duration-200"
             aria-label="Close modal"
           >
             <X className="w-5 h-5" />
