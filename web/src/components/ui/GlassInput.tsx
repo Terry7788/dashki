@@ -43,7 +43,7 @@ export default function GlassInput({
       {label && (
         <label
           htmlFor={inputId}
-          className="text-sm font-medium text-gray-500 dark:text-white/60 pl-1"
+          className="text-sm font-medium text-[#313d44] dark:text-white/60 pl-1"
         >
           {label}
         </label>
@@ -65,8 +65,8 @@ export default function GlassInput({
         className={clsx(
           'w-full px-4 py-3 rounded-2xl transition-all duration-200',
           // Light mode
-          'bg-black/[0.04] border border-black/[0.10] text-gray-900 placeholder-gray-400',
-          'focus:outline-none focus:ring-2 focus:ring-[#2E8B57]/40 focus:border-[#2E8B57]/60',
+          'bg-[#f5f4f1] border border-[#cccbc8] text-[#1d1c1c] placeholder-[#313d44]/45',
+          'focus:outline-none focus:ring-2 focus:ring-[#71c4ef]/40 focus:border-[#00668c]/60',
           // Dark mode
           'dark:bg-white/[0.06] dark:border-white/[0.12] dark:text-white dark:placeholder-white/40',
           'disabled:opacity-40 disabled:cursor-not-allowed'

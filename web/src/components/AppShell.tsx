@@ -38,21 +38,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* ── Animated Background ───────────────────────────── */}
       <div
-        className="fixed inset-0 -z-10 dark:bg-gradient-to-br dark:from-[#111111] dark:via-[#1a1a1a] dark:to-[#111111] bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100"
+        className="fixed inset-0 -z-10 dark:bg-gradient-to-br dark:from-[#111111] dark:via-[#1a1a1a] dark:to-[#111111] bg-gradient-to-br from-[#fffefb] via-[#f5f4f1] to-[#fffefb]"
         aria-hidden="true"
       >
         {/* Blobs — dark mode: dark grey; light mode: soft grey */}
         <div
-          className="absolute -top-32 -left-32 w-[600px] h-[600px] rounded-full blur-3xl animate-blob-1 dark:opacity-[0.08] opacity-[0.25]"
-          style={{ backgroundColor: darkMode ? '#2d2d2d' : '#c8d6c9' }}
+          className="absolute -top-32 -left-32 w-[600px] h-[600px] rounded-full blur-3xl animate-blob-1 dark:opacity-[0.08] opacity-[0.07]"
+          style={{ backgroundColor: darkMode ? '#2d2d2d' : '#b6ccd8' }}
         />
         <div
-          className="absolute -bottom-40 -right-32 w-[700px] h-[700px] rounded-full blur-3xl animate-blob-2 dark:opacity-[0.08] opacity-[0.25]"
-          style={{ backgroundColor: darkMode ? '#2d2d2d' : '#c8d6c9' }}
+          className="absolute -bottom-40 -right-32 w-[700px] h-[700px] rounded-full blur-3xl animate-blob-2 dark:opacity-[0.08] opacity-[0.07]"
+          style={{ backgroundColor: darkMode ? '#2d2d2d' : '#b6ccd8' }}
         />
         <div
-          className="absolute top-1/2 right-1/4 w-[500px] h-[500px] rounded-full blur-3xl animate-blob-3 dark:opacity-[0.06] opacity-[0.20]"
-          style={{ backgroundColor: darkMode ? '#2d2d2d' : '#c8d6c9' }}
+          className="absolute top-1/2 right-1/4 w-[500px] h-[500px] rounded-full blur-3xl animate-blob-3 dark:opacity-[0.06] opacity-[0.05]"
+          style={{ backgroundColor: darkMode ? '#2d2d2d' : '#b6ccd8' }}
         />
       </div>
 
