@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Plus, Pencil, Trash2, Search, Leaf, BookOpen } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Leaf, BookOpen, X } from 'lucide-react';
 import { GlassCard, GlassButton, GlassInput, GlassModal } from '@/components/ui';
 import { getFoods, createFood, updateFood, deleteFood, addJournalEntry } from '@/lib/api';
 import type { Food, MealType } from '@/lib/types';
@@ -683,8 +683,17 @@ export default function FoodsPage() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search foods…"
-          className="w-full pl-10 sm:pl-11 pr-3 sm:pr-4 py-2.5 sm:py-3 text-sm sm:text-base bg-black/[0.04] border border-black/[0.10] text-gray-900 placeholder-gray-400 dark:bg-white/10 dark:border-white/20 dark:text-white dark:placeholder-white/40 rounded-xl sm:rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#2E8B57]/40 focus:border-[#2E8B57]/60 transition-all duration-200"
+          className="w-full pl-10 sm:pl-11 pr-10 py-2.5 sm:py-3 text-sm sm:text-base bg-black/[0.04] border border-black/[0.10] text-gray-900 placeholder-gray-400 dark:bg-white/10 dark:border-white/20 dark:text-white dark:placeholder-white/40 rounded-xl sm:rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#2E8B57]/40 focus:border-[#2E8B57]/60 transition-all duration-200"
         />
+        {query && (
+          <button
+            onClick={() => setQuery('')}
+            className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 rounded-full text-gray-400 hover:text-gray-700 dark:text-white/40 dark:hover:text-white transition-colors duration-200"
+            aria-label="Clear search"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       {/* Stats bar */}
