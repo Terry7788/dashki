@@ -541,7 +541,7 @@ function FoodRow({ food, onEdit, onDelete, onAddToJournal }: FoodRowProps) {
   const fat = food.fat_per_100g ?? 0;
 
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 px-3 sm:px-5 py-3 sm:py-4 rounded-2xl sm:rounded-3xl bg-white/[0.06] border border-white/10 hover:bg-white/[0.09] transition-all duration-200 group">
+    <div className="flex flex-row items-center gap-3 sm:gap-4 px-3 sm:px-5 py-3 sm:py-4 rounded-2xl sm:rounded-3xl bg-white/[0.06] border border-white/10 hover:bg-white/[0.09] transition-all duration-200 group">
       <div className="flex-1 min-w-0">
         <p className="font-medium text-white truncate">{food.name}</p>
         <p className="text-xs text-white/50 mt-0.5">
