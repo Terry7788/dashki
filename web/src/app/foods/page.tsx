@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Pencil, Trash2, Search, Leaf } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Leaf, BookOpen } from 'lucide-react';
 import { GlassCard, GlassButton, GlassInput, GlassModal } from '@/components/ui';
 import { getFoods, createFood, updateFood, deleteFood, addJournalEntry } from '@/lib/api';
 import type { Food, MealType } from '@/lib/types';
@@ -455,15 +455,85 @@ function DeleteModal({ isOpen, onClose, food, onDeleted }: DeleteModalProps) {
   );
 }
 
+// ─── Add to Journal Modal ────────────────────────────────────────────────────
+
+interface AddToJournalModalProps {
+  food: Food | null;
+  isOpen: boolean;
+  onClose: () => void;
+  onAdd: (food: Food, mealType: MealType, servings: number) => void;
+}
+
+function AddToJournalModal({ food, isOpen, onClose, onAdd }: AddToJournalModalProps) {
+  const [mealType, setMealType] = useState<MealType>('breakfast');
+  const [servings, setServings] = useState('1');
+
+  function handleAdd() {
+    if (!food) return;
+    const sv = parseFloat(servings) || 1;
+    onAdd(food, mealType, sv);
+    setServings('1');
+    onClose();
+  }
+
+  const sv = parseFloat(servings) || 0;
+  const calories = food ? (food.calories_per_100g ?? food.calories ?? 0) * sv : 0;
+  const protein = food ? (food.protein_per_100g ?? food.protein ?? 0) * sv : 0;
+
+  return (
+    <GlassModal isOpen={isOpen} onClose={onClose} title="Add to Journal" size="sm">
+      <div className="space-y-4">
+        {food && (
+          <div className="px-4 py-3 rounded-2xl bg-white/5 border border-white/10">
+            <p className="font-medium text-white">{food.name}</p>
+            <p className="text-xs text-white/50 mt-0.5">
+              {Math.round(calories)} kcal · {protein.toFixed(1)}g protein
+            </p>
+          </div>
+        )}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-white/60 pl-1">Meal</label>
+          <select
+            value={mealType}
+            onChange={(e) => setMealType(e.target.value as MealType)}
+            className="w-full h-[46px] px-4 bg-white/10 border border-white/20 text-white rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2E8B57]/40 focus:border-[#2E8B57]/60 transition-all duration-200"
+          >
+            {MEAL_TYPES.map((m) => (
+              <option key={m} value={m} className="bg-[#1a1a1a]">{MEAL_LABELS[m]}</option>
+            ))}
+          </select>
+        </div>
+        <GlassInput
+          label="Servings"
+          type="number"
+          inputMode="decimal"
+          value={servings}
+          onChange={(e) => setServings(e.target.value)}
+          min={0}
+          step={0.1}
+          placeholder="1"
+        />
+        <div className="flex gap-3">
+          <GlassButton variant="default" className="flex-1" onClick={onClose}>Cancel</GlassButton>
+          <GlassButton variant="primary" className="flex-1" onClick={handleAdd}>
+            <span className="flex items-center gap-2"><BookOpen className="w-4 h-4" /> Add to Journal</span>
+          </GlassButton>
+        </div>
+      </div>
+    </GlassModal>
+  );
+}
+
 // ─── Food Row ─────────────────────────────────────────────────────────────────
 
 interface FoodRowProps {
   food: Food;
   onEdit: (food: Food) => void;
   onDelete: (food: Food) => void;
+  onAddToJournal: (food: Food) => void;
 }
 
-function FoodRow({ food, onEdit, onDelete }: FoodRowProps) {
+function FoodRow({ food, onEdit, onDelete, onAddToJournal }: FoodRowProps) {
   const calories = food.calories ?? food.calories_per_100g ?? 0;
   const protein = food.protein ?? food.protein_per_100g ?? 0;
   const carbs = food.carbs_per_100g ?? 0;
@@ -494,6 +564,13 @@ function FoodRow({ food, onEdit, onDelete }: FoodRowProps) {
       {/* Actions - always visible on mobile */}
       <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200">
         <button
+          onClick={() => onAddToJournal(food)}
+          className="p-2 rounded-xl text-white/40 hover:text-[#61bc84] hover:bg-[#2E8B57]/10 transition-all duration-200"
+          title="Add to Journal"
+        >
+          <BookOpen className="w-4 h-4" />
+        </button>
+        <button
           onClick={() => onEdit(food)}
           className="p-2 rounded-xl text-white/40 hover:text-indigo-300 hover:bg-indigo-500/10 transition-all duration-200"
           title="Edit"
@@ -522,6 +599,7 @@ export default function FoodsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingFood, setEditingFood] = useState<Food | null>(null);
   const [deletingFood, setDeletingFood] = useState<Food | null>(null);
+  const [journalFood, setJournalFood] = useState<Food | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [debouncedQuery, setDebouncedQuery] = useState('');
 
@@ -640,6 +718,7 @@ export default function FoodsPage() {
               food={food}
               onEdit={handleEdit}
               onDelete={setDeletingFood}
+              onAddToJournal={setJournalFood}
             />
           ))}
         </div>
@@ -658,6 +737,12 @@ export default function FoodsPage() {
         onClose={() => setDeletingFood(null)}
         food={deletingFood}
         onDeleted={handleDeleted}
+      />
+      <AddToJournalModal
+        food={journalFood}
+        isOpen={!!journalFood}
+        onClose={() => setJournalFood(null)}
+        onAdd={handleAddToJournal}
       />
     </div>
   );

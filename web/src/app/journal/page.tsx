@@ -9,32 +9,14 @@ import {
   updateJournalEntry,
   deleteJournalEntry,
   getSavedMeals,
+  getGoals,
+  updateGoals,
 } from '@/lib/api';
 import type { JournalEntry, MealType, Food, SavedMeal } from '@/lib/types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const NUTRITION_GOALS_KEY = 'dashki-nutrition-goals';
 const DEFAULT_GOALS = { calories: 2000, protein: 150 };
-
-function loadGoals(): { calories: number; protein: number } {
-  if (typeof window === 'undefined') return DEFAULT_GOALS;
-  try {
-    const raw = localStorage.getItem(NUTRITION_GOALS_KEY);
-    if (!raw) return DEFAULT_GOALS;
-    const parsed = JSON.parse(raw);
-    return {
-      calories: Number(parsed.calories) || DEFAULT_GOALS.calories,
-      protein: Number(parsed.protein) || DEFAULT_GOALS.protein,
-    };
-  } catch {
-    return DEFAULT_GOALS;
-  }
-}
-
-function saveGoals(goals: { calories: number; protein: number }) {
-  localStorage.setItem(NUTRITION_GOALS_KEY, JSON.stringify(goals));
-}
 
 const MEAL_TYPES: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 const MEAL_LABELS: Record<MealType, string> = {
@@ -752,14 +734,18 @@ export default function JournalPage() {
   const [goalsModalOpen, setGoalsModalOpen] = useState(false);
   const [addMealType, setAddMealType] = useState<MealType | null>(null);
 
-  // Load goals from localStorage
+  // Load goals from API
   useEffect(() => {
-    setGoals(loadGoals());
+    getGoals()
+      .then((g) => setGoals({ calories: g.calories, protein: g.protein }))
+      .catch(() => {}); // keep defaults on failure
   }, []);
 
-  function handleSaveGoals(newGoals: { calories: number; protein: number }) {
-    saveGoals(newGoals);
-    setGoals(newGoals);
+  async function handleSaveGoals(newGoals: { calories: number; protein: number }) {
+    setGoals(newGoals); // optimistic update
+    try {
+      await updateGoals(newGoals);
+    } catch { /* silently keep local state */ }
   }
 
   const dateStr = toISODate(currentDate);
