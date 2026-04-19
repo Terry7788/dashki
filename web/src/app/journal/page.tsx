@@ -281,6 +281,7 @@ function FoodPicker({ onAdd }: FoodPickerProps) {
                   <div className="relative">
                     <input
                       type="number"
+                      inputMode="decimal"
                       min={0}
                       step={0.1}
                       value={selected.servings === 0 ? '' : selected.servings}
@@ -564,6 +565,7 @@ function EditEntryModal({ isOpen, onClose, entry, onUpdated }: EditEntryModalPro
           <GlassInput
             label="Servings"
             type="number"
+            inputMode="decimal"
             value={servings}
             onChange={(e) => setServings(e.target.value)}
             min={0.1}
@@ -627,6 +629,7 @@ function EditGoalsModal({ isOpen, onClose, goals, onSave }: EditGoalsModalProps)
         <GlassInput
           label="Calorie Goal (kcal)"
           type="number"
+          inputMode="numeric"
           value={calories}
           onChange={(e) => setCalories(e.target.value)}
           min={1}
@@ -635,6 +638,7 @@ function EditGoalsModal({ isOpen, onClose, goals, onSave }: EditGoalsModalProps)
         <GlassInput
           label="Protein Goal (g)"
           type="number"
+          inputMode="numeric"
           value={protein}
           onChange={(e) => setProtein(e.target.value)}
           min={1}

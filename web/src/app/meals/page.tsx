@@ -129,6 +129,7 @@ function FoodPickerForMeal({ items, onAdd, onRemove, onUpdateServings }: FoodPic
           <GlassInput
             label="Servings"
             type="number"
+            inputMode="decimal"
             value={servings}
             onChange={(e) => setServings(e.target.value)}
             min={0.1}
@@ -329,6 +330,7 @@ function CreateMealModal({ isOpen, onClose, onCreated, editingMeal }: CreateMeal
                       </div>
                       <input
                         type="number"
+                        inputMode="decimal"
                         value={sv}
                         min={0.1}
                         step={0.1}
@@ -800,6 +802,7 @@ export default function MealsPage() {
                           </div>
                           <input
                             type="number"
+                            inputMode="decimal"
                             value={sv}
                             min={0.1}
                             step={0.1}

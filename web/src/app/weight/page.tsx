@@ -291,6 +291,7 @@ export default function WeightPage() {
           <GlassInput
             label="Weight (kg)"
             type="number"
+            inputMode="decimal"
             step={0.1}
             min={0}
             placeholder="e.g. 75.5"

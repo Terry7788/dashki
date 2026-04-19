@@ -218,6 +218,7 @@ function TemplateFormModal({
                   <div className="flex items-center gap-1">
                     <input
                       type="number"
+                      inputMode="numeric"
                       value={ex.sets}
                       min={1}
                       max={20}
@@ -231,6 +232,7 @@ function TemplateFormModal({
                   <div className="flex items-center gap-1">
                     <input
                       type="number"
+                      inputMode="numeric"
                       value={ex.reps}
                       min={1}
                       max={100}
@@ -658,6 +660,7 @@ function SetRow({
       <td className="py-1.5 pr-2">
         <input
           type="number"
+          inputMode="numeric"
           value={reps}
           min={0}
           onChange={(e) => setReps(e.target.value)}
@@ -668,6 +671,7 @@ function SetRow({
       <td className="py-1.5 pr-2">
         <input
           type="number"
+          inputMode="decimal"
           value={weight}
           min={0}
           step={0.5}

@@ -621,6 +621,7 @@ export default function DashboardPage() {
           <GlassInput
             label="Weight (kg)"
             type="number"
+            inputMode="decimal"
             placeholder="e.g. 75.5"
             value={weightInput}
             onChange={(e) => setWeightInput(e.target.value)}
@@ -649,6 +650,7 @@ export default function DashboardPage() {
           <GlassInput
             label="Steps today"
             type="number"
+            inputMode="numeric"
             placeholder="e.g. 8500"
             value={stepsInput}
             onChange={(e) => setStepsInput(e.target.value)}
