@@ -332,6 +332,7 @@ function AddFoodModal({ isOpen, onClose, mealType, date, onAdded }: AddFoodModal
   const [loadingMeals, setLoadingMeals] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [mealQuery, setMealQuery] = useState('');
 
   useEffect(() => {
     if (tab === 'meals' && savedMeals.length === 0) {
@@ -443,7 +444,27 @@ function AddFoodModal({ isOpen, onClose, mealType, date, onAdded }: AddFoodModal
         {tab === 'foods' && <FoodPicker onAdd={handleAddFood} />}
 
         {tab === 'meals' && (
-          <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+          <div className="space-y-2">
+            {/* Meal search */}
+            <div className="relative">
+              <input
+                type="text"
+                value={mealQuery}
+                onChange={(e) => setMealQuery(e.target.value)}
+                placeholder="Search saved meals…"
+                className="w-full pl-4 pr-9 py-2.5 text-sm bg-white/5 border border-white/10 text-white placeholder-white/30 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-400/40 focus:border-indigo-400/40 transition-all duration-200"
+              />
+              {mealQuery && (
+                <button
+                  onClick={() => setMealQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white transition-colors duration-200"
+                  aria-label="Clear search"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
             {loadingMeals && (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="w-6 h-6 text-indigo-400 animate-spin" />
@@ -452,7 +473,10 @@ function AddFoodModal({ isOpen, onClose, mealType, date, onAdded }: AddFoodModal
             {!loadingMeals && savedMeals.length === 0 && (
               <p className="text-center text-white/40 text-sm py-4">No saved meals yet</p>
             )}
-            {savedMeals.map((meal) => {
+            {!loadingMeals && savedMeals.length > 0 && mealQuery && savedMeals.filter((m) => m.name.toLowerCase().includes(mealQuery.toLowerCase())).length === 0 && (
+              <p className="text-center text-white/40 text-sm py-4">No meals match your search</p>
+            )}
+            {savedMeals.filter((m) => !mealQuery || m.name.toLowerCase().includes(mealQuery.toLowerCase())).map((meal) => {
               // Calculate totals from items
               const totals = (meal.items || []).reduce(
                 (acc, item) => ({
@@ -478,6 +502,7 @@ function AddFoodModal({ isOpen, onClose, mealType, date, onAdded }: AddFoodModal
                 </button>
               );
             })}
+            </div>
           </div>
         )}
       </div>
