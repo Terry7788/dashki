@@ -328,12 +328,17 @@ interface AddFoodModalProps {
 }
 
 function AddFoodModal({ isOpen, onClose, mealType, date, onAdded }: AddFoodModalProps) {
-  const [tab, setTab] = useState<'foods' | 'meals'>('foods');
+  const [tab, setTab] = useState<'foods' | 'meals' | 'quick'>('foods');
   const [savedMeals, setSavedMeals] = useState<SavedMeal[]>([]);
   const [loadingMeals, setLoadingMeals] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [mealQuery, setMealQuery] = useState('');
+
+  // Quick Add state
+  const [quickName, setQuickName] = useState('');
+  const [quickCalories, setQuickCalories] = useState('');
+  const [quickProtein, setQuickProtein] = useState('');
 
   useEffect(() => {
     if (tab === 'meals' && savedMeals.length === 0) {
@@ -412,6 +417,33 @@ function AddFoodModal({ isOpen, onClose, mealType, date, onAdded }: AddFoodModal
     }
   }
 
+  async function handleQuickAdd() {
+    const cal = parseFloat(quickCalories);
+    const pro = parseFloat(quickProtein) || 0;
+    if (!quickName.trim() || !cal || cal < 0) return;
+    setSaving(true);
+    setError('');
+    try {
+      const entry = await addJournalEntry({
+        date,
+        meal_type: mealType,
+        food_name_snapshot: quickName.trim(),
+        servings: 1,
+        calories_snapshot: Math.round(cal),
+        protein_snapshot: Math.round(pro * 10) / 10,
+      });
+      onAdded(entry);
+      setQuickName('');
+      setQuickCalories('');
+      setQuickProtein('');
+      onClose();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to add entry');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const tabClass = (t: typeof tab) =>
     `flex-1 py-2 text-sm font-medium rounded-xl transition-all duration-200 ${
       tab === t
@@ -432,6 +464,7 @@ function AddFoodModal({ isOpen, onClose, mealType, date, onAdded }: AddFoodModal
         <div className="flex gap-2 p-1 rounded-2xl bg-white/5 border border-white/10">
           <button className={tabClass('foods')} onClick={() => setTab('foods')}>🍎 Foods</button>
           <button className={tabClass('meals')} onClick={() => setTab('meals')}>🍽️ Saved Meals</button>
+          <button className={tabClass('quick')} onClick={() => setTab('quick')}>⚡ Quick Add</button>
         </div>
 
         {error && (
@@ -443,6 +476,52 @@ function AddFoodModal({ isOpen, onClose, mealType, date, onAdded }: AddFoodModal
         )}
 
         {tab === 'foods' && <FoodPicker onAdd={handleAddFood} />}
+
+        {tab === 'quick' && (
+          <div className="space-y-4">
+            <p className="text-xs text-white/40">
+              Log calories without adding to your food database — great for one-off items.
+            </p>
+            <GlassInput
+              label="Food name"
+              placeholder="e.g. Slice of birthday cake"
+              value={quickName}
+              onChange={(e) => setQuickName(e.target.value)}
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <GlassInput
+                label="Calories (kcal)"
+                type="number"
+                inputMode="numeric"
+                placeholder="e.g. 350"
+                value={quickCalories}
+                onChange={(e) => setQuickCalories(e.target.value)}
+                min={0}
+              />
+              <GlassInput
+                label="Protein (g) — optional"
+                type="number"
+                inputMode="decimal"
+                placeholder="e.g. 8"
+                value={quickProtein}
+                onChange={(e) => setQuickProtein(e.target.value)}
+                min={0}
+                step={0.1}
+              />
+            </div>
+            <GlassButton
+              variant="primary"
+              className="w-full justify-center"
+              onClick={handleQuickAdd}
+              disabled={!quickName.trim() || !quickCalories || saving}
+            >
+              <span className="flex items-center gap-2">
+                <Plus className="w-4 h-4" />
+                {saving ? 'Adding…' : 'Add to Journal'}
+              </span>
+            </GlassButton>
+          </div>
+        )}
 
         {tab === 'meals' && (
           <div className="space-y-2">
