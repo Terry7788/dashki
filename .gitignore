@@ -33,3 +33,6 @@ Thumbs.db
 *.tsbuildinfo
 *.db-shm
 *.db-wal
+
+# Claude Code worktrees
+.claude/worktrees/
