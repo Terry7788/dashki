@@ -285,34 +285,17 @@ function makeCard(parent) {
 }
 
 // ─── Left card: Calories ring + Calorie/Protein bars ─────────────────────────
-//
-// Layout (explicit sizes to prevent overflow on small widget viewports):
-//
-//   ┌───────────────────────────────────────┐  ← LEFT_CARD_WIDTH = 195
-//   │ ╭──╮  Calories          655 / 2000    │
-//   │ │55│  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━   │
-//   │ ╰──╯  Protein            32 / 150g    │
-//   │       ━━━━━━━━━━━━━━━━━━━━━━━━━━━━   │
-//   └───────────────────────────────────────┘
-//
-// Sizing rationale (medium widget, ~338pt wide × ~158pt tall):
-//   widget padding = 10 each side → 318pt inner
-//   left card 195 + spacer 8 + right card 110 = 313pt → fits with slack
-//
-//   left card inner (after 10pt L+R card padding) = 175pt
-//     → ring 56 + spacing 8 + bars column 100 + slack 11 = 175 ✓
-//
-//   right card inner = 90pt → fits 76pt steps ring centered
+
 const LEFT_CARD_WIDTH = 195;
-const LEFT_CARD_HEIGHT = 92;
-const RING_SIZE_LEFT = 56;
-const BAR_DISPLAY_WIDTH = 100;
+const LEFT_CARD_HEIGHT = 96;
+const RING_SIZE_LEFT = 60;
+const BAR_DISPLAY_WIDTH = 102;
 
 function buildJournalCard(parent, data) {
   const card = makeCard(parent);
   card.layoutHorizontally();
   card.centerAlignContent();
-  card.spacing = 8;
+  card.spacing = 10;
   card.size = new Size(LEFT_CARD_WIDTH, LEFT_CARD_HEIGHT);
 
   // Calorie ring on the left
@@ -322,8 +305,8 @@ function buildJournalCard(parent, data) {
     color: COLORS.calories,
     centerValue: data.calories != null ? String(data.calories) : "—",
     centerCaption: "kcal",
-    pixelSize: 220,
-    stroke: 20,
+    pixelSize: 240,
+    stroke: 22,
   }));
   ringImg.imageSize = new Size(RING_SIZE_LEFT, RING_SIZE_LEFT);
   ringImg.resizable = true;
@@ -331,7 +314,7 @@ function buildJournalCard(parent, data) {
   // Right side: stacked Calories + Protein bars
   const stats = card.addStack();
   stats.layoutVertically();
-  stats.spacing = 6;
+  stats.spacing = 8;
 
   addBarRow(stats, {
     label: "Calories",
@@ -339,6 +322,7 @@ function buildJournalCard(parent, data) {
     goal: data.goals.calories,
     unit: "",
     color: COLORS.calories,
+    symbolName: "flame.fill",
   });
 
   addBarRow(stats, {
@@ -347,22 +331,35 @@ function buildJournalCard(parent, data) {
     goal: data.goals.protein,
     unit: "g",
     color: COLORS.protein,
+    symbolName: "leaf.fill",
   });
 }
 
-function addBarRow(parent, { label, value, goal, unit, color }) {
+function addBarRow(parent, { label, value, goal, unit, color, symbolName }) {
   const row = parent.addStack();
   row.layoutVertically();
-  row.spacing = 2;
+  row.spacing = 3;
 
-  // Header: "Calories               655 / 2000"
+  // Header row: [icon] Label                  X / Y
   const top = row.addStack();
-  top.bottomAlignContent();
+  top.centerAlignContent();
   top.size = new Size(BAR_DISPLAY_WIDTH, 0);
+  top.spacing = 4;
+
+  // Color-tinted icon
+  if (symbolName) {
+    const icon = SFSymbol.named(symbolName);
+    if (icon) {
+      const iconImg = top.addImage(icon.image);
+      iconImg.imageSize = new Size(9, 9);
+      iconImg.tintColor = color;
+    }
+  }
 
   const labelText = top.addText(label);
-  labelText.font = Font.systemFont(10);
-  labelText.textColor = COLORS.textMuted;
+  labelText.font = Font.semiboldSystemFont(10);
+  labelText.textColor = COLORS.textPrimary;
+  labelText.textOpacity = 0.85;
   labelText.lineLimit = 1;
   labelText.minimumScaleFactor = 0.7;
 
@@ -373,17 +370,17 @@ function addBarRow(parent, { label, value, goal, unit, color }) {
       ? "—"
       : `${formatNumber(value)}${unit}${goal != null ? ` / ${formatNumber(goal)}${unit}` : ""}`
   );
-  valueText.font = Font.systemFont(10);
-  valueText.textColor = COLORS.textMuted;
+  valueText.font = Font.systemFont(9);
+  valueText.textColor = COLORS.textDim;
   valueText.lineLimit = 1;
   valueText.minimumScaleFactor = 0.6;
 
   // Bar
   const barImg = row.addImage(drawProgressBar({
     value, goal, color,
-    width: 320, height: 8,
+    width: 320, height: 10,
   }));
-  barImg.imageSize = new Size(BAR_DISPLAY_WIDTH, 4);
+  barImg.imageSize = new Size(BAR_DISPLAY_WIDTH, 5);
   barImg.resizable = true;
 }
 
@@ -391,24 +388,36 @@ function addBarRow(parent, { label, value, goal, unit, color }) {
 
 const RIGHT_CARD_WIDTH = 110;
 const RIGHT_CARD_HEIGHT = LEFT_CARD_HEIGHT; // match for visual balance
-const STEPS_RING_SIZE = 76;
+const STEPS_RING_SIZE = 62;
 
 function buildStepsCard(parent, data) {
   const card = makeCard(parent);
   card.layoutVertically();
   card.centerAlignContent();
-  card.spacing = 2;
+  card.spacing = 4;
   card.size = new Size(RIGHT_CARD_WIDTH, RIGHT_CARD_HEIGHT);
 
-  // STEPS label at top
+  // STEPS header row: [icon] STEPS
   const labelRow = card.addStack();
-  labelRow.addSpacer();
-  const label = labelRow.addText("STEPS");
-  label.font = Font.semiboldSystemFont(9);
-  label.textColor = COLORS.textDim;
+  labelRow.centerAlignContent();
+  labelRow.spacing = 4;
   labelRow.addSpacer();
 
-  // Big steps ring with value inside
+  const stepsIcon = SFSymbol.named("figure.walk");
+  if (stepsIcon) {
+    const iconImg = labelRow.addImage(stepsIcon.image);
+    iconImg.imageSize = new Size(10, 10);
+    iconImg.tintColor = COLORS.steps;
+  }
+
+  const label = labelRow.addText("STEPS");
+  label.font = Font.semiboldSystemFont(10);
+  label.textColor = COLORS.steps;
+  label.textOpacity = 0.95;
+
+  labelRow.addSpacer();
+
+  // Big steps ring with value inside (no caption — value alone is the focus)
   const ringRow = card.addStack();
   ringRow.addSpacer();
   const ringImg = ringRow.addImage(drawRing({
@@ -416,13 +425,31 @@ function buildStepsCard(parent, data) {
     goal: data.goals.steps,
     color: COLORS.steps,
     centerValue: data.steps != null ? formatNumber(data.steps) : "—",
-    centerCaption: `/ ${formatNumber(data.goals.steps)}`,
     pixelSize: 240,
-    stroke: 20,
+    stroke: 22,
   }));
   ringImg.imageSize = new Size(STEPS_RING_SIZE, STEPS_RING_SIZE);
   ringImg.resizable = true;
   ringRow.addSpacer();
+
+  // Footer: "X% of 10,000"
+  const footerRow = card.addStack();
+  footerRow.centerAlignContent();
+  footerRow.addSpacer();
+
+  const percent = data.steps != null && data.goals.steps
+    ? Math.round((data.steps / data.goals.steps) * 100)
+    : null;
+  const goalStr = formatNumber(data.goals.steps);
+  const footerText = footerRow.addText(
+    percent != null ? `${percent}% of ${goalStr}` : `of ${goalStr}`
+  );
+  footerText.font = Font.semiboldSystemFont(8);
+  footerText.textColor = COLORS.textDim;
+  footerText.lineLimit = 1;
+  footerText.minimumScaleFactor = 0.7;
+
+  footerRow.addSpacer();
 }
 
 // ─── Medium widget ───────────────────────────────────────────────────────────
@@ -434,14 +461,22 @@ function buildMediumWidget(data) {
   widget.url = OPEN_URL_ON_TAP
     || `scriptable:///run/${encodeURIComponent(Script.name())}?refresh=1`;
 
-  // Header
-  const title = widget.addText("DASHKI");
+  // Header — small accent dot + "DASHKI"
+  const header = widget.addStack();
+  header.centerAlignContent();
+  header.spacing = 5;
+
+  const dot = header.addText("●");
+  dot.font = Font.systemFont(8);
+  dot.textColor = COLORS.calories;
+
+  const title = header.addText("DASHKI");
   title.font = Font.boldSystemFont(10);
   title.textColor = COLORS.textPrimary;
-  title.textOpacity = 0.55;
+  title.textOpacity = 0.6;
   title.lineLimit = 1;
 
-  widget.addSpacer(6);
+  widget.addSpacer(8);
 
   // Body — two cards side by side. The flexible spacer between them absorbs
   // any width difference between phone models (medium widget is wider on
@@ -475,10 +510,16 @@ function buildSmallWidget(data) {
   widget.url = OPEN_URL_ON_TAP
     || `scriptable:///run/${encodeURIComponent(Script.name())}?refresh=1`;
 
-  const title = widget.addText("DASHKI");
+  const header = widget.addStack();
+  header.centerAlignContent();
+  header.spacing = 4;
+  const dot = header.addText("●");
+  dot.font = Font.systemFont(7);
+  dot.textColor = COLORS.calories;
+  const title = header.addText("DASHKI");
   title.font = Font.boldSystemFont(10);
   title.textColor = COLORS.textPrimary;
-  title.textOpacity = 0.55;
+  title.textOpacity = 0.6;
   title.lineLimit = 1;
 
   widget.addSpacer(6);
