@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { GlassCard, GlassButton } from '@/components/ui';
-import { getTodos } from '@/lib/api';
-import type { Todo } from '@/lib/types';
-import { ChevronLeft, ChevronRight, Calendar, CheckSquare, ExternalLink } from 'lucide-react';
+import { getTodos, getJournalEntries, getWeightEntries } from '@/lib/api';
+import type { Todo, JournalEntry, WeightEntry } from '@/lib/types';
+import { ChevronLeft, ChevronRight, Calendar, CheckSquare, ExternalLink, Flame, Scale } from 'lucide-react';
 import clsx from 'clsx';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -142,6 +142,7 @@ function DayCell({
   isSelected,
   hasTodo,
   hasEvent,
+  hasHealth,
   onClick,
 }: {
   date: Date;
@@ -150,6 +151,7 @@ function DayCell({
   isSelected: boolean;
   hasTodo: boolean;
   hasEvent: boolean;
+  hasHealth: boolean;
   onClick: () => void;
 }) {
   return (
@@ -178,13 +180,16 @@ function DayCell({
       </span>
 
       {/* Dots */}
-      {(hasTodo || hasEvent) && (
+      {(hasTodo || hasEvent || hasHealth) && (
         <div className="flex gap-0.5 mt-0.5">
           {hasTodo && (
             <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 opacity-80" />
           )}
           {hasEvent && (
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 opacity-80" />
+          )}
+          {hasHealth && (
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 opacity-80" />
           )}
         </div>
       )}
@@ -200,12 +205,16 @@ function SidePanel({
   events,
   eventsLoading,
   googleConfigured,
+  caloriesForDay,
+  weightForDay,
 }: {
   selectedDay: Date;
   todos: Todo[];
   events: CalendarEvent[];
   eventsLoading: boolean;
   googleConfigured: boolean | null;
+  caloriesForDay: number | null;
+  weightForDay: number | null;
 }) {
   const dayLabel = selectedDay.toLocaleDateString('en-AU', {
     weekday: 'long',
@@ -219,6 +228,47 @@ function SidePanel({
   return (
     <div className="space-y-4">
       <h2 className="text-lg font-semibold text-white">{dayLabel}</h2>
+
+      {/* Health summary for this day */}
+      {(caloriesForDay !== null || weightForDay !== null) && (
+        <div>
+          <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+            <Flame className="w-3.5 h-3.5" /> Health
+          </h3>
+          <div className="grid grid-cols-2 gap-2">
+            {caloriesForDay !== null && (
+              <GlassCard padding={false} className="px-3 py-2.5">
+                <div className="flex items-center gap-2">
+                  <Flame className="w-4 h-4 text-amber-400 shrink-0" />
+                  <div className="flex flex-col leading-tight">
+                    <span className="text-sm text-white font-semibold">
+                      {Math.round(caloriesForDay)}
+                    </span>
+                    <span className="text-[10px] uppercase tracking-wider text-white/40">
+                      kcal
+                    </span>
+                  </div>
+                </div>
+              </GlassCard>
+            )}
+            {weightForDay !== null && (
+              <GlassCard padding={false} className="px-3 py-2.5">
+                <div className="flex items-center gap-2">
+                  <Scale className="w-4 h-4 text-amber-400 shrink-0" />
+                  <div className="flex flex-col leading-tight">
+                    <span className="text-sm text-white font-semibold">
+                      {weightForDay.toFixed(1)}
+                    </span>
+                    <span className="text-[10px] uppercase tracking-wider text-white/40">
+                      kg
+                    </span>
+                  </div>
+                </div>
+              </GlassCard>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Todos for this day */}
       <div>
@@ -300,6 +350,8 @@ export default function CalendarPage() {
   const [eventsLoading, setEventsLoading] = useState(true);
   // null = unknown (loading), true = configured, false = not configured
   const [googleConfigured, setGoogleConfigured] = useState<boolean | null>(null);
+  const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
+  const [weightEntries, setWeightEntries] = useState<WeightEntry[]>([]);
 
   const year = currentMonth.getFullYear();
   const month = currentMonth.getMonth();
@@ -313,6 +365,41 @@ export default function CalendarPage() {
       .catch(console.error)
       .finally(() => setTodosLoading(false));
   }, []);
+
+  // ── Fetch journal entries for the visible month ───────────────────────────
+
+  useEffect(() => {
+    const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    getJournalEntries({ startDate, endDate })
+      .then(setJournalEntries)
+      .catch(console.error);
+  }, [year, month]);
+
+  // ── Fetch weight entries (all, once) ──────────────────────────────────────
+
+  useEffect(() => {
+    getWeightEntries().then(setWeightEntries).catch(console.error);
+  }, []);
+
+  // ── Aggregate health data by date ─────────────────────────────────────────
+
+  const caloriesByDate = useMemo(() => {
+    const map = new Map<string, number>();
+    journalEntries.forEach((e) => {
+      map.set(e.date, (map.get(e.date) ?? 0) + e.calories_snapshot);
+    });
+    return map;
+  }, [journalEntries]);
+
+  const weightByDate = useMemo(() => {
+    const map = new Map<string, number>();
+    // If multiple weights exist for the same date, the last entry (highest id) wins.
+    const sorted = [...weightEntries].sort((a, b) => a.id - b.id);
+    sorted.forEach((w) => map.set(w.date, w.weight_kg));
+    return map;
+  }, [weightEntries]);
 
   // ── Fetch calendar events for selected day ────────────────────────────────
 
@@ -428,6 +515,8 @@ export default function CalendarPage() {
                   <div className="grid grid-cols-7 gap-1">
                     {cells.map(({ date, isCurrentMonth }, idx) => {
                       const dateStr = toLocalDateStr(date);
+                      const hasHealth =
+                        caloriesByDate.has(dateStr) || weightByDate.has(dateStr);
                       return (
                         <DayCell
                           key={idx}
@@ -437,6 +526,7 @@ export default function CalendarPage() {
                           isSelected={isSameDay(date, selectedDay)}
                           hasTodo={todoDateSet.has(dateStr)}
                           hasEvent={false} /* We don't bulk-fetch events per cell */
+                          hasHealth={hasHealth}
                           onClick={() => setSelectedDay(new Date(date))}
                         />
                       );
@@ -444,7 +534,7 @@ export default function CalendarPage() {
                   </div>
 
                   {/* Legend */}
-                  <div className="flex items-center gap-4 mt-4 pt-4 border-t border-white/10">
+                  <div className="flex items-center gap-4 mt-4 pt-4 border-t border-white/10 flex-wrap">
                     <div className="flex items-center gap-1.5 text-xs text-white/40">
                       <span className="w-2 h-2 rounded-full bg-indigo-400" />
                       Task due
@@ -452,6 +542,10 @@ export default function CalendarPage() {
                     <div className="flex items-center gap-1.5 text-xs text-white/40">
                       <span className="w-2 h-2 rounded-full bg-emerald-400" />
                       Calendar event
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs text-white/40">
+                      <span className="w-2 h-2 rounded-full bg-amber-400" />
+                      Calories / Weight logged
                     </div>
                     <div className="flex items-center gap-1.5 text-xs text-white/40">
                       <span className="w-3 h-3 rounded-full ring-1 ring-indigo-400/60 inline-block" />
@@ -472,6 +566,8 @@ export default function CalendarPage() {
                 events={events}
                 eventsLoading={eventsLoading}
                 googleConfigured={googleConfigured}
+                caloriesForDay={caloriesByDate.get(toLocalDateStr(selectedDay)) ?? null}
+                weightForDay={weightByDate.get(toLocalDateStr(selectedDay)) ?? null}
               />
             </GlassCard>
           </div>

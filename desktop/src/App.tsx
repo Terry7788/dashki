@@ -3,6 +3,7 @@ import clsx from 'clsx';
 import HomePage from '@/app/page';
 import JournalPage from '@/app/journal/page';
 import FoodsPage from '@/app/foods/page';
+import CalendarPage from '@/app/calendar/page';
 import WeightPage from '@/app/weight/page';
 import StepsPage from '@/app/steps/page';
 import TopTabs, { type TabId } from './TopTabs';
@@ -10,7 +11,7 @@ import TitleBar from './TitleBar';
 import SettingsModal from './SettingsModal';
 
 const STORAGE_KEY = 'dashki-desktop:active-tab';
-const VALID_TABS: TabId[] = ['home', 'journal', 'foods', 'weight', 'steps'];
+const VALID_TABS: TabId[] = ['home', 'journal', 'foods', 'calendar', 'weight', 'steps'];
 
 function readInitialTab(): TabId {
   if (typeof window === 'undefined') return 'home';
@@ -26,6 +27,8 @@ function renderActivePage(activeTab: TabId) {
       return <JournalPage />;
     case 'foods':
       return <FoodsPage />;
+    case 'calendar':
+      return <CalendarPage />;
     case 'weight':
       return <WeightPage />;
     case 'steps':
@@ -48,9 +51,9 @@ export default function App() {
       <main
         className={clsx(
           'flex-1 overflow-auto',
-          // Steps page already supplies its own px-4 md:px-6 py-8 wrapper.
+          // Steps and Calendar pages already supply their own px-4 py-8 wrapper.
           // Other pages don't, so add matching padding here for consistency.
-          activeTab !== 'steps' && 'px-4 md:px-6 py-8'
+          activeTab !== 'steps' && activeTab !== 'calendar' && 'px-4 md:px-6 py-8'
         )}
       >
         {renderActivePage(activeTab)}
