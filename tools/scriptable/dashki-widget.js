@@ -3,7 +3,25 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //
 // Shows your Dashki health data (calories, protein, steps, weight) on the
-// iOS home screen. Refreshes whenever iOS decides to (typically 15-30 min).
+// iOS home screen.
+//
+// REFRESH BEHAVIOUR — important to understand
+//
+//   iOS does NOT let third-party widgets push-update from a server. Apple's
+//   widget framework runs scripts on its own schedule, typically 15-30 minutes
+//   apart, and there is no API to trigger an immediate refresh from outside
+//   the device. So "update instantly when I save a meal" is not achievable
+//   purely from a widget.
+//
+//   This widget does the next-best things:
+//
+//     • Asks iOS to re-run as often as possible (60s hint). iOS often refuses
+//       and uses its own 15-30 min cadence, but sometimes honours it.
+//     • Tapping the widget re-runs the script in foreground and immediately
+//       repaints with fresh data. Use this right after you log a meal.
+//     • The script is also runnable from Shortcuts / the Action Button /
+//       Home Screen for a one-tap manual refresh from anywhere. See the
+//       "Force-refresh on demand" section below.
 //
 // SETUP
 //   1. Install "Scriptable" from the App Store.
@@ -14,18 +32,42 @@
 //      Pick the MEDIUM widget size and add it.
 //   6. Long-press the new widget → Edit Widget → choose script "Dashki".
 //
+// FORCE-REFRESH ON DEMAND
+//   Three ways, in increasing convenience:
+//
+//   (a) Tap the widget. Re-runs the script in foreground. Fastest existing
+//       option. ALWAYS works because tapping always re-runs the script.
+//
+//   (b) Add a Home Screen icon that runs the script. Open Scriptable → tap
+//       the script → tap the share icon → "Add to Home Screen". Tap it from
+//       the home screen and the widget repaints within ~2s of the script
+//       finishing.
+//
+//   (c) iPhone 15 Pro / 16 Pro Action Button: Settings → Action Button →
+//       Shortcut → pick a Shortcut that runs the "Dashki" Scriptable script
+//       (Shortcuts app → New Shortcut → Add Action → "Run Script"). Single
+//       press of the side button = instant refresh.
+//
 // CONFIG
-//   Just the API base. Change if your Railway URL changes.
+//   API_BASE — change if your Railway URL changes.
+//   OPEN_URL_ON_TAP — by default, tapping the widget force-refreshes the
+//     script. If you'd rather have tapping open your web Dashki, set this
+//     to the URL (e.g. "https://your-deployed-dashki.com") and that takes
+//     precedence over the force-refresh behaviour.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const API_BASE = "https://dashki-production.up.railway.app";
 
-// Tap the widget to open this URL in Safari. Set to your deployed web app, or
-// leave as "" to disable the tap action.
+// Set to a URL to override the default tap-to-refresh behaviour. Leave as ""
+// to keep tap-to-refresh.
 const OPEN_URL_ON_TAP = "";
 
 // Default goals if the goals endpoint can't be reached.
 const FALLBACK_GOALS = { calories: 2000, protein: 150, steps: 10000 };
+
+// How often to ask iOS to re-run us. iOS often ignores this and uses its own
+// 15-30 minute cadence; setting it low just maximises the chance of honour.
+const REFRESH_HINT_SECONDS = 60;
 
 // ─── Theme (matches Dashki's dark Glass design) ───────────────────────────────
 
@@ -205,7 +247,14 @@ function buildWidget(data) {
   widget.backgroundColor = COLORS.bg;
   widget.setPadding(14, 14, 14, 14);
 
-  if (OPEN_URL_ON_TAP) widget.url = OPEN_URL_ON_TAP;
+  // Tap behaviour:
+  //   - If OPEN_URL_ON_TAP is set, open that URL in Safari.
+  //   - Otherwise, re-run this same script via the Scriptable URL scheme.
+  //     The ?refresh=1 query tells the script (see main()) to skip the
+  //     in-app preview, run fast, and let iOS repaint the widget with
+  //     the freshly-fetched data.
+  widget.url = OPEN_URL_ON_TAP
+    || `scriptable:///run/${encodeURIComponent(Script.name())}?refresh=1`;
 
   // ── Header: "DASHKI" + today's date ───────────────────────────────────────
   const header = widget.addStack();
@@ -295,7 +344,9 @@ function buildSmallWidget(data) {
   const widget = new ListWidget();
   widget.backgroundColor = COLORS.bg;
   widget.setPadding(12, 12, 12, 12);
-  if (OPEN_URL_ON_TAP) widget.url = OPEN_URL_ON_TAP;
+
+  widget.url = OPEN_URL_ON_TAP
+    || `scriptable:///run/${encodeURIComponent(Script.name())}?refresh=1`;
 
   const title = widget.addText("DASHKI");
   title.font = Font.boldSystemFont(10);
@@ -353,13 +404,25 @@ async function main() {
     widget = buildWidget(data);
   }
 
-  // Refresh hint to iOS — try every 15 min. iOS ultimately decides.
-  widget.refreshAfterDate = new Date(Date.now() + 15 * 60 * 1000);
+  // Refresh hint to iOS. iOS often ignores this and uses its own 15-30 min
+  // cadence, but a short hint maximises the chance of being honoured.
+  widget.refreshAfterDate = new Date(Date.now() + REFRESH_HINT_SECONDS * 1000);
+
+  // Was this run launched from a tap on the widget (?refresh=1)?
+  // Or from a Shortcut / Action Button? In either case, skip the in-app
+  // preview and exit immediately so the user is dropped back on the home
+  // screen. iOS will repaint the widget with the freshly-fetched data
+  // shortly after Scriptable returns.
+  const launchedForRefresh = args.queryParameters
+    && args.queryParameters.refresh === "1";
 
   if (config.runsInWidget) {
     Script.setWidget(widget);
+  } else if (launchedForRefresh) {
+    // Update the widget snapshot but DON'T present a preview.
+    Script.setWidget(widget);
   } else {
-    // When you tap Run inside the Scriptable app, preview the medium layout.
+    // Manual "Run" button inside the Scriptable app — show a preview.
     await widget.presentMedium();
   }
   Script.complete();
