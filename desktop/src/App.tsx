@@ -3,13 +3,14 @@ import clsx from 'clsx';
 import HomePage from '@/app/page';
 import JournalPage from '@/app/journal/page';
 import FoodsPage from '@/app/foods/page';
+import WeightPage from '@/app/weight/page';
 import StepsPage from '@/app/steps/page';
 import TopTabs, { type TabId } from './TopTabs';
 import TitleBar from './TitleBar';
 import SettingsModal from './SettingsModal';
 
 const STORAGE_KEY = 'dashki-desktop:active-tab';
-const VALID_TABS: TabId[] = ['home', 'journal', 'foods', 'steps'];
+const VALID_TABS: TabId[] = ['home', 'journal', 'foods', 'weight', 'steps'];
 
 function readInitialTab(): TabId {
   if (typeof window === 'undefined') return 'home';
@@ -25,6 +26,8 @@ function renderActivePage(activeTab: TabId) {
       return <JournalPage />;
     case 'foods':
       return <FoodsPage />;
+    case 'weight':
+      return <WeightPage />;
     case 'steps':
       return <StepsPage />;
   }
