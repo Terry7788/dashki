@@ -69,9 +69,12 @@ const COLORS = {
   //   calories ring/bar: indigo  (#6366f1 → blue #3b82f6)
   //   protein bar:       emerald (#10b981 → teal #2dd4bf)
   //   steps:             sky     (matches calendar widget)
+  //   over-goal:         red     (when calories exceed goal)
   calories: new Color("#6366f1"),
   protein: new Color("#10b981"),
   steps: new Color("#38bdf8"),
+  over: new Color("#ef4444"),
+  overSoft: new Color("#f87171"),
 };
 
 // ─── Fetch helpers ────────────────────────────────────────────────────────────
@@ -298,11 +301,16 @@ function buildJournalCard(parent, data) {
   card.spacing = 10;
   card.size = new Size(LEFT_CARD_WIDTH, LEFT_CARD_HEIGHT);
 
+  // When calories exceed the goal, swap the calorie accent from indigo to red.
+  const caloriesOver =
+    data.calories != null && data.calories > data.goals.calories;
+  const caloriesColor = caloriesOver ? COLORS.over : COLORS.calories;
+
   // Calorie ring on the left
   const ringImg = card.addImage(drawRing({
     value: data.calories,
     goal: data.goals.calories,
-    color: COLORS.calories,
+    color: caloriesColor,
     centerValue: data.calories != null ? String(data.calories) : "—",
     centerCaption: "kcal",
     pixelSize: 240,
@@ -321,8 +329,11 @@ function buildJournalCard(parent, data) {
     value: data.calories,
     goal: data.goals.calories,
     unit: "",
-    color: COLORS.calories,
+    color: caloriesColor,
     symbolName: "flame.fill",
+    overIndicator: caloriesOver
+      ? `+${formatNumber(data.calories - data.goals.calories)} over`
+      : null,
   });
 
   addBarRow(stats, {
@@ -335,12 +346,12 @@ function buildJournalCard(parent, data) {
   });
 }
 
-function addBarRow(parent, { label, value, goal, unit, color, symbolName }) {
+function addBarRow(parent, { label, value, goal, unit, color, symbolName, overIndicator }) {
   const row = parent.addStack();
   row.layoutVertically();
   row.spacing = 3;
 
-  // Header row: [icon] Label                  X / Y
+  // Header row: [icon] Label                  X / Y  (+N over)
   const top = row.addStack();
   top.centerAlignContent();
   top.size = new Size(BAR_DISPLAY_WIDTH, 0);
@@ -365,17 +376,30 @@ function addBarRow(parent, { label, value, goal, unit, color, symbolName }) {
 
   top.addSpacer();
 
-  const valueText = top.addText(
-    value == null
-      ? "—"
-      : `${formatNumber(value)}${unit}${goal != null ? ` / ${formatNumber(goal)}${unit}` : ""}`
-  );
-  valueText.font = Font.systemFont(9);
-  valueText.textColor = COLORS.textDim;
-  valueText.lineLimit = 1;
-  valueText.minimumScaleFactor = 0.6;
+  // If there's an over-indicator, show only it on the top row so the alert
+  // isn't hidden beside a long "X / Y" string. Otherwise show the standard
+  // "X / Y" goal comparison.
+  if (overIndicator) {
+    const overText = top.addText(overIndicator);
+    overText.font = Font.semiboldSystemFont(9);
+    overText.textColor = COLORS.overSoft;
+    overText.lineLimit = 1;
+    overText.minimumScaleFactor = 0.6;
+  } else {
+    const valueText = top.addText(
+      value == null
+        ? "—"
+        : `${formatNumber(value)}${unit}${goal != null ? ` / ${formatNumber(goal)}${unit}` : ""}`
+    );
+    valueText.font = Font.systemFont(9);
+    valueText.textColor = COLORS.textDim;
+    valueText.lineLimit = 1;
+    valueText.minimumScaleFactor = 0.6;
+  }
 
-  // Bar
+  // Bar — always fills to the actual progress (capped at 100% visually via
+  // drawProgressBar) and uses the passed-in `color`, so red-when-over is
+  // controlled by the caller.
   const barImg = row.addImage(drawProgressBar({
     value, goal, color,
     width: 320, height: 10,

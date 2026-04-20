@@ -470,11 +470,20 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 </div>
-              ) : summary ? (
+              ) : summary ? (() => {
+                const caloriesOver = summary.calories > goals.calories;
+                const caloriesOverBy = Math.round(summary.calories - goals.calories);
+                return (
                 <div className="flex items-center gap-5">
                   {/* Calories ring */}
                   <div className="relative shrink-0">
-                    <ProgressRing value={summary.calories} max={goals.calories} size={68} stroke={6} color="#6366f1" />
+                    <ProgressRing
+                      value={summary.calories}
+                      max={goals.calories}
+                      size={68}
+                      stroke={6}
+                      color={caloriesOver ? '#ef4444' : '#6366f1'}
+                    />
                     <div className="absolute inset-0 flex flex-col items-center justify-center">
                       <span className="text-xs font-bold leading-tight">{Math.round(summary.calories)}</span>
                       <span className="text-[9px] text-white/40">kcal</span>
@@ -487,11 +496,20 @@ export default function DashboardPage() {
                         <span className="text-sm text-white/60">Calories</span>
                         <span className="text-sm font-bold text-white">
                           {Math.round(summary.calories)} <span className="text-white/40 font-normal">/ {goals.calories}</span>
+                          {caloriesOver && (
+                            <span className="ml-1.5 text-red-400 font-semibold">
+                              +{caloriesOverBy} over
+                            </span>
+                          )}
                         </span>
                       </div>
                       <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
                         <div
-                          className="h-full bg-gradient-to-r from-indigo-500 to-blue-500 rounded-full transition-all duration-500"
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            caloriesOver
+                              ? 'bg-gradient-to-r from-red-500 to-rose-500'
+                              : 'bg-gradient-to-r from-indigo-500 to-blue-500'
+                          }`}
                           style={{ width: `${Math.min((summary.calories / goals.calories) * 100, 100)}%` }}
                         />
                       </div>
@@ -513,7 +531,8 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 </div>
-              ) : (
+                );
+              })() : (
                 <p className="text-white/40 text-sm text-center py-2">
                   No food logged today yet.
                 </p>

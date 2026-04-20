@@ -971,10 +971,21 @@ export default function JournalPage() {
 
       {/* Daily Totals */}
       <GlassCard>
+        {(() => {
+        const caloriesOver = totalCalories > goals.calories;
+        const caloriesOverBy = Math.round(totalCalories - goals.calories);
+        return (
+        <>
         <div className="flex items-center gap-6">
           {/* Calories ring */}
           <div className="relative shrink-0">
-            <ProgressRing value={totalCalories} max={goals.calories} size={72} stroke={6} color="#6366f1" />
+            <ProgressRing
+              value={totalCalories}
+              max={goals.calories}
+              size={72}
+              stroke={6}
+              color={caloriesOver ? '#ef4444' : '#6366f1'}
+            />
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <span className="text-sm font-bold leading-tight">{Math.round(totalCalories)}</span>
               <span className="text-[10px] text-gray-400 dark:text-white/40">kcal</span>
@@ -988,11 +999,20 @@ export default function JournalPage() {
                 <span className="text-sm text-gray-500 dark:text-white/60">Calories</span>
                 <span className="text-base font-bold">
                   {Math.round(totalCalories)} <span className="text-gray-400 dark:text-white/40 font-normal">/ {goals.calories}</span>
+                  {caloriesOver && (
+                    <span className="ml-1.5 text-red-500 dark:text-red-400 font-semibold text-sm">
+                      +{caloriesOverBy} over
+                    </span>
+                  )}
                 </span>
               </div>
               <div className="h-1.5 rounded-full bg-black/10 dark:bg-white/10 overflow-hidden">
                 <div
-                  className="h-full bg-gradient-to-r from-indigo-500 to-blue-500 rounded-full transition-all duration-500"
+                  className={`h-full rounded-full transition-all duration-500 ${
+                    caloriesOver
+                      ? 'bg-gradient-to-r from-red-500 to-rose-500'
+                      : 'bg-gradient-to-r from-indigo-500 to-blue-500'
+                  }`}
                   style={{ width: `${Math.min((totalCalories / goals.calories) * 100, 100)}%` }}
                 />
               </div>
@@ -1041,6 +1061,9 @@ export default function JournalPage() {
             </button>
           </div>
         </div>
+        </>
+        );
+        })()}
       </GlassCard>
 
       {/* Error */}
