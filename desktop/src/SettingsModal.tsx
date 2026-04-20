@@ -37,7 +37,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   };
 
   return (
-    <GlassModal open={open} onClose={onClose} title="Settings" size="sm">
+    <GlassModal isOpen={open} onClose={onClose} title="Settings" size="sm">
       <div className="space-y-4">
         <label className="flex items-start gap-3 cursor-pointer">
           <input
