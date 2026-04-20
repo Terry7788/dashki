@@ -2,9 +2,13 @@
 // Dashki Widget — iOS Scriptable
 // ─────────────────────────────────────────────────────────────────────────────
 //
-// Three-ring health widget showing today's CALORIES, PROTEIN, and STEPS
-// from the Dashki production API. Inspired by the Apple Health activity
-// rings but in Dashki's dark Glass palette.
+// Two-card health widget mirroring the Dashki web app's "Today's Journal"
+// dashboard card:
+//
+//   LEFT CARD       RIGHT CARD
+//   ───────────────  ───────────
+//   ⚪ Calories  ━━  ⚪ Steps
+//      Protein   ━━
 //
 // REFRESH BEHAVIOUR — important to understand
 //
@@ -50,18 +54,24 @@ const OPEN_URL_ON_TAP = "";
 const FALLBACK_GOALS = { calories: 2000, protein: 150, steps: 10000 };
 const REFRESH_HINT_SECONDS = 60;
 
-// ─── Theme ────────────────────────────────────────────────────────────────────
+// ─── Theme (matches Dashki web Today's Journal card) ─────────────────────────
 
 const COLORS = {
   bg: new Color("#0b0b0b"),
-  bgRgb: { r: 0x0b, g: 0x0b, b: 0x0b }, // for ring inner-cover (must match bg)
+  bgRgb: { r: 0x0b, g: 0x0b, b: 0x0b }, // for ring inner-cover
+  card: new Color("#ffffff", 0.04),     // GlassCard surface
+  cardBorder: new Color("#ffffff", 0.08),
   textPrimary: new Color("#ffffff"),
   textMuted: new Color("#ffffff", 0.55),
   textDim: new Color("#ffffff", 0.32),
-  ringTrack: new Color("#ffffff", 0.10), // background ring (the unfilled track)
-  amber: new Color("#fbbf24"),    // calories
-  emerald: new Color("#34d399"),  // protein
-  sky: new Color("#38bdf8"),      // steps
+  ringTrack: new Color("#ffffff", 0.10),
+  // Match the gradients used in web/src/app/page.tsx Today's Journal:
+  //   calories ring/bar: indigo  (#6366f1 → blue #3b82f6)
+  //   protein bar:       emerald (#10b981 → teal #2dd4bf)
+  //   steps:             sky     (matches calendar widget)
+  calories: new Color("#6366f1"),
+  protein: new Color("#10b981"),
+  steps: new Color("#38bdf8"),
 };
 
 // ─── Fetch helpers ────────────────────────────────────────────────────────────
@@ -121,95 +131,16 @@ function pct(value, goal) {
   return Math.max(0, Math.min(1, value / goal));
 }
 
-// ─── Ring rendering (DrawContext) ─────────────────────────────────────────────
-
-/**
- * Draws a circular progress ring with the value displayed inside.
- * Returns an Image ready to drop into a stack.
- *
- * Approach:
- *   1. Draw the full background "track" ring in muted white.
- *   2. Draw the foreground "filled" arc as a polygon-approximated pie slice
- *      in the stat's accent color.
- *   3. Cover the inner area with a circle that matches the widget bg, so the
- *      pie slice becomes a hollow ring (matches Apple Health rings visually).
- *   4. Render the value text in the center.
- */
-function drawRing({
-  value,
-  goal,
-  color,
-  unit,            // optional: "g", "kcal", etc. shown beneath the value
-  pixelSize = 220, // internal render size; the image is then displayed smaller
-  stroke = 22,
-}) {
-  const ctx = new DrawContext();
-  ctx.size = new Size(pixelSize, pixelSize);
-  ctx.opaque = false;
-  ctx.respectScreenScale = true;
-
-  const cx = pixelSize / 2;
-  const cy = pixelSize / 2;
-  const outerR = pixelSize / 2;
-  const innerR = outerR - stroke;
-  const fraction = pct(value, goal);
-
-  // 1. Background track ring
-  drawArc(ctx, cx, cy, outerR, 0, 1, COLORS.ringTrack);
-  drawCircle(ctx, cx, cy, innerR, new Color(rgbHex(COLORS.bgRgb), 1));
-
-  // 2. Foreground filled arc
-  if (fraction > 0) {
-    drawArc(ctx, cx, cy, outerR, 0, fraction, color);
-    drawCircle(ctx, cx, cy, innerR, new Color(rgbHex(COLORS.bgRgb), 1));
-  }
-
-  // 3. Cap dot at the start of the ring (clean look at 12 o'clock)
-  if (fraction > 0) {
-    const capR = stroke / 2;
-    drawCircle(ctx, cx, cy - (outerR - capR), capR, color);
-  }
-
-  // 4. Cap dot at the end of the filled arc
-  if (fraction > 0 && fraction < 1) {
-    const angle = -Math.PI / 2 + fraction * 2 * Math.PI;
-    const ringMidR = (outerR + innerR) / 2;
-    const ex = cx + ringMidR * Math.cos(angle);
-    const ey = cy + ringMidR * Math.sin(angle);
-    drawCircle(ctx, ex, ey, stroke / 2, color);
-  }
-
-  // 5. Center text — value
-  const valueText = value == null ? "—" : formatNumber(value);
-  const valueFontSize = valueText.length >= 5 ? 38 : valueText.length === 4 ? 46 : 56;
-  ctx.setFont(Font.boldSystemFont(valueFontSize));
-  ctx.setTextColor(COLORS.textPrimary);
-  ctx.setTextAlignedCenter();
-  const valueRect = new Rect(
-    0,
-    cy - valueFontSize * 0.6,
-    pixelSize,
-    valueFontSize * 1.2
-  );
-  ctx.drawTextInRect(valueText, valueRect);
-
-  // 6. Optional unit label below value
-  if (unit) {
-    ctx.setFont(Font.semiboldSystemFont(16));
-    ctx.setTextColor(COLORS.textMuted);
-    ctx.setTextAlignedCenter();
-    ctx.drawTextInRect(
-      unit,
-      new Rect(0, cy + valueFontSize * 0.55, pixelSize, 22)
-    );
-  }
-
-  return ctx.getImage();
+function rgbHex({ r, g, b }) {
+  const h = (n) => n.toString(16).padStart(2, "0");
+  return `#${h(r)}${h(g)}${h(b)}`;
 }
 
+// ─── Drawing primitives ──────────────────────────────────────────────────────
+
 /**
- * Draw a "pie slice" arc from startFrac to endFrac (0..1, clockwise from 12 o'clock).
- * Filled, not stroked. Combine with a smaller cover circle to get a ring.
+ * Draw a "pie slice" arc filled (not stroked). Combine with a smaller cover
+ * circle to get a hollow ring.
  */
 function drawArc(ctx, cx, cy, radius, startFrac, endFrac, color) {
   const startAngle = -Math.PI / 2 + startFrac * 2 * Math.PI;
@@ -238,111 +169,292 @@ function drawCircle(ctx, cx, cy, radius, color) {
   ctx.fillPath();
 }
 
-function rgbHex({ r, g, b }) {
-  const h = (n) => n.toString(16).padStart(2, "0");
-  return `#${h(r)}${h(g)}${h(b)}`;
+/**
+ * Hollow progress ring with optional center text.
+ * Matches the web ProgressRing component aesthetic.
+ */
+function drawRing({
+  value,
+  goal,
+  color,
+  centerValue,        // text shown big in center, e.g. "655"
+  centerCaption,      // smaller text under it, e.g. "kcal"
+  pixelSize = 220,
+  stroke = 18,
+}) {
+  const ctx = new DrawContext();
+  ctx.size = new Size(pixelSize, pixelSize);
+  ctx.opaque = false;
+  ctx.respectScreenScale = true;
+
+  const cx = pixelSize / 2;
+  const cy = pixelSize / 2;
+  const outerR = pixelSize / 2;
+  const innerR = outerR - stroke;
+  const fraction = pct(value, goal);
+  const bgCover = new Color(rgbHex(COLORS.bgRgb), 1);
+
+  // Track ring
+  drawArc(ctx, cx, cy, outerR, 0, 1, COLORS.ringTrack);
+  drawCircle(ctx, cx, cy, innerR, bgCover);
+
+  // Filled arc
+  if (fraction > 0) {
+    drawArc(ctx, cx, cy, outerR, 0, fraction, color);
+    drawCircle(ctx, cx, cy, innerR, bgCover);
+
+    // Rounded cap at start (12 o'clock)
+    const capR = stroke / 2;
+    const ringMidR = (outerR + innerR) / 2;
+    drawCircle(ctx, cx, cy - ringMidR, capR, color);
+
+    // Rounded cap at end of fill (omit when fully complete to avoid overlap)
+    if (fraction < 1) {
+      const angle = -Math.PI / 2 + fraction * 2 * Math.PI;
+      drawCircle(
+        ctx,
+        cx + ringMidR * Math.cos(angle),
+        cy + ringMidR * Math.sin(angle),
+        capR,
+        color
+      );
+    }
+  }
+
+  // Center text
+  if (centerValue) {
+    // Auto-shrink if the value is many digits
+    const len = String(centerValue).length;
+    const valueFontSize = len >= 6 ? 32 : len >= 5 ? 38 : len >= 4 ? 46 : 54;
+
+    ctx.setFont(Font.boldSystemFont(valueFontSize));
+    ctx.setTextColor(COLORS.textPrimary);
+    ctx.setTextAlignedCenter();
+    ctx.drawTextInRect(
+      String(centerValue),
+      new Rect(0, cy - valueFontSize * 0.62, pixelSize, valueFontSize * 1.2)
+    );
+
+    if (centerCaption) {
+      ctx.setFont(Font.semiboldSystemFont(15));
+      ctx.setTextColor(COLORS.textMuted);
+      ctx.setTextAlignedCenter();
+      ctx.drawTextInRect(
+        centerCaption,
+        new Rect(0, cy + valueFontSize * 0.38, pixelSize, 22)
+      );
+    }
+  }
+
+  return ctx.getImage();
 }
 
-// ─── Stat tile (ring + label) ─────────────────────────────────────────────────
+/**
+ * Horizontal rounded progress bar.
+ * width / height in pixels (internal — image is then displayed smaller).
+ */
+function drawProgressBar({ value, goal, color, width = 320, height = 10 }) {
+  const ctx = new DrawContext();
+  ctx.size = new Size(width, height);
+  ctx.opaque = false;
+  ctx.respectScreenScale = true;
 
-function addStatTile(parent, { ring, label, color, displaySize }) {
-  const tile = parent.addStack();
-  tile.layoutVertically();
-  tile.centerAlignContent();
-  tile.spacing = 6;
+  // Track
+  const trackPath = new Path();
+  trackPath.addRoundedRect(new Rect(0, 0, width, height), height / 2, height / 2);
+  ctx.addPath(trackPath);
+  ctx.setFillColor(COLORS.ringTrack);
+  ctx.fillPath();
 
-  const imgRow = tile.addStack();
-  imgRow.addSpacer();
-  const img = imgRow.addImage(ring);
-  img.imageSize = new Size(displaySize, displaySize);
-  img.resizable = true;
-  imgRow.addSpacer();
+  // Fill
+  const fraction = pct(value, goal);
+  if (fraction > 0) {
+    const fillW = Math.max(height, Math.round(width * fraction));
+    const fillPath = new Path();
+    fillPath.addRoundedRect(new Rect(0, 0, fillW, height), height / 2, height / 2);
+    ctx.addPath(fillPath);
+    ctx.setFillColor(color);
+    ctx.fillPath();
+  }
 
-  const labelRow = tile.addStack();
-  labelRow.addSpacer();
-  const labelText = labelRow.addText(label);
-  labelText.font = Font.semiboldSystemFont(10);
-  labelText.textColor = color;
-  labelText.textOpacity = 0.85;
-  labelRow.addSpacer();
+  return ctx.getImage();
 }
 
-// ─── Medium widget ────────────────────────────────────────────────────────────
+// ─── Card primitive (Glass styling) ──────────────────────────────────────────
+
+function makeCard(parent) {
+  const card = parent.addStack();
+  card.backgroundColor = COLORS.card;
+  card.cornerRadius = 14;
+  card.borderColor = COLORS.cardBorder;
+  card.borderWidth = 1;
+  card.setPadding(10, 12, 10, 12);
+  return card;
+}
+
+// ─── Left card: Calories ring + Calorie/Protein bars ─────────────────────────
+
+function buildJournalCard(parent, data) {
+  const card = makeCard(parent);
+  card.layoutHorizontally();
+  card.centerAlignContent();
+  card.spacing = 10;
+
+  // Calorie ring on the left (matches web ProgressRing 68px / stroke 6)
+  const ringImg = card.addImage(drawRing({
+    value: data.calories,
+    goal: data.goals.calories,
+    color: COLORS.calories,
+    centerValue: data.calories != null ? String(data.calories) : "—",
+    centerCaption: "kcal",
+    pixelSize: 220,
+    stroke: 18,
+  }));
+  ringImg.imageSize = new Size(64, 64);
+  ringImg.resizable = true;
+
+  // Right side: stacked Calories + Protein bars
+  const stats = card.addStack();
+  stats.layoutVertically();
+  stats.spacing = 8;
+  stats.size = new Size(0, 64); // align column to ring height
+
+  // ── Calories row ────────────────────────────────────────────────────────
+  addBarRow(stats, {
+    label: "Calories",
+    value: data.calories,
+    goal: data.goals.calories,
+    unit: "",
+    color: COLORS.calories,
+  });
+
+  // ── Protein row ────────────────────────────────────────────────────────
+  addBarRow(stats, {
+    label: "Protein",
+    value: data.protein,
+    goal: data.goals.protein,
+    unit: "g",
+    color: COLORS.protein,
+  });
+}
+
+function addBarRow(parent, { label, value, goal, unit, color }) {
+  const row = parent.addStack();
+  row.layoutVertically();
+  row.spacing = 2;
+
+  // "Calories      655 / 2000"
+  const top = row.addStack();
+  top.bottomAlignContent();
+
+  const labelText = top.addText(label);
+  labelText.font = Font.systemFont(11);
+  labelText.textColor = COLORS.textMuted;
+
+  top.addSpacer();
+
+  const valueRow = top.addStack();
+  valueRow.bottomAlignContent();
+  valueRow.spacing = 2;
+
+  const valueText = valueRow.addText(value == null ? "—" : formatNumber(value));
+  valueText.font = Font.boldSystemFont(11);
+  valueText.textColor = COLORS.textPrimary;
+
+  if (unit) {
+    const unitText = valueRow.addText(unit);
+    unitText.font = Font.boldSystemFont(11);
+    unitText.textColor = COLORS.textPrimary;
+  }
+
+  if (goal != null) {
+    const goalText = valueRow.addText(` / ${formatNumber(goal)}${unit}`);
+    goalText.font = Font.systemFont(11);
+    goalText.textColor = COLORS.textDim;
+  }
+
+  // Bar
+  const barImg = row.addImage(drawProgressBar({
+    value, goal, color,
+    width: 320, height: 7,
+  }));
+  barImg.imageSize = new Size(160, 4);
+  barImg.resizable = true;
+}
+
+// ─── Right card: Steps ring ──────────────────────────────────────────────────
+
+function buildStepsCard(parent, data) {
+  const card = makeCard(parent);
+  card.layoutVertically();
+  card.centerAlignContent();
+  card.spacing = 4;
+
+  // STEPS label at top
+  const labelRow = card.addStack();
+  labelRow.addSpacer();
+  const label = labelRow.addText("STEPS");
+  label.font = Font.semiboldSystemFont(9);
+  label.textColor = COLORS.textDim;
+  labelRow.addSpacer();
+
+  card.addSpacer(2);
+
+  // Big steps ring with value inside
+  const ringRow = card.addStack();
+  ringRow.addSpacer();
+  const ringImg = ringRow.addImage(drawRing({
+    value: data.steps,
+    goal: data.goals.steps,
+    color: COLORS.steps,
+    centerValue: data.steps != null ? formatNumber(data.steps) : "—",
+    centerCaption: `/ ${formatNumber(data.goals.steps)}`,
+    pixelSize: 240,
+    stroke: 20,
+  }));
+  ringImg.imageSize = new Size(86, 86);
+  ringImg.resizable = true;
+  ringRow.addSpacer();
+}
+
+// ─── Medium widget ───────────────────────────────────────────────────────────
 
 function buildMediumWidget(data) {
   const widget = new ListWidget();
   widget.backgroundColor = COLORS.bg;
-  widget.setPadding(14, 16, 14, 16);
+  widget.setPadding(12, 12, 12, 12);
   widget.url = OPEN_URL_ON_TAP
     || `scriptable:///run/${encodeURIComponent(Script.name())}?refresh=1`;
 
-  // ── Header ────────────────────────────────────────────────────────────────
+  // Header
   const header = widget.addStack();
   header.centerAlignContent();
-
   const title = header.addText("DASHKI");
   title.font = Font.boldSystemFont(11);
   title.textColor = COLORS.textPrimary;
   title.textOpacity = 0.55;
-
   header.addSpacer();
-
   const date = header.addText(formatDate(data.fetchedAt));
   date.font = Font.semiboldSystemFont(10);
   date.textColor = COLORS.textDim;
 
-  widget.addSpacer();
+  widget.addSpacer(8);
 
-  // ── Three rings ───────────────────────────────────────────────────────────
-  const RING_SIZE = 92;
-  const row = widget.addStack();
-  row.centerAlignContent();
-  row.spacing = 0;
+  // Body — two cards side by side
+  const body = widget.addStack();
+  body.spacing = 8;
+  body.layoutHorizontally();
+  body.centerAlignContent();
 
-  row.addSpacer();
-  addStatTile(row, {
-    ring: drawRing({
-      value: data.calories,
-      goal: data.goals.calories,
-      color: COLORS.amber,
-      unit: "kcal",
-    }),
-    label: "CALORIES",
-    color: COLORS.amber,
-    displaySize: RING_SIZE,
-  });
-  row.addSpacer();
-  addStatTile(row, {
-    ring: drawRing({
-      value: data.protein,
-      goal: data.goals.protein,
-      color: COLORS.emerald,
-      unit: "g",
-    }),
-    label: "PROTEIN",
-    color: COLORS.emerald,
-    displaySize: RING_SIZE,
-  });
-  row.addSpacer();
-  addStatTile(row, {
-    ring: drawRing({
-      value: data.steps,
-      goal: data.goals.steps,
-      color: COLORS.sky,
-      unit: "steps",
-    }),
-    label: "STEPS",
-    color: COLORS.sky,
-    displaySize: RING_SIZE,
-  });
-  row.addSpacer();
+  // Left card takes ~60% — wider for the ring + 2 bars
+  buildJournalCard(body, data);
+  // Right card takes the rest — steps
+  buildStepsCard(body, data);
 
-  widget.addSpacer();
-
-  // ── Footer error indicator ────────────────────────────────────────────────
   if (data.anyFetchFailed) {
+    widget.addSpacer(4);
     const err = widget.addText("Some data unavailable — tap to retry");
-    err.font = Font.systemFont(9);
+    err.font = Font.systemFont(8);
     err.textColor = COLORS.textDim;
     err.centerAlignText();
   }
@@ -350,7 +462,7 @@ function buildMediumWidget(data) {
   return widget;
 }
 
-// ─── Small widget — single hero ring (calories) + protein/steps below ────────
+// ─── Small widget — single hero calories ring + protein/steps mini ──────────
 
 function buildSmallWidget(data) {
   const widget = new ListWidget();
@@ -359,7 +471,6 @@ function buildSmallWidget(data) {
   widget.url = OPEN_URL_ON_TAP
     || `scriptable:///run/${encodeURIComponent(Script.name())}?refresh=1`;
 
-  // Header
   const header = widget.addStack();
   header.centerAlignContent();
   const title = header.addText("DASHKI");
@@ -373,24 +484,24 @@ function buildSmallWidget(data) {
 
   widget.addSpacer(6);
 
-  // Body — two-column layout: hero calories ring on left, protein+steps mini rings on right
   const body = widget.addStack();
   body.centerAlignContent();
-  body.spacing = 8;
+  body.spacing = 6;
 
-  // Hero: calories ring (left)
+  // Hero calories ring on the left
   const heroImg = body.addImage(drawRing({
     value: data.calories,
     goal: data.goals.calories,
-    color: COLORS.amber,
-    unit: "kcal",
-    pixelSize: 200,
+    color: COLORS.calories,
+    centerValue: data.calories != null ? String(data.calories) : "—",
+    centerCaption: "kcal",
+    pixelSize: 220,
     stroke: 22,
   }));
-  heroImg.imageSize = new Size(80, 80);
+  heroImg.imageSize = new Size(86, 86);
   heroImg.resizable = true;
 
-  // Right column: small protein + steps rings stacked
+  // Protein + Steps stacked on the right
   const right = body.addStack();
   right.layoutVertically();
   right.spacing = 4;
@@ -398,22 +509,24 @@ function buildSmallWidget(data) {
   const proteinImg = right.addImage(drawRing({
     value: data.protein,
     goal: data.goals.protein,
-    color: COLORS.emerald,
-    unit: "g",
+    color: COLORS.protein,
+    centerValue: data.protein != null ? String(data.protein) : "—",
+    centerCaption: "g",
     pixelSize: 160,
     stroke: 18,
   }));
-  proteinImg.imageSize = new Size(48, 48);
+  proteinImg.imageSize = new Size(44, 44);
   proteinImg.resizable = true;
 
   const stepsImg = right.addImage(drawRing({
     value: data.steps,
     goal: data.goals.steps,
-    color: COLORS.sky,
+    color: COLORS.steps,
+    centerValue: data.steps != null ? formatNumber(data.steps) : "—",
     pixelSize: 160,
     stroke: 18,
   }));
-  stepsImg.imageSize = new Size(48, 48);
+  stepsImg.imageSize = new Size(44, 44);
   stepsImg.resizable = true;
 
   return widget;
