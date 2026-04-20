@@ -50,6 +50,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': resolve(__dirname, '../web/src'),
+      'next/link': resolve(__dirname, 'src/shims/next-link.tsx'),
       ...Object.fromEntries(
         SHARED_DEPS.map((dep) => [dep, resolve(__dirname, 'node_modules', dep)]),
       ),
