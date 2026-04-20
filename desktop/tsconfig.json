@@ -15,6 +15,7 @@
     "allowJs": false,
     "forceConsistentCasingInFileNames": true,
     "useDefineForClassFields": true,
+    "types": ["vite/client"],
     "baseUrl": ".",
     "paths": {
       "@/*": ["../web/src/*"]
