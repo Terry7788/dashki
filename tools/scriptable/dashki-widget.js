@@ -2,8 +2,9 @@
 // Dashki Widget — iOS Scriptable
 // ─────────────────────────────────────────────────────────────────────────────
 //
-// Shows your Dashki health data (calories, protein, steps, weight) on the
-// iOS home screen.
+// Three-ring health widget showing today's CALORIES, PROTEIN, and STEPS
+// from the Dashki production API. Inspired by the Apple Health activity
+// rings but in Dashki's dark Glass palette.
 //
 // REFRESH BEHAVIOUR — important to understand
 //
@@ -20,8 +21,7 @@
 //     • Tapping the widget re-runs the script in foreground and immediately
 //       repaints with fresh data. Use this right after you log a meal.
 //     • The script is also runnable from Shortcuts / the Action Button /
-//       Home Screen for a one-tap manual refresh from anywhere. See the
-//       "Force-refresh on demand" section below.
+//       Home Screen for a one-tap manual refresh from anywhere.
 //
 // SETUP
 //   1. Install "Scriptable" from the App Store.
@@ -33,56 +33,35 @@
 //   6. Long-press the new widget → Edit Widget → choose script "Dashki".
 //
 // FORCE-REFRESH ON DEMAND
-//   Three ways, in increasing convenience:
-//
-//   (a) Tap the widget. Re-runs the script in foreground. Fastest existing
-//       option. ALWAYS works because tapping always re-runs the script.
-//
-//   (b) Add a Home Screen icon that runs the script. Open Scriptable → tap
-//       the script → tap the share icon → "Add to Home Screen". Tap it from
-//       the home screen and the widget repaints within ~2s of the script
-//       finishing.
-//
+//   (a) Tap the widget — re-runs and repaints in 2-5 sec.
+//   (b) Add a Home Screen icon: open Scriptable → tap the script → share →
+//       "Add to Home Screen". Tap = instant refresh from anywhere.
 //   (c) iPhone 15 Pro / 16 Pro Action Button: Settings → Action Button →
-//       Shortcut → pick a Shortcut that runs the "Dashki" Scriptable script
-//       (Shortcuts app → New Shortcut → Add Action → "Run Script"). Single
-//       press of the side button = instant refresh.
+//       Shortcut → pick a Shortcut that runs the "Dashki" script.
 //
 // CONFIG
-//   API_BASE — change if your Railway URL changes.
-//   OPEN_URL_ON_TAP — by default, tapping the widget force-refreshes the
-//     script. If you'd rather have tapping open your web Dashki, set this
-//     to the URL (e.g. "https://your-deployed-dashki.com") and that takes
-//     precedence over the force-refresh behaviour.
+//   API_BASE         change if your Railway URL changes
+//   OPEN_URL_ON_TAP  set to a URL to override default tap-to-refresh
+//   FALLBACK_GOALS   defaults if /api/goals can't be reached
 // ─────────────────────────────────────────────────────────────────────────────
 
 const API_BASE = "https://dashki-production.up.railway.app";
-
-// Set to a URL to override the default tap-to-refresh behaviour. Leave as ""
-// to keep tap-to-refresh.
 const OPEN_URL_ON_TAP = "";
-
-// Default goals if the goals endpoint can't be reached.
 const FALLBACK_GOALS = { calories: 2000, protein: 150, steps: 10000 };
-
-// How often to ask iOS to re-run us. iOS often ignores this and uses its own
-// 15-30 minute cadence; setting it low just maximises the chance of honour.
 const REFRESH_HINT_SECONDS = 60;
 
-// ─── Theme (matches Dashki's dark Glass design) ───────────────────────────────
+// ─── Theme ────────────────────────────────────────────────────────────────────
 
 const COLORS = {
-  bg: new Color("#0e0e0e"),
-  card: new Color("#1a1a1a"),
-  border: new Color("#ffffff14"),
+  bg: new Color("#0b0b0b"),
+  bgRgb: { r: 0x0b, g: 0x0b, b: 0x0b }, // for ring inner-cover (must match bg)
   textPrimary: new Color("#ffffff"),
-  textMuted: new Color("#ffffff66"),
-  textDim: new Color("#ffffff40"),
-  amber: new Color("#fbbf24"),       // calories
-  emerald: new Color("#34d399"),     // protein
-  sky: new Color("#38bdf8"),         // steps
-  purple: new Color("#a78bfa"),      // weight
-  goalBg: new Color("#ffffff10"),
+  textMuted: new Color("#ffffff", 0.55),
+  textDim: new Color("#ffffff", 0.32),
+  ringTrack: new Color("#ffffff", 0.10), // background ring (the unfilled track)
+  amber: new Color("#fbbf24"),    // calories
+  emerald: new Color("#34d399"),  // protein
+  sky: new Color("#38bdf8"),      // steps
 };
 
 // ─── Fetch helpers ────────────────────────────────────────────────────────────
@@ -91,8 +70,8 @@ async function fetchJSON(path) {
   const req = new Request(`${API_BASE}${path}`);
   req.timeoutInterval = 8;
   try {
-    const res = await req.loadJSON();
-    return { ok: true, data: res };
+    const data = await req.loadJSON();
+    return { ok: true, data };
   } catch (err) {
     console.log(`Fetch failed for ${path}: ${err}`);
     return { ok: false, data: null };
@@ -100,10 +79,9 @@ async function fetchJSON(path) {
 }
 
 async function loadDashboard() {
-  const [summary, steps, weight, goals] = await Promise.all([
+  const [summary, steps, goals] = await Promise.all([
     fetchJSON("/api/journal/today-summary"),
     fetchJSON("/api/steps/today"),
-    fetchJSON("/api/weight/latest"),
     fetchJSON("/api/goals"),
   ]);
 
@@ -113,10 +91,6 @@ async function loadDashboard() {
     calories: summary.ok ? Math.round(summary.data?.calories ?? 0) : null,
     protein: summary.ok ? Math.round(summary.data?.protein ?? 0) : null,
     steps: steps.ok ? Math.round(steps.data?.steps ?? 0) : null,
-    weight: weight.ok && weight.data?.weight_kg != null
-      ? Number(weight.data.weight_kg)
-      : null,
-    weightDate: weight.ok ? weight.data?.date ?? null : null,
     goals: {
       calories: Number(goalsData.calories) || FALLBACK_GOALS.calories,
       protein: Number(goalsData.protein) || FALLBACK_GOALS.protein,
@@ -139,7 +113,7 @@ function formatDate(d) {
     weekday: "short",
     day: "numeric",
     month: "short",
-  });
+  }).toUpperCase();
 }
 
 function pct(value, goal) {
@@ -147,177 +121,226 @@ function pct(value, goal) {
   return Math.max(0, Math.min(1, value / goal));
 }
 
-// ─── UI building blocks ───────────────────────────────────────────────────────
+// ─── Ring rendering (DrawContext) ─────────────────────────────────────────────
 
 /**
- * Adds a stat tile to a parent stack. Layout:
+ * Draws a circular progress ring with the value displayed inside.
+ * Returns an Image ready to drop into a stack.
  *
- *   [icon]  CALORIES
- *           655 / 2000
- *           ━━━━━━━━━━━━━━ (progress bar; omitted if no goal)
+ * Approach:
+ *   1. Draw the full background "track" ring in muted white.
+ *   2. Draw the foreground "filled" arc as a polygon-approximated pie slice
+ *      in the stat's accent color.
+ *   3. Cover the inner area with a circle that matches the widget bg, so the
+ *      pie slice becomes a hollow ring (matches Apple Health rings visually).
+ *   4. Render the value text in the center.
  */
-function addStatTile(parent, { label, value, unit, goal, color, symbolName }) {
-  const tile = parent.addStack();
-  tile.layoutVertically();
-  tile.spacing = 2;
-
-  // Header row: icon + label
-  const header = tile.addStack();
-  header.centerAlignContent();
-  header.spacing = 4;
-
-  const icon = SFSymbol.named(symbolName);
-  if (icon) {
-    const img = header.addImage(icon.image);
-    img.imageSize = new Size(11, 11);
-    img.tintColor = color;
-  }
-  const labelText = header.addText(label);
-  labelText.font = Font.semiboldSystemFont(9);
-  labelText.textColor = COLORS.textDim;
-
-  // Value row
-  const valueRow = tile.addStack();
-  valueRow.centerAlignContent();
-  valueRow.spacing = 3;
-
-  const valueText = valueRow.addText(value == null ? "—" : formatNumber(value));
-  valueText.font = Font.boldSystemFont(20);
-  valueText.textColor = COLORS.textPrimary;
-  valueText.minimumScaleFactor = 0.5;
-  valueText.lineLimit = 1;
-
-  if (goal != null && value != null) {
-    const goalText = valueRow.addText(`/ ${formatNumber(goal)}`);
-    goalText.font = Font.systemFont(11);
-    goalText.textColor = COLORS.textDim;
-    goalText.lineLimit = 1;
-  } else if (unit) {
-    const unitText = valueRow.addText(unit);
-    unitText.font = Font.systemFont(11);
-    unitText.textColor = COLORS.textDim;
-    unitText.lineLimit = 1;
-  }
-
-  // Progress bar (only when there's a goal)
-  if (goal != null && value != null) {
-    const bar = drawProgressBar(pct(value, goal), color);
-    const img = tile.addImage(bar);
-    img.imageSize = new Size(120, 4);
-    img.resizable = true;
-  }
-}
-
-/**
- * Draws a tiny rounded progress bar to a Drawing context.
- * Returns an Image.
- */
-function drawProgressBar(fraction, color) {
-  const W = 240; // 2x for retina
-  const H = 8;
+function drawRing({
+  value,
+  goal,
+  color,
+  unit,            // optional: "g", "kcal", etc. shown beneath the value
+  pixelSize = 220, // internal render size; the image is then displayed smaller
+  stroke = 22,
+}) {
   const ctx = new DrawContext();
-  ctx.size = new Size(W, H);
+  ctx.size = new Size(pixelSize, pixelSize);
   ctx.opaque = false;
   ctx.respectScreenScale = true;
 
-  // Background
-  const bgPath = new Path();
-  bgPath.addRoundedRect(new Rect(0, 0, W, H), H / 2, H / 2);
-  ctx.addPath(bgPath);
-  ctx.setFillColor(COLORS.goalBg);
-  ctx.fillPath();
+  const cx = pixelSize / 2;
+  const cy = pixelSize / 2;
+  const outerR = pixelSize / 2;
+  const innerR = outerR - stroke;
+  const fraction = pct(value, goal);
 
-  // Fill
-  const fillW = Math.max(H, Math.round(W * fraction));
+  // 1. Background track ring
+  drawArc(ctx, cx, cy, outerR, 0, 1, COLORS.ringTrack);
+  drawCircle(ctx, cx, cy, innerR, new Color(rgbHex(COLORS.bgRgb), 1));
+
+  // 2. Foreground filled arc
   if (fraction > 0) {
-    const fillPath = new Path();
-    fillPath.addRoundedRect(new Rect(0, 0, fillW, H), H / 2, H / 2);
-    ctx.addPath(fillPath);
-    ctx.setFillColor(color);
-    ctx.fillPath();
+    drawArc(ctx, cx, cy, outerR, 0, fraction, color);
+    drawCircle(ctx, cx, cy, innerR, new Color(rgbHex(COLORS.bgRgb), 1));
+  }
+
+  // 3. Cap dot at the start of the ring (clean look at 12 o'clock)
+  if (fraction > 0) {
+    const capR = stroke / 2;
+    drawCircle(ctx, cx, cy - (outerR - capR), capR, color);
+  }
+
+  // 4. Cap dot at the end of the filled arc
+  if (fraction > 0 && fraction < 1) {
+    const angle = -Math.PI / 2 + fraction * 2 * Math.PI;
+    const ringMidR = (outerR + innerR) / 2;
+    const ex = cx + ringMidR * Math.cos(angle);
+    const ey = cy + ringMidR * Math.sin(angle);
+    drawCircle(ctx, ex, ey, stroke / 2, color);
+  }
+
+  // 5. Center text — value
+  const valueText = value == null ? "—" : formatNumber(value);
+  const valueFontSize = valueText.length >= 5 ? 38 : valueText.length === 4 ? 46 : 56;
+  ctx.setFont(Font.boldSystemFont(valueFontSize));
+  ctx.setTextColor(COLORS.textPrimary);
+  ctx.setTextAlignedCenter();
+  const valueRect = new Rect(
+    0,
+    cy - valueFontSize * 0.6,
+    pixelSize,
+    valueFontSize * 1.2
+  );
+  ctx.drawTextInRect(valueText, valueRect);
+
+  // 6. Optional unit label below value
+  if (unit) {
+    ctx.setFont(Font.semiboldSystemFont(16));
+    ctx.setTextColor(COLORS.textMuted);
+    ctx.setTextAlignedCenter();
+    ctx.drawTextInRect(
+      unit,
+      new Rect(0, cy + valueFontSize * 0.55, pixelSize, 22)
+    );
   }
 
   return ctx.getImage();
 }
 
-// ─── Widget render ────────────────────────────────────────────────────────────
+/**
+ * Draw a "pie slice" arc from startFrac to endFrac (0..1, clockwise from 12 o'clock).
+ * Filled, not stroked. Combine with a smaller cover circle to get a ring.
+ */
+function drawArc(ctx, cx, cy, radius, startFrac, endFrac, color) {
+  const startAngle = -Math.PI / 2 + startFrac * 2 * Math.PI;
+  const endAngle = -Math.PI / 2 + endFrac * 2 * Math.PI;
+  const sweep = endAngle - startAngle;
+  const steps = Math.max(24, Math.ceil(Math.abs(endFrac - startFrac) * 180));
 
-function buildWidget(data) {
+  const path = new Path();
+  path.move(new Point(cx, cy));
+  for (let i = 0; i <= steps; i++) {
+    const a = startAngle + sweep * (i / steps);
+    path.addLine(new Point(cx + radius * Math.cos(a), cy + radius * Math.sin(a)));
+  }
+  path.addLine(new Point(cx, cy));
+
+  ctx.addPath(path);
+  ctx.setFillColor(color);
+  ctx.fillPath();
+}
+
+function drawCircle(ctx, cx, cy, radius, color) {
+  const path = new Path();
+  path.addEllipse(new Rect(cx - radius, cy - radius, radius * 2, radius * 2));
+  ctx.addPath(path);
+  ctx.setFillColor(color);
+  ctx.fillPath();
+}
+
+function rgbHex({ r, g, b }) {
+  const h = (n) => n.toString(16).padStart(2, "0");
+  return `#${h(r)}${h(g)}${h(b)}`;
+}
+
+// ─── Stat tile (ring + label) ─────────────────────────────────────────────────
+
+function addStatTile(parent, { ring, label, color, displaySize }) {
+  const tile = parent.addStack();
+  tile.layoutVertically();
+  tile.centerAlignContent();
+  tile.spacing = 6;
+
+  const imgRow = tile.addStack();
+  imgRow.addSpacer();
+  const img = imgRow.addImage(ring);
+  img.imageSize = new Size(displaySize, displaySize);
+  img.resizable = true;
+  imgRow.addSpacer();
+
+  const labelRow = tile.addStack();
+  labelRow.addSpacer();
+  const labelText = labelRow.addText(label);
+  labelText.font = Font.semiboldSystemFont(10);
+  labelText.textColor = color;
+  labelText.textOpacity = 0.85;
+  labelRow.addSpacer();
+}
+
+// ─── Medium widget ────────────────────────────────────────────────────────────
+
+function buildMediumWidget(data) {
   const widget = new ListWidget();
   widget.backgroundColor = COLORS.bg;
-  widget.setPadding(14, 14, 14, 14);
-
-  // Tap behaviour:
-  //   - If OPEN_URL_ON_TAP is set, open that URL in Safari.
-  //   - Otherwise, re-run this same script via the Scriptable URL scheme.
-  //     The ?refresh=1 query tells the script (see main()) to skip the
-  //     in-app preview, run fast, and let iOS repaint the widget with
-  //     the freshly-fetched data.
+  widget.setPadding(14, 16, 14, 16);
   widget.url = OPEN_URL_ON_TAP
     || `scriptable:///run/${encodeURIComponent(Script.name())}?refresh=1`;
 
-  // ── Header: "DASHKI" + today's date ───────────────────────────────────────
+  // ── Header ────────────────────────────────────────────────────────────────
   const header = widget.addStack();
   header.centerAlignContent();
 
   const title = header.addText("DASHKI");
   title.font = Font.boldSystemFont(11);
   title.textColor = COLORS.textPrimary;
-  title.textOpacity = 0.5;
+  title.textOpacity = 0.55;
 
   header.addSpacer();
 
   const date = header.addText(formatDate(data.fetchedAt));
   date.font = Font.semiboldSystemFont(10);
-  date.textColor = COLORS.textMuted;
+  date.textColor = COLORS.textDim;
 
-  widget.addSpacer(10);
+  widget.addSpacer();
 
-  // ── 2x2 grid of stat tiles ─────────────────────────────────────────────────
-  const grid = widget.addStack();
-  grid.layoutVertically();
-  grid.spacing = 12;
+  // ── Three rings ───────────────────────────────────────────────────────────
+  const RING_SIZE = 92;
+  const row = widget.addStack();
+  row.centerAlignContent();
+  row.spacing = 0;
 
-  const row1 = grid.addStack();
-  row1.spacing = 14;
-  addStatTile(row1, {
+  row.addSpacer();
+  addStatTile(row, {
+    ring: drawRing({
+      value: data.calories,
+      goal: data.goals.calories,
+      color: COLORS.amber,
+      unit: "kcal",
+    }),
     label: "CALORIES",
-    value: data.calories,
-    goal: data.goals.calories,
     color: COLORS.amber,
-    symbolName: "flame.fill",
+    displaySize: RING_SIZE,
   });
-  row1.addSpacer();
-  addStatTile(row1, {
+  row.addSpacer();
+  addStatTile(row, {
+    ring: drawRing({
+      value: data.protein,
+      goal: data.goals.protein,
+      color: COLORS.emerald,
+      unit: "g",
+    }),
     label: "PROTEIN",
-    value: data.protein,
-    unit: "g",
-    goal: data.goals.protein,
     color: COLORS.emerald,
-    symbolName: "leaf.fill",
+    displaySize: RING_SIZE,
   });
-
-  const row2 = grid.addStack();
-  row2.spacing = 14;
-  addStatTile(row2, {
+  row.addSpacer();
+  addStatTile(row, {
+    ring: drawRing({
+      value: data.steps,
+      goal: data.goals.steps,
+      color: COLORS.sky,
+      unit: "steps",
+    }),
     label: "STEPS",
-    value: data.steps,
-    goal: data.goals.steps,
     color: COLORS.sky,
-    symbolName: "figure.walk",
+    displaySize: RING_SIZE,
   });
-  row2.addSpacer();
-  addStatTile(row2, {
-    label: data.weightDate ? `WEIGHT · ${shortDate(data.weightDate)}` : "WEIGHT",
-    value: data.weight != null ? data.weight.toFixed(1) : null,
-    unit: "kg",
-    color: COLORS.purple,
-    symbolName: "scalemass.fill",
-  });
+  row.addSpacer();
 
-  // ── Footer / error indicator ───────────────────────────────────────────────
+  widget.addSpacer();
+
+  // ── Footer error indicator ────────────────────────────────────────────────
   if (data.anyFetchFailed) {
-    widget.addSpacer(6);
     const err = widget.addText("Some data unavailable — tap to retry");
     err.font = Font.systemFont(9);
     err.textColor = COLORS.textDim;
@@ -327,102 +350,98 @@ function buildWidget(data) {
   return widget;
 }
 
-function shortDate(isoDate) {
-  // "2026-04-20" → "20 Apr"
-  try {
-    const [y, m, d] = isoDate.split("-").map(Number);
-    const dt = new Date(y, m - 1, d);
-    return dt.toLocaleDateString("en-AU", { day: "numeric", month: "short" });
-  } catch {
-    return isoDate;
-  }
-}
-
-// ─── Small-widget fallback (compact 2-stat layout) ────────────────────────────
+// ─── Small widget — single hero ring (calories) + protein/steps below ────────
 
 function buildSmallWidget(data) {
   const widget = new ListWidget();
   widget.backgroundColor = COLORS.bg;
   widget.setPadding(12, 12, 12, 12);
-
   widget.url = OPEN_URL_ON_TAP
     || `scriptable:///run/${encodeURIComponent(Script.name())}?refresh=1`;
 
-  const title = widget.addText("DASHKI");
+  // Header
+  const header = widget.addStack();
+  header.centerAlignContent();
+  const title = header.addText("DASHKI");
   title.font = Font.boldSystemFont(10);
   title.textColor = COLORS.textPrimary;
-  title.textOpacity = 0.5;
+  title.textOpacity = 0.55;
+  header.addSpacer();
+  const date = header.addText(formatDate(data.fetchedAt));
+  date.font = Font.semiboldSystemFont(8);
+  date.textColor = COLORS.textDim;
 
-  widget.addSpacer(8);
+  widget.addSpacer(6);
 
-  // Two rows of stats, no progress bars (too cramped at 169pt)
-  const stack = widget.addStack();
-  stack.layoutVertically();
-  stack.spacing = 8;
+  // Body — two-column layout: hero calories ring on left, protein+steps mini rings on right
+  const body = widget.addStack();
+  body.centerAlignContent();
+  body.spacing = 8;
 
-  addCompactRow(stack, "flame.fill", COLORS.amber,
-    data.calories != null ? `${formatNumber(data.calories)} kcal` : "—");
-  addCompactRow(stack, "leaf.fill", COLORS.emerald,
-    data.protein != null ? `${formatNumber(data.protein)} g` : "—");
-  addCompactRow(stack, "figure.walk", COLORS.sky,
-    data.steps != null ? `${formatNumber(data.steps)}` : "—");
-  addCompactRow(stack, "scalemass.fill", COLORS.purple,
-    data.weight != null ? `${data.weight.toFixed(1)} kg` : "—");
+  // Hero: calories ring (left)
+  const heroImg = body.addImage(drawRing({
+    value: data.calories,
+    goal: data.goals.calories,
+    color: COLORS.amber,
+    unit: "kcal",
+    pixelSize: 200,
+    stroke: 22,
+  }));
+  heroImg.imageSize = new Size(80, 80);
+  heroImg.resizable = true;
+
+  // Right column: small protein + steps rings stacked
+  const right = body.addStack();
+  right.layoutVertically();
+  right.spacing = 4;
+
+  const proteinImg = right.addImage(drawRing({
+    value: data.protein,
+    goal: data.goals.protein,
+    color: COLORS.emerald,
+    unit: "g",
+    pixelSize: 160,
+    stroke: 18,
+  }));
+  proteinImg.imageSize = new Size(48, 48);
+  proteinImg.resizable = true;
+
+  const stepsImg = right.addImage(drawRing({
+    value: data.steps,
+    goal: data.goals.steps,
+    color: COLORS.sky,
+    pixelSize: 160,
+    stroke: 18,
+  }));
+  stepsImg.imageSize = new Size(48, 48);
+  stepsImg.resizable = true;
 
   return widget;
-}
-
-function addCompactRow(parent, symbolName, color, value) {
-  const row = parent.addStack();
-  row.centerAlignContent();
-  row.spacing = 6;
-
-  const icon = SFSymbol.named(symbolName);
-  if (icon) {
-    const img = row.addImage(icon.image);
-    img.imageSize = new Size(13, 13);
-    img.tintColor = color;
-  }
-  const text = row.addText(value);
-  text.font = Font.semiboldSystemFont(13);
-  text.textColor = COLORS.textPrimary;
-  text.lineLimit = 1;
-  text.minimumScaleFactor = 0.7;
 }
 
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
 async function main() {
   const data = await loadDashboard();
-  const family = config.widgetFamily; // "small" | "medium" | "large" | undefined when run in-app
+  const family = config.widgetFamily;
 
   let widget;
   if (family === "small") {
     widget = buildSmallWidget(data);
   } else {
-    // Medium/large/in-app preview all use the spacious layout.
-    widget = buildWidget(data);
+    widget = buildMediumWidget(data);
   }
 
-  // Refresh hint to iOS. iOS often ignores this and uses its own 15-30 min
-  // cadence, but a short hint maximises the chance of being honoured.
   widget.refreshAfterDate = new Date(Date.now() + REFRESH_HINT_SECONDS * 1000);
 
-  // Was this run launched from a tap on the widget (?refresh=1)?
-  // Or from a Shortcut / Action Button? In either case, skip the in-app
-  // preview and exit immediately so the user is dropped back on the home
-  // screen. iOS will repaint the widget with the freshly-fetched data
-  // shortly after Scriptable returns.
   const launchedForRefresh = args.queryParameters
     && args.queryParameters.refresh === "1";
 
   if (config.runsInWidget) {
     Script.setWidget(widget);
   } else if (launchedForRefresh) {
-    // Update the widget snapshot but DON'T present a preview.
     Script.setWidget(widget);
   } else {
-    // Manual "Run" button inside the Scriptable app — show a preview.
     await widget.presentMedium();
   }
   Script.complete();
