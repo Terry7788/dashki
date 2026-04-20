@@ -230,7 +230,7 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
             <GlassInput
               label="Calories (per 100g) *"
               type="number"
-              inputMode="numeric"
+              inputMode="decimal"
               value={form.calories_per_100g}
               onChange={(e) => set('calories_per_100g', e.target.value)}
               min={0}
@@ -254,7 +254,7 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
             <GlassInput
               label="Protein (per 100g)"
               type="number"
-              inputMode="numeric"
+              inputMode="decimal"
               value={form.protein_per_100g}
               onChange={(e) => set('protein_per_100g', e.target.value)}
               min={0}
@@ -278,7 +278,7 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
             <GlassInput
               label="Carbs (per 100g)"
               type="number"
-              inputMode="numeric"
+              inputMode="decimal"
               value={form.carbs_per_100g}
               onChange={(e) => set('carbs_per_100g', e.target.value)}
               min={0}
@@ -299,7 +299,7 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
             <GlassInput
               label="Fat (per 100g)"
               type="number"
-              inputMode="numeric"
+              inputMode="decimal"
               value={form.fat_per_100g}
               onChange={(e) => set('fat_per_100g', e.target.value)}
               min={0}
@@ -322,7 +322,7 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
           <GlassInput
             label="Serving Size (g) — optional"
             type="number"
-            inputMode="numeric"
+            inputMode="decimal"
             value={form.serving_size_g}
             onChange={(e) => set('serving_size_g', e.target.value)}
             min={1}

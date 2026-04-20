@@ -352,12 +352,12 @@ export default function StepsPage() {
           <GlassInput
             label="Walking Time (minutes)"
             type="number"
-            inputMode="numeric"
+            inputMode="decimal"
             placeholder="Enter time in minutes"
             value={calc.time}
             onChange={(e) => setCalc((prev) => ({ ...prev, time: e.target.value }))}
             min={0}
-            step={1}
+            step={0.5}
           />
           <GlassInput
             label="Walking Speed (km/h)"
@@ -372,12 +372,12 @@ export default function StepsPage() {
           <GlassInput
             label="Height (cm)"
             type="number"
-            inputMode="numeric"
+            inputMode="decimal"
             placeholder="Enter height"
             value={calc.height}
             onChange={(e) => setCalc((prev) => ({ ...prev, height: e.target.value }))}
             min={0}
-            step={1}
+            step={0.5}
           />
         </div>
 

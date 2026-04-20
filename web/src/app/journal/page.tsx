@@ -492,7 +492,7 @@ function AddFoodModal({ isOpen, onClose, mealType, date, onAdded }: AddFoodModal
               <GlassInput
                 label="Calories (kcal)"
                 type="number"
-                inputMode="numeric"
+                inputMode="decimal"
                 placeholder="e.g. 350"
                 value={quickCalories}
                 onChange={(e) => setQuickCalories(e.target.value)}
@@ -708,7 +708,7 @@ function EditGoalsModal({ isOpen, onClose, goals, onSave }: EditGoalsModalProps)
         <GlassInput
           label="Calorie Goal (kcal)"
           type="number"
-          inputMode="numeric"
+          inputMode="decimal"
           value={calories}
           onChange={(e) => setCalories(e.target.value)}
           min={1}
@@ -717,7 +717,7 @@ function EditGoalsModal({ isOpen, onClose, goals, onSave }: EditGoalsModalProps)
         <GlassInput
           label="Protein Goal (g)"
           type="number"
-          inputMode="numeric"
+          inputMode="decimal"
           value={protein}
           onChange={(e) => setProtein(e.target.value)}
           min={1}
