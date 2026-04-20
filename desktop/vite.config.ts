@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import electron from 'vite-plugin-electron/simple';
 import { resolve } from 'path';
 
 const PROD_API_URL = 'https://dashki-production.up.railway.app';
@@ -18,7 +19,34 @@ const SHARED_DEPS = [
 ];
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    electron({
+      main: {
+        entry: 'electron/main.ts',
+        vite: {
+          build: {
+            outDir: 'dist-electron',
+            rollupOptions: {
+              external: ['electron', 'electron-window-state'],
+            },
+          },
+        },
+      },
+      preload: {
+        input: 'electron/preload.ts',
+        vite: {
+          build: {
+            outDir: 'dist-electron',
+            rollupOptions: {
+              external: ['electron'],
+            },
+          },
+        },
+      },
+      renderer: {},
+    }),
+  ],
   resolve: {
     alias: {
       '@': resolve(__dirname, '../web/src'),
