@@ -22,22 +22,36 @@ const SELECT_ENTRY_SQL = `
   FROM JournalEntries
 `;
 
-// ─── GET / — entries for a date ───────────────────────────────────────────────
+// ─── GET / — entries for a date or date range ────────────────────────────────
+// Supports:
+//   ?date=YYYY-MM-DD                              → single day
+//   ?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD      → inclusive range
+//   (no params)                                   → today
 
 router.get('/', (req: Request, res: Response) => {
-  const date = ((req.query.date as string) || todayStr()).trim();
+  const dateParam = (req.query.date as string | undefined)?.trim();
+  const startDate = (req.query.startDate as string | undefined)?.trim();
+  const endDate = (req.query.endDate as string | undefined)?.trim();
 
-  db.all(
-    `${SELECT_ENTRY_SQL} WHERE date = ? ORDER BY logged_at ASC`,
-    [date],
-    (err, rows) => {
-      if (err) {
-        console.error('[error] GET /api/journal', err);
-        return res.status(500).json({ error: 'Failed to fetch journal entries' });
-      }
-      res.json(rows || []);
+  let sql: string;
+  let params: string[];
+
+  if (startDate && endDate) {
+    sql = `${SELECT_ENTRY_SQL} WHERE date BETWEEN ? AND ? ORDER BY date ASC, logged_at ASC`;
+    params = [startDate, endDate];
+  } else {
+    const date = dateParam || todayStr();
+    sql = `${SELECT_ENTRY_SQL} WHERE date = ? ORDER BY logged_at ASC`;
+    params = [date];
+  }
+
+  db.all(sql, params, (err, rows) => {
+    if (err) {
+      console.error('[error] GET /api/journal', err);
+      return res.status(500).json({ error: 'Failed to fetch journal entries' });
     }
-  );
+    res.json(rows || []);
+  });
 });
 
 // ─── GET /today-summary ───────────────────────────────────────────────────────
