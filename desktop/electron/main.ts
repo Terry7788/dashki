@@ -1,5 +1,6 @@
 import { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage } from 'electron';
 import path from 'node:path';
+import fs from 'node:fs';
 // @ts-ignore — no type defs published
 import windowStateKeeper from 'electron-window-state';
 
@@ -22,6 +23,17 @@ app.on('second-instance', () => {
     mainWindow.focus();
   }
 });
+
+function bootstrapAutoLaunchOnFirstRun() {
+  const sentinelPath = path.join(app.getPath('userData'), 'bootstrapped.json');
+  if (fs.existsSync(sentinelPath)) return;
+
+  app.setLoginItemSettings({
+    openAtLogin: true,
+    args: ['--hidden'],
+  });
+  fs.writeFileSync(sentinelPath, JSON.stringify({ bootstrapped: true, ts: Date.now() }));
+}
 
 function createWindow() {
   const winState = windowStateKeeper({
@@ -109,7 +121,19 @@ function createTray() {
 ipcMain.on('window:minimize', () => mainWindow?.minimize());
 ipcMain.on('window:close', () => mainWindow?.hide());
 
+ipcMain.handle('autolaunch:get', () => {
+  return app.getLoginItemSettings().openAtLogin;
+});
+
+ipcMain.handle('autolaunch:set', (_event, enabled: boolean) => {
+  app.setLoginItemSettings({
+    openAtLogin: enabled,
+    args: enabled ? ['--hidden'] : [],
+  });
+});
+
 app.whenReady().then(() => {
+  bootstrapAutoLaunchOnFirstRun();
   createWindow();
   createTray();
 });
