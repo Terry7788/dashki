@@ -288,19 +288,42 @@ function makeCard(parent) {
   card.cornerRadius = 14;
   card.borderColor = COLORS.cardBorder;
   card.borderWidth = 1;
-  card.setPadding(10, 12, 10, 12);
+  card.setPadding(8, 10, 8, 10);
   return card;
 }
 
 // ─── Left card: Calories ring + Calorie/Protein bars ─────────────────────────
+//
+// Layout (explicit sizes to prevent overflow on small widget viewports):
+//
+//   ┌───────────────────────────────────────┐  ← LEFT_CARD_WIDTH = 195
+//   │ ╭──╮  Calories          655 / 2000    │
+//   │ │55│  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━   │
+//   │ ╰──╯  Protein            32 / 150g    │
+//   │       ━━━━━━━━━━━━━━━━━━━━━━━━━━━━   │
+//   └───────────────────────────────────────┘
+//
+// Sizing rationale (medium widget, ~338pt wide × ~158pt tall):
+//   widget padding = 10 each side → 318pt inner
+//   left card 195 + spacer 8 + right card 110 = 313pt → fits with slack
+//
+//   left card inner (after 10pt L+R card padding) = 175pt
+//     → ring 56 + spacing 8 + bars column 100 + slack 11 = 175 ✓
+//
+//   right card inner = 90pt → fits 76pt steps ring centered
+const LEFT_CARD_WIDTH = 195;
+const LEFT_CARD_HEIGHT = 92;
+const RING_SIZE_LEFT = 56;
+const BAR_DISPLAY_WIDTH = 100;
 
 function buildJournalCard(parent, data) {
   const card = makeCard(parent);
   card.layoutHorizontally();
   card.centerAlignContent();
-  card.spacing = 10;
+  card.spacing = 8;
+  card.size = new Size(LEFT_CARD_WIDTH, LEFT_CARD_HEIGHT);
 
-  // Calorie ring on the left (matches web ProgressRing 68px / stroke 6)
+  // Calorie ring on the left
   const ringImg = card.addImage(drawRing({
     value: data.calories,
     goal: data.goals.calories,
@@ -308,18 +331,16 @@ function buildJournalCard(parent, data) {
     centerValue: data.calories != null ? String(data.calories) : "—",
     centerCaption: "kcal",
     pixelSize: 220,
-    stroke: 18,
+    stroke: 20,
   }));
-  ringImg.imageSize = new Size(64, 64);
+  ringImg.imageSize = new Size(RING_SIZE_LEFT, RING_SIZE_LEFT);
   ringImg.resizable = true;
 
   // Right side: stacked Calories + Protein bars
   const stats = card.addStack();
   stats.layoutVertically();
-  stats.spacing = 8;
-  stats.size = new Size(0, 64); // align column to ring height
+  stats.spacing = 6;
 
-  // ── Calories row ────────────────────────────────────────────────────────
   addBarRow(stats, {
     label: "Calories",
     value: data.calories,
@@ -328,7 +349,6 @@ function buildJournalCard(parent, data) {
     color: COLORS.calories,
   });
 
-  // ── Protein row ────────────────────────────────────────────────────────
   addBarRow(stats, {
     label: "Protein",
     value: data.protein,
@@ -343,52 +363,50 @@ function addBarRow(parent, { label, value, goal, unit, color }) {
   row.layoutVertically();
   row.spacing = 2;
 
-  // "Calories      655 / 2000"
+  // Header: "Calories               655 / 2000"
   const top = row.addStack();
   top.bottomAlignContent();
+  top.size = new Size(BAR_DISPLAY_WIDTH, 0);
 
   const labelText = top.addText(label);
-  labelText.font = Font.systemFont(11);
+  labelText.font = Font.systemFont(10);
   labelText.textColor = COLORS.textMuted;
+  labelText.lineLimit = 1;
+  labelText.minimumScaleFactor = 0.7;
 
   top.addSpacer();
 
-  const valueRow = top.addStack();
-  valueRow.bottomAlignContent();
-  valueRow.spacing = 2;
-
-  const valueText = valueRow.addText(value == null ? "—" : formatNumber(value));
-  valueText.font = Font.boldSystemFont(11);
-  valueText.textColor = COLORS.textPrimary;
-
-  if (unit) {
-    const unitText = valueRow.addText(unit);
-    unitText.font = Font.boldSystemFont(11);
-    unitText.textColor = COLORS.textPrimary;
-  }
-
-  if (goal != null) {
-    const goalText = valueRow.addText(` / ${formatNumber(goal)}${unit}`);
-    goalText.font = Font.systemFont(11);
-    goalText.textColor = COLORS.textDim;
-  }
+  const valueText = top.addText(
+    value == null
+      ? "—"
+      : `${formatNumber(value)}${unit}${goal != null ? ` / ${formatNumber(goal)}${unit}` : ""}`
+  );
+  valueText.font = Font.systemFont(10);
+  valueText.textColor = COLORS.textMuted;
+  valueText.lineLimit = 1;
+  valueText.minimumScaleFactor = 0.6;
 
   // Bar
   const barImg = row.addImage(drawProgressBar({
     value, goal, color,
-    width: 320, height: 7,
+    width: 320, height: 8,
   }));
-  barImg.imageSize = new Size(160, 4);
+  barImg.imageSize = new Size(BAR_DISPLAY_WIDTH, 4);
   barImg.resizable = true;
 }
 
 // ─── Right card: Steps ring ──────────────────────────────────────────────────
 
+const RIGHT_CARD_WIDTH = 110;
+const RIGHT_CARD_HEIGHT = LEFT_CARD_HEIGHT; // match for visual balance
+const STEPS_RING_SIZE = 76;
+
 function buildStepsCard(parent, data) {
   const card = makeCard(parent);
   card.layoutVertically();
   card.centerAlignContent();
-  card.spacing = 4;
+  card.spacing = 2;
+  card.size = new Size(RIGHT_CARD_WIDTH, RIGHT_CARD_HEIGHT);
 
   // STEPS label at top
   const labelRow = card.addStack();
@@ -397,8 +415,6 @@ function buildStepsCard(parent, data) {
   label.font = Font.semiboldSystemFont(9);
   label.textColor = COLORS.textDim;
   labelRow.addSpacer();
-
-  card.addSpacer(2);
 
   // Big steps ring with value inside
   const ringRow = card.addStack();
@@ -412,7 +428,7 @@ function buildStepsCard(parent, data) {
     pixelSize: 240,
     stroke: 20,
   }));
-  ringImg.imageSize = new Size(86, 86);
+  ringImg.imageSize = new Size(STEPS_RING_SIZE, STEPS_RING_SIZE);
   ringImg.resizable = true;
   ringRow.addSpacer();
 }
@@ -422,7 +438,7 @@ function buildStepsCard(parent, data) {
 function buildMediumWidget(data) {
   const widget = new ListWidget();
   widget.backgroundColor = COLORS.bg;
-  widget.setPadding(12, 12, 12, 12);
+  widget.setPadding(10, 10, 10, 10);
   widget.url = OPEN_URL_ON_TAP
     || `scriptable:///run/${encodeURIComponent(Script.name())}?refresh=1`;
 
@@ -430,29 +446,31 @@ function buildMediumWidget(data) {
   const header = widget.addStack();
   header.centerAlignContent();
   const title = header.addText("DASHKI");
-  title.font = Font.boldSystemFont(11);
+  title.font = Font.boldSystemFont(10);
   title.textColor = COLORS.textPrimary;
   title.textOpacity = 0.55;
+  title.lineLimit = 1;
   header.addSpacer();
   const date = header.addText(formatDate(data.fetchedAt));
-  date.font = Font.semiboldSystemFont(10);
+  date.font = Font.semiboldSystemFont(9);
   date.textColor = COLORS.textDim;
+  date.lineLimit = 1;
 
-  widget.addSpacer(8);
+  widget.addSpacer(6);
 
-  // Body — two cards side by side
+  // Body — two cards side by side, sized explicitly to fit medium width.
+  // 195 (left) + 8 (spacing) + 110 (right) = 313pt, well within medium's
+  // ~318pt content area after 10pt padding.
   const body = widget.addStack();
   body.spacing = 8;
   body.layoutHorizontally();
   body.centerAlignContent();
 
-  // Left card takes ~60% — wider for the ring + 2 bars
   buildJournalCard(body, data);
-  // Right card takes the rest — steps
   buildStepsCard(body, data);
 
   if (data.anyFetchFailed) {
-    widget.addSpacer(4);
+    widget.addSpacer(2);
     const err = widget.addText("Some data unavailable — tap to retry");
     err.font = Font.systemFont(8);
     err.textColor = COLORS.textDim;
