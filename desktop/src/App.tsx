@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import clsx from 'clsx';
 import HomePage from '@/app/page';
 import JournalPage from '@/app/journal/page';
 import FoodsPage from '@/app/foods/page';
@@ -41,7 +42,14 @@ export default function App() {
     <div className="min-h-screen flex flex-col bg-black text-white">
       <TitleBar onOpenSettings={() => setSettingsOpen(true)} />
       <TopTabs active={activeTab} onChange={setActiveTab} />
-      <main className="flex-1 overflow-auto">
+      <main
+        className={clsx(
+          'flex-1 overflow-auto',
+          // Steps page already supplies its own px-4 md:px-6 py-8 wrapper.
+          // Other pages don't, so add matching padding here for consistency.
+          activeTab !== 'steps' && 'px-4 md:px-6 py-8'
+        )}
+      >
         {renderActivePage(activeTab)}
       </main>
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
