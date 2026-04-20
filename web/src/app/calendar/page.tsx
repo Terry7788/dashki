@@ -1,26 +1,13 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { GlassCard, GlassButton } from '@/components/ui';
+import { useState, useEffect, useMemo } from 'react';
+import { GlassCard } from '@/components/ui';
 import { getTodos, getJournalEntries, getWeightEntries } from '@/lib/api';
 import type { Todo, JournalEntry, WeightEntry } from '@/lib/types';
-import { ChevronLeft, ChevronRight, Calendar, CheckSquare, ExternalLink, Flame, Scale } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CheckSquare, Flame, Scale } from 'lucide-react';
 import clsx from 'clsx';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface CalendarEvent {
-  id: string;
-  summary: string;
-  start: { dateTime?: string; date?: string };
-  end: { dateTime?: string; date?: string };
-  htmlLink?: string;
-}
-
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-const BASE_URL =
-  (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000').replace(/\/$/, '');
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -75,14 +62,6 @@ function buildCalendarGrid(year: number, month: number) {
   return cells;
 }
 
-function formatEventTime(event: CalendarEvent): string {
-  const start = event.start.dateTime || event.start.date;
-  if (!start) return '';
-  if (event.start.date && !event.start.dateTime) return 'All day';
-  const d = new Date(start);
-  return d.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true });
-}
-
 // ─── Skeletons ────────────────────────────────────────────────────────────────
 
 function CalendarSkeleton() {
@@ -98,41 +77,6 @@ function CalendarSkeleton() {
   );
 }
 
-function PanelSkeleton() {
-  return (
-    <div className="space-y-3">
-      {[1, 2].map((i) => (
-        <div key={i} className="skeleton h-16 rounded-2xl" />
-      ))}
-    </div>
-  );
-}
-
-// ─── Google Calendar Setup Card ───────────────────────────────────────────────
-
-function GoogleCalendarSetup() {
-  return (
-    <GlassCard className="text-center">
-      <div className="flex flex-col items-center gap-3">
-        <span className="text-4xl">📅</span>
-        <h3 className="text-white font-semibold text-base">Connect Google Calendar</h3>
-        <p className="text-white/50 text-sm">
-          Link your Google Calendar to see events alongside your tasks.
-        </p>
-        <GlassButton
-          variant="primary"
-          onClick={() => (window.location.href = `${BASE_URL}/api/auth/google`)}
-        >
-          <span className="flex items-center gap-2">
-            <ExternalLink className="w-4 h-4" />
-            Connect Google Calendar
-          </span>
-        </GlassButton>
-      </div>
-    </GlassCard>
-  );
-}
-
 // ─── Day Cell ─────────────────────────────────────────────────────────────────
 
 function DayCell({
@@ -141,7 +85,6 @@ function DayCell({
   isToday,
   isSelected,
   hasTodo,
-  hasEvent,
   caloriesForCell,
   proteinForCell,
   onClick,
@@ -151,7 +94,6 @@ function DayCell({
   isToday: boolean;
   isSelected: boolean;
   hasTodo: boolean;
-  hasEvent: boolean;
   caloriesForCell: number | null;
   proteinForCell: number | null;
   onClick: () => void;
@@ -199,27 +141,17 @@ function DayCell({
         </div>
       )}
 
-      {/* Event/todo dots (only when no nutrition labels above) */}
-      {(hasTodo || hasEvent) && !hasNutrition && (
+      {/* Todo dot (only when no nutrition labels above) */}
+      {hasTodo && !hasNutrition && (
         <div className="flex gap-0.5 mt-0.5">
-          {hasTodo && (
-            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 opacity-80" />
-          )}
-          {hasEvent && (
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 opacity-80" />
-          )}
+          <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 opacity-80" />
         </div>
       )}
 
-      {/* When nutrition labels are present, show todo/event as small corner dots */}
-      {(hasTodo || hasEvent) && hasNutrition && (
-        <div className="absolute top-1 right-1 flex gap-0.5">
-          {hasTodo && (
-            <span className="w-1 h-1 rounded-full bg-indigo-400 opacity-80" />
-          )}
-          {hasEvent && (
-            <span className="w-1 h-1 rounded-full bg-emerald-400 opacity-80" />
-          )}
+      {/* When nutrition labels are present, show todo as small corner dot */}
+      {hasTodo && hasNutrition && (
+        <div className="absolute top-1 right-1">
+          <span className="w-1 h-1 rounded-full bg-indigo-400 opacity-80 inline-block" />
         </div>
       )}
     </button>
@@ -231,18 +163,12 @@ function DayCell({
 function SidePanel({
   selectedDay,
   todos,
-  events,
-  eventsLoading,
-  googleConfigured,
   caloriesForDay,
   proteinForDay,
   weightForDay,
 }: {
   selectedDay: Date;
   todos: Todo[];
-  events: CalendarEvent[];
-  eventsLoading: boolean;
-  googleConfigured: boolean | null;
   caloriesForDay: number | null;
   proteinForDay: number | null;
   weightForDay: number | null;
@@ -343,33 +269,6 @@ function SidePanel({
         )}
       </div>
 
-      {/* Google Calendar Events */}
-      <div>
-        <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-          <Calendar className="w-3.5 h-3.5" /> Calendar events
-        </h3>
-
-        {googleConfigured === null || eventsLoading ? (
-          <PanelSkeleton />
-        ) : !googleConfigured ? (
-          <GoogleCalendarSetup />
-        ) : events.length === 0 ? (
-          <p className="text-white/30 text-sm">No events this day.</p>
-        ) : (
-          <div className="space-y-2">
-            {events.map((event) => (
-              <GlassCard key={event.id} padding={false} className="px-3 py-2.5">
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-sm text-white font-medium line-clamp-1">
-                    {event.summary}
-                  </span>
-                  <span className="text-xs text-white/40">{formatEventTime(event)}</span>
-                </div>
-              </GlassCard>
-            ))}
-          </div>
-        )}
-      </div>
     </div>
   );
 }
@@ -386,10 +285,6 @@ export default function CalendarPage() {
   const [selectedDay, setSelectedDay] = useState(today);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [todosLoading, setTodosLoading] = useState(true);
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [eventsLoading, setEventsLoading] = useState(true);
-  // null = unknown (loading), true = configured, false = not configured
-  const [googleConfigured, setGoogleConfigured] = useState<boolean | null>(null);
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
   const [weightEntries, setWeightEntries] = useState<WeightEntry[]>([]);
 
@@ -448,46 +343,6 @@ export default function CalendarPage() {
     sorted.forEach((w) => map.set(w.date, w.weight_kg));
     return map;
   }, [weightEntries]);
-
-  // ── Fetch calendar events for selected day ────────────────────────────────
-
-  const fetchEvents = useCallback(async (date: Date) => {
-    setEventsLoading(true);
-    const dateStr = toLocalDateStr(date);
-    try {
-      const res = await fetch(`${BASE_URL}/api/calendar/events?date=${dateStr}`);
-      if (res.status === 501 || res.status === 404) {
-        const body = await res.json().catch(() => ({}));
-        if (body.setup) {
-          setGoogleConfigured(false);
-          setEvents([]);
-          return;
-        }
-        // 404 with no setup flag = not configured either
-        setGoogleConfigured(false);
-        setEvents([]);
-        return;
-      }
-      if (!res.ok) {
-        // Treat other errors as not configured gracefully
-        setGoogleConfigured(false);
-        setEvents([]);
-        return;
-      }
-      const data = await res.json();
-      setGoogleConfigured(true);
-      setEvents(Array.isArray(data) ? data : data.events || []);
-    } catch {
-      setGoogleConfigured(false);
-      setEvents([]);
-    } finally {
-      setEventsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchEvents(selectedDay);
-  }, [selectedDay, fetchEvents]);
 
   // ── Calendar grid ─────────────────────────────────────────────────────────
 
@@ -571,7 +426,6 @@ export default function CalendarPage() {
                           isToday={isSameDay(date, today)}
                           isSelected={isSameDay(date, selectedDay)}
                           hasTodo={todoDateSet.has(dateStr)}
-                          hasEvent={false} /* We don't bulk-fetch events per cell */
                           caloriesForCell={caloriesByDate.get(dateStr) ?? null}
                           proteinForCell={proteinByDate.get(dateStr) ?? null}
                           onClick={() => setSelectedDay(new Date(date))}
@@ -610,9 +464,6 @@ export default function CalendarPage() {
               <SidePanel
                 selectedDay={selectedDay}
                 todos={todos}
-                events={events}
-                eventsLoading={eventsLoading}
-                googleConfigured={googleConfigured}
                 caloriesForDay={caloriesByDate.get(toLocalDateStr(selectedDay)) ?? null}
                 proteinForDay={proteinByDate.get(toLocalDateStr(selectedDay)) ?? null}
                 weightForDay={weightByDate.get(toLocalDateStr(selectedDay)) ?? null}
