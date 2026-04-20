@@ -443,15 +443,16 @@ function buildMediumWidget(data) {
 
   widget.addSpacer(6);
 
-  // Body — two cards side by side, sized explicitly to fit medium width.
-  // 195 (left) + 8 (spacing) + 110 (right) = 313pt, well within medium's
-  // ~318pt content area after 10pt padding.
+  // Body — two cards side by side. The flexible spacer between them absorbs
+  // any width difference between phone models (medium widget is wider on
+  // Plus/Pro Max than on standard iPhones), so the cards always sit at the
+  // outer edges and the gap grows or shrinks to fit.
   const body = widget.addStack();
-  body.spacing = 8;
   body.layoutHorizontally();
   body.centerAlignContent();
 
   buildJournalCard(body, data);
+  body.addSpacer();
   buildStepsCard(body, data);
 
   if (data.anyFetchFailed) {
