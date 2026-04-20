@@ -118,14 +118,6 @@ function formatNumber(n) {
   return n.toLocaleString("en-US");
 }
 
-function formatDate(d) {
-  return d.toLocaleDateString("en-AU", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-  }).toUpperCase();
-}
-
 function pct(value, goal) {
   if (value == null || !goal) return 0;
   return Math.max(0, Math.min(1, value / goal));
@@ -443,18 +435,11 @@ function buildMediumWidget(data) {
     || `scriptable:///run/${encodeURIComponent(Script.name())}?refresh=1`;
 
   // Header
-  const header = widget.addStack();
-  header.centerAlignContent();
-  const title = header.addText("DASHKI");
+  const title = widget.addText("DASHKI");
   title.font = Font.boldSystemFont(10);
   title.textColor = COLORS.textPrimary;
   title.textOpacity = 0.55;
   title.lineLimit = 1;
-  header.addSpacer();
-  const date = header.addText(formatDate(data.fetchedAt));
-  date.font = Font.semiboldSystemFont(9);
-  date.textColor = COLORS.textDim;
-  date.lineLimit = 1;
 
   widget.addSpacer(6);
 
@@ -489,16 +474,11 @@ function buildSmallWidget(data) {
   widget.url = OPEN_URL_ON_TAP
     || `scriptable:///run/${encodeURIComponent(Script.name())}?refresh=1`;
 
-  const header = widget.addStack();
-  header.centerAlignContent();
-  const title = header.addText("DASHKI");
+  const title = widget.addText("DASHKI");
   title.font = Font.boldSystemFont(10);
   title.textColor = COLORS.textPrimary;
   title.textOpacity = 0.55;
-  header.addSpacer();
-  const date = header.addText(formatDate(data.fetchedAt));
-  date.font = Font.semiboldSystemFont(8);
-  date.textColor = COLORS.textDim;
+  title.lineLimit = 1;
 
   widget.addSpacer(6);
 
