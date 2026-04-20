@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { GlassCard } from '@/components/ui';
-import { getTodos, getJournalEntries, getWeightEntries } from '@/lib/api';
-import type { Todo, JournalEntry, WeightEntry } from '@/lib/types';
-import { ChevronLeft, ChevronRight, CheckSquare, Flame, Scale } from 'lucide-react';
+import { getTodos, getJournalEntries, getWeightEntries, getSteps } from '@/lib/api';
+import type { Todo, JournalEntry, WeightEntry, StepEntry } from '@/lib/types';
+import { ChevronLeft, ChevronRight, CheckSquare, Flame, Scale, Footprints } from 'lucide-react';
 import clsx from 'clsx';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -87,6 +87,7 @@ function DayCell({
   hasTodo,
   caloriesForCell,
   proteinForCell,
+  stepsForCell,
   onClick,
 }: {
   date: Date;
@@ -96,16 +97,18 @@ function DayCell({
   hasTodo: boolean;
   caloriesForCell: number | null;
   proteinForCell: number | null;
+  stepsForCell: number | null;
   onClick: () => void;
 }) {
-  const hasNutrition = caloriesForCell !== null || proteinForCell !== null;
+  const hasData =
+    caloriesForCell !== null || proteinForCell !== null || stepsForCell !== null;
 
   return (
     <button
       type="button"
       onClick={onClick}
       className={clsx(
-        'relative flex flex-col items-center justify-start pt-1.5 pb-1.5 px-1 rounded-xl transition-all duration-200 min-h-[64px]',
+        'relative flex flex-col items-center justify-start pt-1.5 pb-1.5 px-1 rounded-xl transition-all duration-200 min-h-[78px]',
         'text-sm font-medium select-none',
         isSelected
           ? 'bg-indigo-500/30 border border-indigo-400/60 text-white'
@@ -125,8 +128,8 @@ function DayCell({
         {date.getDate()}
       </span>
 
-      {/* Nutrition labels — calories on top, protein below */}
-      {hasNutrition && isCurrentMonth && (
+      {/* Health labels — calories, protein, steps */}
+      {hasData && isCurrentMonth && (
         <div className="flex flex-col items-center mt-0.5 leading-tight">
           {caloriesForCell !== null && (
             <span className="text-[10px] font-semibold text-amber-400/90">
@@ -138,18 +141,23 @@ function DayCell({
               {Math.round(proteinForCell)}<span className="text-emerald-400/50 font-normal">g</span>
             </span>
           )}
+          {stepsForCell !== null && (
+            <span className="text-[10px] font-semibold text-sky-400/90">
+              {stepsForCell.toLocaleString()}<span className="text-sky-400/50 font-normal"> steps</span>
+            </span>
+          )}
         </div>
       )}
 
-      {/* Todo dot (only when no nutrition labels above) */}
-      {hasTodo && !hasNutrition && (
+      {/* Todo dot (only when no health labels above) */}
+      {hasTodo && !hasData && (
         <div className="flex gap-0.5 mt-0.5">
           <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 opacity-80" />
         </div>
       )}
 
-      {/* When nutrition labels are present, show todo as small corner dot */}
-      {hasTodo && hasNutrition && (
+      {/* When health labels are present, show todo as small corner dot */}
+      {hasTodo && hasData && (
         <div className="absolute top-1 right-1">
           <span className="w-1 h-1 rounded-full bg-indigo-400 opacity-80 inline-block" />
         </div>
@@ -166,12 +174,14 @@ function SidePanel({
   caloriesForDay,
   proteinForDay,
   weightForDay,
+  stepsForDay,
 }: {
   selectedDay: Date;
   todos: Todo[];
   caloriesForDay: number | null;
   proteinForDay: number | null;
   weightForDay: number | null;
+  stepsForDay: number | null;
 }) {
   const dayLabel = selectedDay.toLocaleDateString('en-AU', {
     weekday: 'long',
@@ -187,12 +197,12 @@ function SidePanel({
       <h2 className="text-lg font-semibold text-white">{dayLabel}</h2>
 
       {/* Health summary for this day */}
-      {(caloriesForDay !== null || proteinForDay !== null || weightForDay !== null) && (
+      {(caloriesForDay !== null || proteinForDay !== null || weightForDay !== null || stepsForDay !== null) && (
         <div>
           <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-2 flex items-center gap-1.5">
             <Flame className="w-3.5 h-3.5" /> Health
           </h3>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {caloriesForDay !== null && (
               <GlassCard padding={false} className="px-2 py-2.5">
                 <div className="flex flex-col items-center leading-tight">
@@ -219,10 +229,23 @@ function SidePanel({
                 </div>
               </GlassCard>
             )}
+            {stepsForDay !== null && (
+              <GlassCard padding={false} className="px-2 py-2.5">
+                <div className="flex flex-col items-center leading-tight">
+                  <Footprints className="w-4 h-4 text-sky-400 mb-1" />
+                  <span className="text-sm text-white font-semibold">
+                    {stepsForDay.toLocaleString()}
+                  </span>
+                  <span className="text-[10px] uppercase tracking-wider text-white/40">
+                    steps
+                  </span>
+                </div>
+              </GlassCard>
+            )}
             {weightForDay !== null && (
               <GlassCard padding={false} className="px-2 py-2.5">
                 <div className="flex flex-col items-center leading-tight">
-                  <Scale className="w-4 h-4 text-sky-400 mb-1" />
+                  <Scale className="w-4 h-4 text-purple-400 mb-1" />
                   <span className="text-sm text-white font-semibold">
                     {weightForDay.toFixed(1)}
                   </span>
@@ -287,6 +310,7 @@ export default function CalendarPage() {
   const [todosLoading, setTodosLoading] = useState(true);
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
   const [weightEntries, setWeightEntries] = useState<WeightEntry[]>([]);
+  const [stepEntries, setStepEntries] = useState<StepEntry[]>([]);
 
   const year = currentMonth.getFullYear();
   const month = currentMonth.getMonth();
@@ -301,7 +325,7 @@ export default function CalendarPage() {
       .finally(() => setTodosLoading(false));
   }, []);
 
-  // ── Fetch journal entries for the visible month ───────────────────────────
+  // ── Fetch journal entries + steps for the visible month ───────────────────
 
   useEffect(() => {
     const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`;
@@ -309,6 +333,9 @@ export default function CalendarPage() {
     const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
     getJournalEntries({ startDate, endDate })
       .then(setJournalEntries)
+      .catch(console.error);
+    getSteps({ startDate, endDate })
+      .then(setStepEntries)
       .catch(console.error);
   }, [year, month]);
 
@@ -343,6 +370,12 @@ export default function CalendarPage() {
     sorted.forEach((w) => map.set(w.date, w.weight_kg));
     return map;
   }, [weightEntries]);
+
+  const stepsByDate = useMemo(() => {
+    const map = new Map<string, number>();
+    stepEntries.forEach((s) => map.set(s.date, s.steps));
+    return map;
+  }, [stepEntries]);
 
   // ── Calendar grid ─────────────────────────────────────────────────────────
 
@@ -428,6 +461,7 @@ export default function CalendarPage() {
                           hasTodo={todoDateSet.has(dateStr)}
                           caloriesForCell={caloriesByDate.get(dateStr) ?? null}
                           proteinForCell={proteinByDate.get(dateStr) ?? null}
+                          stepsForCell={stepsByDate.get(dateStr) ?? null}
                           onClick={() => setSelectedDay(new Date(date))}
                         />
                       );
@@ -443,6 +477,9 @@ export default function CalendarPage() {
                     <div className="flex items-center gap-1.5 text-xs text-white/40">
                       <span className="text-emerald-400 font-semibold">g</span>
                       Protein
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs text-white/40">
+                      <span className="text-sky-400 font-semibold">steps</span>
                     </div>
                     <div className="flex items-center gap-1.5 text-xs text-white/40">
                       <span className="w-2 h-2 rounded-full bg-indigo-400" />
@@ -467,6 +504,7 @@ export default function CalendarPage() {
                 caloriesForDay={caloriesByDate.get(toLocalDateStr(selectedDay)) ?? null}
                 proteinForDay={proteinByDate.get(toLocalDateStr(selectedDay)) ?? null}
                 weightForDay={weightByDate.get(toLocalDateStr(selectedDay)) ?? null}
+                stepsForDay={stepsByDate.get(toLocalDateStr(selectedDay)) ?? null}
               />
             </GlassCard>
           </div>
