@@ -1,0 +1,30 @@
+appId: com.terry.dashki-desktop
+productName: Dashki Desktop
+copyright: Copyright © 2026 Terry Truong
+
+directories:
+  output: release
+  buildResources: electron/assets
+
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - electron/assets/**/*
+  - package.json
+
+asar: true
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: electron/assets/app-icon.ico
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Dashki Desktop
