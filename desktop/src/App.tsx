@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import JournalPage from '@/app/journal/page';
 import FoodsPage from '@/app/foods/page';
 import TopTabs, { type TabId } from './TopTabs';
+import TitleBar from './TitleBar';
 
 const STORAGE_KEY = 'dashki-desktop:active-tab';
 
@@ -20,6 +21,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-black text-white">
+      <TitleBar />
       <TopTabs active={activeTab} onChange={setActiveTab} />
       <main className="flex-1 overflow-auto">
         {activeTab === 'journal' ? <JournalPage /> : <FoodsPage />}

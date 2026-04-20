@@ -1,2 +1,8 @@
-// Preload script. Currently empty; extended in Task 7 with auto-launch IPC.
+import { contextBridge, ipcRenderer } from 'electron';
+
+contextBridge.exposeInMainWorld('electronAPI', {
+  windowMinimize: () => ipcRenderer.send('window:minimize'),
+  windowClose: () => ipcRenderer.send('window:close'),
+});
+
 export {};
