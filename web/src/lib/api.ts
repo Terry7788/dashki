@@ -431,12 +431,19 @@ export function updateGoals(data: {
 
 // ─── Preferences ─────────────────────────────────────────────────────────────
 
-export function getPreferences(): Promise<{ theme: 'dark' | 'light' }> {
-  return request<{ theme: 'dark' | 'light' }>('/api/preferences');
+export interface Preferences {
+  theme: 'dark' | 'light';
+  display_name: string | null;
 }
 
-export function updatePreferences(data: { theme: 'dark' | 'light' }): Promise<{ theme: 'dark' | 'light' }> {
-  return request<{ theme: 'dark' | 'light' }>('/api/preferences', {
+export function getPreferences(): Promise<Preferences> {
+  return request<Preferences>('/api/preferences');
+}
+
+export function updatePreferences(
+  data: Partial<{ theme: 'dark' | 'light'; display_name: string | null }>
+): Promise<Preferences> {
+  return request<Preferences>('/api/preferences', {
     method: 'PUT',
     body: JSON.stringify(data),
   });

@@ -294,6 +294,18 @@ export function initDb(): Promise<void> {
         }
       });
 
+      // ── Migration: add display_name to UserPreferences ─────────────────────
+      db.all(`PRAGMA table_info(UserPreferences)`, [], (pragmaErr, columns: Array<{ name: string }>) => {
+        if (pragmaErr) return;
+        const existingCols = new Set(columns.map((c) => c.name));
+        if (!existingCols.has('display_name')) {
+          db.run(`ALTER TABLE UserPreferences ADD COLUMN display_name TEXT`, [], (err) => {
+            if (err) console.error('[db] migration error (UserPreferences.display_name):', err.message);
+            else console.log('[db] ran migration: ALTER TABLE UserPreferences ADD COLUMN display_name');
+          });
+        }
+      });
+
       // ── Sentinel to confirm serialization completed ────────────────────────
       db.run('SELECT 1', (err) => {
         if (err) reject(err);
