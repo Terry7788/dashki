@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { Scale, Footprints, Flame, Dumbbell, Plus, Check, Settings as SettingsIcon } from 'lucide-react';
+import { Scale, Footprints, Flame, Dumbbell, Plus, Check } from 'lucide-react';
 import GlassCard from '@/components/ui/GlassCard';
 import GlassButton from '@/components/ui/GlassButton';
 import GlassModal from '@/components/ui/GlassModal';
@@ -401,22 +401,8 @@ export default function DashboardPage() {
         <h1 className="text-3xl font-bold text-white">
           {displayName ? `${getGreeting()}, ${displayName} 👋` : `${getGreeting()} 👋`}
         </h1>
-        <p className="text-white/50 mt-1 text-sm flex items-center gap-2 flex-wrap">
-          <span>
-            {new Date().toLocaleDateString('en-AU', { weekday: 'long', month: 'long', day: 'numeric' })}
-          </span>
-          {!displayName && (
-            <>
-              <span className="text-white/20">·</span>
-              <Link
-                href="/settings"
-                className="inline-flex items-center gap-1 text-indigo-300 hover:text-indigo-200 transition-colors"
-              >
-                <SettingsIcon className="w-3.5 h-3.5" />
-                Set your name
-              </Link>
-            </>
-          )}
+        <p className="text-white/50 mt-1 text-sm">
+          {new Date().toLocaleDateString('en-AU', { weekday: 'long', month: 'long', day: 'numeric' })}
         </p>
       </div>
 

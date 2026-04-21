@@ -2,13 +2,18 @@
 // Dashki Widget — iOS Scriptable
 // ─────────────────────────────────────────────────────────────────────────────
 //
-// Two-card health widget mirroring the Dashki web app's "Today's Journal"
-// dashboard card:
+// Five layouts in one script — Scriptable picks the right one based on which
+// widget size you choose:
 //
-//   LEFT CARD       RIGHT CARD
-//   ───────────────  ───────────
-//   ⚪ Calories  ━━  ⚪ Steps
-//      Protein   ━━
+//   HOME SCREEN
+//     - small    : hero calorie ring + mini protein/steps rings stacked
+//     - medium   : two-card layout (calories+protein bars / steps ring)
+//
+//   LOCK SCREEN  (iOS 16+, requires the "Lock Screen" widget gallery)
+//     - accessoryCircular     : single calorie ring with the value inside
+//     - accessoryRectangular  : 3 compact lines for cal/protein/steps
+//     - accessoryInline       : one tiny line near the time, e.g.
+//                               "🔥 655/2000 · 🚶 5,267"
 //
 // REFRESH BEHAVIOUR — important to understand
 //
@@ -27,14 +32,27 @@
 //     • The script is also runnable from Shortcuts / the Action Button /
 //       Home Screen for a one-tap manual refresh from anywhere.
 //
-// SETUP
+// SETUP — HOME SCREEN
 //   1. Install "Scriptable" from the App Store.
 //   2. In Scriptable, tap "+" to create a new script.
 //   3. Paste this entire file in. Save.
 //   4. Rename the script to "Dashki" (top of the screen).
 //   5. Long-press an empty home-screen spot → "+" → search for Scriptable.
-//      Pick the MEDIUM widget size and add it.
+//      Pick small or medium and add it.
 //   6. Long-press the new widget → Edit Widget → choose script "Dashki".
+//
+// SETUP — LOCK SCREEN (iOS 16+)
+//   1. Long-press the lock screen → tap "Customize" → tap "Lock Screen".
+//   2. Tap one of the widget slots (above the clock = inline; below = circular
+//      or rectangular).
+//   3. Find "Scriptable" in the gallery. Pick the size you want.
+//   4. Tap the placed widget → choose script "Dashki".
+//   5. Done. Lock the screen to see it live.
+//
+//   iOS lock-screen widgets are tinted automatically — colours are mostly
+//   ignored and everything is rendered in monochrome that matches the
+//   wallpaper / Lock Screen style. The widget uses opacity/coverage rather
+//   than colour for visual hierarchy in those modes.
 //
 // FORCE-REFRESH ON DEMAND
 //   (a) Tap the widget — re-runs and repaints in 2-5 sec.
@@ -163,6 +181,43 @@ function drawCircle(ctx, cx, cy, radius, color) {
   ctx.setFillColor(color);
   ctx.fillPath();
 }
+
+/**
+ * Draw a true hollow donut wedge (no inner cover — works on transparent
+ * backgrounds). Path: outer arc forwards + inner arc backwards, closed.
+ * Used by the lock-screen accessory widgets where there's no solid
+ * background colour to paint over.
+ */
+function drawDonutWedge(ctx, cx, cy, outerR, innerR, startFrac, endFrac, color) {
+  const startAngle = -Math.PI / 2 + startFrac * 2 * Math.PI;
+  const endAngle = -Math.PI / 2 + endFrac * 2 * Math.PI;
+  const sweep = endAngle - startAngle;
+  if (Math.abs(sweep) < 1e-6) return;
+  const steps = Math.max(20, Math.ceil(Math.abs(sweep) * 90));
+
+  const path = new Path();
+  // Outer arc, start → end
+  for (let i = 0; i <= steps; i++) {
+    const a = startAngle + sweep * (i / steps);
+    const p = new Point(cx + outerR * Math.cos(a), cy + outerR * Math.sin(a));
+    if (i === 0) path.move(p);
+    else path.addLine(p);
+  }
+  // Inner arc, end → start
+  for (let i = steps; i >= 0; i--) {
+    const a = startAngle + sweep * (i / steps);
+    const p = new Point(cx + innerR * Math.cos(a), cy + innerR * Math.sin(a));
+    path.addLine(p);
+  }
+  // Close back to first point
+  const a0 = startAngle;
+  path.addLine(new Point(cx + outerR * Math.cos(a0), cy + outerR * Math.sin(a0)));
+
+  ctx.addPath(path);
+  ctx.setFillColor(color);
+  ctx.fillPath();
+}
+
 
 /**
  * Hollow progress ring with optional center text.
@@ -596,6 +651,181 @@ function buildSmallWidget(data) {
   return widget;
 }
 
+// ─── Lock-screen accessory widgets (iOS 16+) ─────────────────────────────────
+//
+// Lock-screen widgets are tinted by iOS to match the lock-screen style,
+// so colour is mostly cosmetic — opacity and coverage are what render
+// distinctly. All three sizes use the standard accessory backdrop so
+// they look native against any wallpaper.
+
+function applyAccessoryBackground(widget) {
+  // addAccessoryWidgetBackground was added in Scriptable 1.7. Guard for
+  // older versions.
+  if ('addAccessoryWidgetBackground' in widget) {
+    widget.addAccessoryWidgetBackground = true;
+  }
+}
+
+function applyTapToRefresh(widget) {
+  widget.url = OPEN_URL_ON_TAP
+    || `scriptable:///run/${encodeURIComponent(Script.name())}?refresh=1`;
+}
+
+/**
+ * accessoryCircular — tiny circular widget below the clock.
+ * Shows the calorie ring with the value inside.
+ */
+function buildAccessoryCircular(data) {
+  const widget = new ListWidget();
+  applyAccessoryBackground(widget);
+  applyTapToRefresh(widget);
+  widget.setPadding(2, 2, 2, 2);
+
+  // Outer container that vertically centres the ring
+  const stack = widget.addStack();
+  stack.layoutVertically();
+  stack.centerAlignContent();
+
+  // The ring image, with the calorie value drawn into the centre via
+  // overlay text inside a relative positioning trick: Scriptable doesn't
+  // support absolute positioning, so we draw the value INTO the ring image.
+  const ring = drawAccessoryCircularRing(data);
+  const img = stack.addImage(ring);
+  img.imageSize = new Size(58, 58);
+  img.resizable = true;
+  img.centerAlignImage();
+
+  return widget;
+}
+
+function drawAccessoryCircularRing(data) {
+  const pixelSize = 220;
+  const stroke = 26;
+  const ctx = new DrawContext();
+  ctx.size = new Size(pixelSize, pixelSize);
+  ctx.opaque = false;
+  ctx.respectScreenScale = true;
+
+  const cx = pixelSize / 2;
+  const cy = pixelSize / 2;
+  const outerR = pixelSize / 2;
+  const innerR = outerR - stroke;
+  const fraction = pct(data.calories, data.goals.calories);
+
+  // Track + progress
+  drawDonutWedge(ctx, cx, cy, outerR, innerR, 0, 1, new Color('#ffffff', 0.25));
+  if (fraction > 0) {
+    drawDonutWedge(ctx, cx, cy, outerR, innerR, 0, fraction, new Color('#ffffff', 1));
+  }
+
+  // Calorie value in the centre. If 4+ digits, use a smaller font so it fits.
+  if (data.calories != null) {
+    const txt = formatNumber(data.calories);
+    const fontSize = txt.length >= 5 ? 50 : txt.length >= 4 ? 60 : 70;
+    ctx.setFont(Font.boldSystemFont(fontSize));
+    ctx.setTextColor(new Color('#ffffff', 1));
+    ctx.setTextAlignedCenter();
+    ctx.drawTextInRect(
+      txt,
+      new Rect(0, cy - fontSize * 0.6, pixelSize, fontSize * 1.2)
+    );
+  } else {
+    ctx.setFont(Font.boldSystemFont(60));
+    ctx.setTextColor(new Color('#ffffff', 0.6));
+    ctx.setTextAlignedCenter();
+    ctx.drawTextInRect('—', new Rect(0, cy - 40, pixelSize, 80));
+  }
+
+  return ctx.getImage();
+}
+
+/**
+ * accessoryRectangular — small horizontal widget below the clock.
+ * Three compact lines: calories, protein, steps. Each with an SF Symbol
+ * icon and the goal in dim text.
+ */
+function buildAccessoryRectangular(data) {
+  const widget = new ListWidget();
+  applyAccessoryBackground(widget);
+  applyTapToRefresh(widget);
+  widget.setPadding(4, 8, 4, 8);
+
+  addAccessoryRow(widget, {
+    symbolName: 'flame.fill',
+    value: data.calories,
+    goal: data.goals.calories,
+    suffix: '',
+  });
+  widget.addSpacer(2);
+  addAccessoryRow(widget, {
+    symbolName: 'leaf.fill',
+    value: data.protein,
+    goal: data.goals.protein,
+    suffix: 'g',
+  });
+  widget.addSpacer(2);
+  addAccessoryRow(widget, {
+    symbolName: 'figure.walk',
+    value: data.steps,
+    goal: data.goals.steps,
+    suffix: '',
+  });
+
+  return widget;
+}
+
+function addAccessoryRow(parent, { symbolName, value, goal, suffix }) {
+  const row = parent.addStack();
+  row.centerAlignContent();
+  row.spacing = 5;
+
+  const icon = SFSymbol.named(symbolName);
+  if (icon) {
+    const img = row.addImage(icon.image);
+    img.imageSize = new Size(11, 11);
+    img.tintColor = new Color('#ffffff', 1);
+  }
+
+  const valueText = row.addText(
+    value == null ? '—' : `${formatNumber(value)}${suffix}`
+  );
+  valueText.font = Font.semiboldSystemFont(12);
+  valueText.textColor = new Color('#ffffff', 1);
+  valueText.lineLimit = 1;
+  valueText.minimumScaleFactor = 0.7;
+
+  if (value != null && goal != null) {
+    const goalText = row.addText(`/ ${formatNumber(goal)}${suffix}`);
+    goalText.font = Font.systemFont(10);
+    goalText.textColor = new Color('#ffffff', 0.5);
+    goalText.lineLimit = 1;
+    goalText.minimumScaleFactor = 0.6;
+  }
+}
+
+/**
+ * accessoryInline — single tiny line of text near the clock.
+ * Most-condensed view: today's calories vs goal + step count.
+ */
+function buildAccessoryInline(data) {
+  const widget = new ListWidget();
+  applyTapToRefresh(widget);
+
+  const cal = data.calories != null
+    ? `🔥 ${formatNumber(data.calories)}/${formatNumber(data.goals.calories)}`
+    : '🔥 —';
+  const steps = data.steps != null
+    ? `🚶 ${formatNumber(data.steps)}`
+    : '🚶 —';
+
+  const text = widget.addText(`${cal} · ${steps}`);
+  text.font = Font.systemFont(12);
+  text.textColor = new Color('#ffffff', 1);
+  text.lineLimit = 1;
+
+  return widget;
+}
+
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
 async function main() {
@@ -603,7 +833,13 @@ async function main() {
   const family = config.widgetFamily;
 
   let widget;
-  if (family === "small") {
+  if (family === 'accessoryCircular') {
+    widget = buildAccessoryCircular(data);
+  } else if (family === 'accessoryRectangular') {
+    widget = buildAccessoryRectangular(data);
+  } else if (family === 'accessoryInline') {
+    widget = buildAccessoryInline(data);
+  } else if (family === 'small') {
     widget = buildSmallWidget(data);
   } else {
     widget = buildMediumWidget(data);
