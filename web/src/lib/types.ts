@@ -84,6 +84,18 @@ export interface StepEntry {
   steps: number;
 }
 
+// Individual step log entry — multiple per day (like JournalEntry).
+// The aggregate StepEntry returned by GET /api/steps is the SUM of all
+// StepLogEntry.steps for that date.
+export interface StepLogEntry {
+  id: number;
+  date: string;       // "YYYY-MM-DD"
+  steps: number;
+  note: string | null;
+  logged_at: string;  // "YYYY-MM-DDTHH:MM:SS" local time
+  created_at: string;
+}
+
 // ─── Todos ───────────────────────────────────────────────────────────────────
 
 export interface Todo {

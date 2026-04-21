@@ -95,7 +95,11 @@ export function initDb(): Promise<void> {
         )
       `);
 
-      // ── Step Entries ───────────────────────────────────────────────────────
+      // ── Step Entries (LEGACY aggregate; kept for backward compat) ──────────
+      // Historically this held one row per date with the day's total.
+      // The new source of truth is StepLogEntries (below) which supports
+      // multiple entries per day. GET /api/steps computes aggregates
+      // on-the-fly from StepLogEntries so this table is no longer required.
       db.run(`
         CREATE TABLE IF NOT EXISTS StepEntries (
           id    INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -103,6 +107,38 @@ export function initDb(): Promise<void> {
           steps INTEGER NOT NULL
         )
       `);
+
+      // ── Step Log Entries (new — multiple per day, like JournalEntries) ─────
+      db.run(`
+        CREATE TABLE IF NOT EXISTS StepLogEntries (
+          id         INTEGER PRIMARY KEY AUTOINCREMENT,
+          date       TEXT NOT NULL,
+          steps      INTEGER NOT NULL,
+          note       TEXT,
+          logged_at  TEXT NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      db.run(`CREATE INDEX IF NOT EXISTS idx_step_log_entries_date ON StepLogEntries(date)`);
+
+      // One-time seed: if StepLogEntries is empty and StepEntries has rows,
+      // convert each legacy aggregate into a single log entry so the user's
+      // historical totals don't disappear from view.
+      db.get(
+        `SELECT COUNT(*) AS cnt FROM StepLogEntries`,
+        [],
+        (cntErr, cntRow: { cnt: number } | undefined) => {
+          if (cntErr || !cntRow || cntRow.cnt > 0) return;
+          db.run(`
+            INSERT INTO StepLogEntries (date, steps, note, logged_at)
+            SELECT date, steps, 'Migrated from legacy total', datetime(date || 'T12:00:00')
+            FROM StepEntries
+          `, [], (seedErr) => {
+            if (seedErr) console.error('[db] migration error (seed StepLogEntries):', seedErr.message);
+            else console.log('[db] ran migration: seeded StepLogEntries from StepEntries');
+          });
+        }
+      );
 
       // ── Todos ──────────────────────────────────────────────────────────────
       db.run(`

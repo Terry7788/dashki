@@ -7,7 +7,7 @@ import GlassCard from '@/components/ui/GlassCard';
 import GlassButton from '@/components/ui/GlassButton';
 import GlassModal from '@/components/ui/GlassModal';
 import GlassInput from '@/components/ui/GlassInput';
-import { getJournalSummary, getSteps, getWeightEntries, getTodos, addWeightEntry, updateSteps, updateTodo, getGoals, getPreferences } from '@/lib/api';
+import { getJournalSummary, getSteps, getWeightEntries, getTodos, addWeightEntry, createStepLog, updateTodo, getGoals, getPreferences } from '@/lib/api';
 import { useSocketEvent } from '@/lib/useSocketEvent';
 import type { DailySummary, StepEntry, WeightEntry, Todo, GymSession, Goals } from '@/lib/types';
 
@@ -379,10 +379,13 @@ export default function DashboardPage() {
 
   async function handleAddSteps() {
     if (!stepsInput) return;
+    const val = parseInt(stepsInput, 10);
+    if (isNaN(val) || val <= 0) return;
     setSaving(true);
     try {
-      const entry = await updateSteps({ date: today, steps: parseInt(stepsInput, 10) });
-      setSteps(entry);
+      // Creates a new log entry for today. Socket emits 'steps-updated' which
+      // triggers fetchAll to refresh the aggregate shown in the stat card.
+      await createStepLog({ date: today, steps: val });
       setStepsModal(false);
       setStepsInput('');
     } finally {

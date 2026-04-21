@@ -4,6 +4,7 @@ import type {
   CurrentMealItem,
   JournalEntry,
   StepEntry,
+  StepLogEntry,
   Todo,
   GymSession,
   GymExercise,
@@ -403,6 +404,37 @@ export function updateSteps(data: {
     method: 'POST',
     body: JSON.stringify(data),
   });
+}
+
+// ─── Individual step log entries (multiple per day) ──────────────────────────
+
+export function getStepLogs(date: string): Promise<StepLogEntry[]> {
+  return request<StepLogEntry[]>(`/api/steps/logs?date=${encodeURIComponent(date)}`);
+}
+
+export function createStepLog(data: {
+  date: string;
+  steps: number;
+  note?: string;
+}): Promise<StepLogEntry> {
+  return request<StepLogEntry>('/api/steps/logs', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateStepLog(
+  id: number,
+  data: { steps?: number; note?: string | null }
+): Promise<StepLogEntry> {
+  return request<StepLogEntry>(`/api/steps/logs/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteStepLog(id: number): Promise<void> {
+  return request<void>(`/api/steps/logs/${id}`, { method: 'DELETE' });
 }
 
 export function getTodaySteps(): Promise<{ date: string; steps: number; id: number | null }> {
