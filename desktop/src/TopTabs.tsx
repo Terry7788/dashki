@@ -1,6 +1,13 @@
 import clsx from 'clsx';
 
-export type TabId = 'home' | 'journal' | 'foods' | 'calendar' | 'weight' | 'steps';
+export type TabId =
+  | 'home'
+  | 'journal'
+  | 'foods'
+  | 'calendar'
+  | 'weight'
+  | 'steps'
+  | 'settings';
 
 interface TopTabsProps {
   active: TabId;
@@ -14,6 +21,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'calendar', label: 'Calendar' },
   { id: 'weight', label: 'Weight' },
   { id: 'steps', label: 'Steps' },
+  { id: 'settings', label: 'Settings' },
 ];
 
 export default function TopTabs({ active, onChange }: TopTabsProps) {
