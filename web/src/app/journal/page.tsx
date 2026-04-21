@@ -681,12 +681,18 @@ interface EditGoalsModalProps {
   isOpen: boolean;
   onClose: () => void;
   goals: { calories: number; protein: number };
-  onSave: (goals: { calories: number; protein: number }) => void;
+  /**
+   * Returns a promise so the modal can wait on the save and surface failures
+   * (rather than optimistically closing while the network call silently fails).
+   */
+  onSave: (goals: { calories: number; protein: number }) => Promise<void>;
 }
 
 function EditGoalsModal({ isOpen, onClose, goals, onSave }: EditGoalsModalProps) {
   const [calories, setCalories] = useState(String(goals.calories));
   const [protein, setProtein] = useState(String(goals.protein));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Sync when goals change externally
   useEffect(() => {
@@ -694,12 +700,25 @@ function EditGoalsModal({ isOpen, onClose, goals, onSave }: EditGoalsModalProps)
     setProtein(String(goals.protein));
   }, [goals.calories, goals.protein]);
 
-  function handleSave() {
-    const cal = parseInt(calories, 10);
-    const pro = parseInt(protein, 10);
-    if (!cal || !pro || cal < 1 || pro < 1) return;
-    onSave({ calories: cal, protein: pro });
-    onClose();
+  async function handleSave() {
+    setError(null);
+    // Use Number (not parseInt) so decimal goals like 1850.5 aren't silently
+    // truncated to 1850 now that the inputs accept decimal entry.
+    const cal = Number(calories);
+    const pro = Number(protein);
+    if (!Number.isFinite(cal) || cal < 1 || !Number.isFinite(pro) || pro < 1) {
+      setError('Both goals must be positive numbers.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave({ calories: cal, protein: pro });
+      onClose();
+    } catch (e: any) {
+      setError(e?.message || 'Failed to save — please try again');
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -713,6 +732,7 @@ function EditGoalsModal({ isOpen, onClose, goals, onSave }: EditGoalsModalProps)
           onChange={(e) => setCalories(e.target.value)}
           min={1}
           step={50}
+          disabled={saving}
         />
         <GlassInput
           label="Protein Goal (g)"
@@ -722,10 +742,18 @@ function EditGoalsModal({ isOpen, onClose, goals, onSave }: EditGoalsModalProps)
           onChange={(e) => setProtein(e.target.value)}
           min={1}
           step={5}
+          disabled={saving}
         />
+        {error && (
+          <p className="text-sm text-red-400 bg-red-500/10 border border-red-400/20 rounded-xl px-3 py-2">
+            {error}
+          </p>
+        )}
         <div className="flex gap-3">
-          <GlassButton variant="default" className="flex-1" onClick={onClose}>Cancel</GlassButton>
-          <GlassButton variant="primary" className="flex-1" onClick={handleSave}>Save Goals</GlassButton>
+          <GlassButton variant="default" className="flex-1" onClick={onClose} disabled={saving}>Cancel</GlassButton>
+          <GlassButton variant="primary" className="flex-1" onClick={handleSave} disabled={saving}>
+            {saving ? 'Saving…' : 'Save Goals'}
+          </GlassButton>
         </div>
       </div>
     </GlassModal>
@@ -851,10 +879,11 @@ export default function JournalPage() {
   }, []);
 
   async function handleSaveGoals(newGoals: { calories: number; protein: number }) {
-    setGoals(newGoals); // optimistic update
-    try {
-      await updateGoals(newGoals);
-    } catch { /* silently keep local state */ }
+    // No optimistic update — wait for the backend to confirm so the modal
+    // can surface failures rather than closing on a fire-and-forget save
+    // that silently dropped the user's input.
+    const updated = await updateGoals(newGoals);
+    setGoals({ calories: updated.calories, protein: updated.protein });
   }
 
   const dateStr = toISODate(currentDate);

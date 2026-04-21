@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import AppShell from '@/components/AppShell';
@@ -18,6 +18,22 @@ export const metadata: Metadata = {
     icon: '/web/favicon.ico',
     apple: '/web/apple-touch-icon.png',
   },
+  // iOS PWA: when added to home screen, render in standalone mode with a
+  // translucent status bar so the page background bleeds underneath.
+  // Combined with the dark themeColor below, the status bar area looks
+  // seamlessly continuous with the dark dashboard background.
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Dashki',
+  },
+};
+
+export const viewport: Viewport = {
+  // Matches --bg-100 in dark mode (web/src/app/globals.css). When iOS adds
+  // the site to the home screen, this controls the colour of the status bar
+  // background and any system chrome around the PWA frame.
+  themeColor: '#111111',
 };
 
 export default function RootLayout({

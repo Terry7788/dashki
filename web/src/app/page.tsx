@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { Scale, Footprints, Flame, Dumbbell, Plus, Check, Pencil } from 'lucide-react';
+import { Scale, Footprints, Flame, Dumbbell, Plus, Check, Settings as SettingsIcon } from 'lucide-react';
 import GlassCard from '@/components/ui/GlassCard';
 import GlassButton from '@/components/ui/GlassButton';
 import GlassModal from '@/components/ui/GlassModal';
 import GlassInput from '@/components/ui/GlassInput';
-import { getJournalSummary, getSteps, getWeightEntries, getTodos, addWeightEntry, updateSteps, updateTodo, getGoals, getPreferences, updatePreferences } from '@/lib/api';
+import { getJournalSummary, getSteps, getWeightEntries, getTodos, addWeightEntry, updateSteps, updateTodo, getGoals, getPreferences } from '@/lib/api';
 import { useSocketEvent } from '@/lib/useSocketEvent';
 import type { DailySummary, StepEntry, WeightEntry, Todo, GymSession, Goals } from '@/lib/types';
 
@@ -233,11 +233,8 @@ export default function DashboardPage() {
   const [goals, setGoals] = useState<Goals>({ id: 0, calories: 2000, protein: 150, carbs: null, fat: null, steps: 10000, weight_kg: null, updated_at: '' });
   const [fadingIds, setFadingIds] = useState<Set<number>>(new Set());
 
-  // Display name (per-instance — set once, used in greeting)
+  // Display name (read-only on dashboard; edited in /settings)
   const [displayName, setDisplayName] = useState<string | null>(null);
-  const [editingName, setEditingName] = useState(false);
-  const [nameDraft, setNameDraft] = useState('');
-  const nameInputRef = useRef<HTMLInputElement>(null);
 
   // Gym widget
   const [gymLoading, setGymLoading] = useState(true);
@@ -293,7 +290,7 @@ export default function DashboardPage() {
   useSocketEvent('todo-deleted', fetchAll);
   useSocketEvent('goals-updated', fetchAll);
 
-  // Display name — fetch once on load, refetch when prefs are updated elsewhere
+  // Display name — fetch on load, refetch when prefs are updated in /settings
   const fetchPreferences = useCallback(async () => {
     try {
       const prefs = await getPreferences();
@@ -306,34 +303,6 @@ export default function DashboardPage() {
     fetchPreferences();
   }, [fetchPreferences]);
   useSocketEvent('preferences-updated', fetchPreferences);
-
-  // When entering edit mode, focus + select the input
-  useEffect(() => {
-    if (editingName && nameInputRef.current) {
-      nameInputRef.current.focus();
-      nameInputRef.current.select();
-    }
-  }, [editingName]);
-
-  async function commitName() {
-    const trimmed = nameDraft.trim();
-    const next = trimmed === '' ? null : trimmed;
-    // Optimistic
-    setDisplayName(next);
-    setEditingName(false);
-    try {
-      await updatePreferences({ display_name: next });
-    } catch (err) {
-      // Revert on failure
-      console.error('Failed to save display name', err);
-      fetchPreferences();
-    }
-  }
-
-  function startEditingName() {
-    setNameDraft(displayName ?? '');
-    setEditingName(true);
-  }
 
   // Fetch gym data separately so it doesn't block the main dashboard
   useEffect(() => {
@@ -429,49 +398,25 @@ export default function DashboardPage() {
         className="mb-8 animate-fade-in-up"
         style={{ animationDelay: '0ms' }}
       >
-        <h1 className="text-3xl font-bold text-white flex items-baseline gap-1 flex-wrap">
-          <span>{getGreeting()},</span>
-          {editingName ? (
-            <input
-              ref={nameInputRef}
-              type="text"
-              value={nameDraft}
-              onChange={(e) => setNameDraft(e.target.value)}
-              onBlur={commitName}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') commitName();
-                if (e.key === 'Escape') setEditingName(false);
-              }}
-              maxLength={50}
-              placeholder="your name"
-              className="bg-transparent border-b-2 border-indigo-400/60 focus:border-indigo-400 outline-none text-3xl font-bold text-white px-1 min-w-[4ch]"
-              style={{ width: `${Math.max(nameDraft.length, 6)}ch` }}
-            />
-          ) : displayName ? (
-            <button
-              type="button"
-              onClick={startEditingName}
-              className="group inline-flex items-baseline gap-2 hover:text-indigo-300 transition-colors duration-200"
-              aria-label="Edit your name"
-            >
-              <span>{displayName}</span>
-              <Pencil className="w-4 h-4 self-center text-white/30 group-hover:text-indigo-300 transition-colors" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={startEditingName}
-              className="group inline-flex items-baseline gap-2 text-white/40 hover:text-indigo-300 transition-colors duration-200 italic font-medium"
-              aria-label="Set your name"
-            >
-              <span>add your name</span>
-              <Pencil className="w-4 h-4 self-center" />
-            </button>
-          )}
-          <span> 👋</span>
+        <h1 className="text-3xl font-bold text-white">
+          {displayName ? `${getGreeting()}, ${displayName} 👋` : `${getGreeting()} 👋`}
         </h1>
-        <p className="text-white/50 mt-1 text-sm">
-          {new Date().toLocaleDateString('en-AU', { weekday: 'long', month: 'long', day: 'numeric' })}
+        <p className="text-white/50 mt-1 text-sm flex items-center gap-2 flex-wrap">
+          <span>
+            {new Date().toLocaleDateString('en-AU', { weekday: 'long', month: 'long', day: 'numeric' })}
+          </span>
+          {!displayName && (
+            <>
+              <span className="text-white/20">·</span>
+              <Link
+                href="/settings"
+                className="inline-flex items-center gap-1 text-indigo-300 hover:text-indigo-200 transition-colors"
+              >
+                <SettingsIcon className="w-3.5 h-3.5" />
+                Set your name
+              </Link>
+            </>
+          )}
         </p>
       </div>
 

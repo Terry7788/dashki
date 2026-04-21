@@ -1,4 +1,4 @@
-import { InputHTMLAttributes, ChangeEvent } from 'react';
+import { InputHTMLAttributes, ChangeEvent, KeyboardEvent } from 'react';
 import clsx from 'clsx';
 
 interface GlassInputProps {
@@ -6,6 +6,7 @@ interface GlassInputProps {
   placeholder?: string;
   value: string | number;
   onChange: (e: ChangeEvent<HTMLInputElement>) => void;
+  onKeyDown?: (e: KeyboardEvent<HTMLInputElement>) => void;
   type?: InputHTMLAttributes<HTMLInputElement>['type'];
   inputMode?: InputHTMLAttributes<HTMLInputElement>['inputMode'];
   className?: string;
@@ -14,6 +15,7 @@ interface GlassInputProps {
   min?: number | string;
   max?: number | string;
   step?: number | string;
+  maxLength?: number;
   required?: boolean;
   disabled?: boolean;
   autoComplete?: string;
@@ -24,6 +26,7 @@ export default function GlassInput({
   placeholder,
   value,
   onChange,
+  onKeyDown,
   type = 'text',
   inputMode,
   className,
@@ -32,6 +35,7 @@ export default function GlassInput({
   min,
   max,
   step,
+  maxLength,
   required,
   disabled,
   autoComplete,
@@ -55,10 +59,12 @@ export default function GlassInput({
         inputMode={inputMode}
         value={value}
         onChange={onChange}
+        onKeyDown={onKeyDown}
         placeholder={placeholder}
         min={min}
         max={max}
         step={step}
+        maxLength={maxLength}
         required={required}
         disabled={disabled}
         autoComplete={autoComplete}

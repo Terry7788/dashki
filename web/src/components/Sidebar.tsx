@@ -16,6 +16,7 @@ import {
   CalendarDays,
   Scale,
   Footprints,
+  Settings,
 } from 'lucide-react';
 
 interface NavItem {
@@ -34,6 +35,7 @@ const navItems: NavItem[] = [
   { label: 'Calendar', href: '/calendar', icon: CalendarDays },
   { label: 'Weight', href: '/weight', icon: Scale },
   { label: 'Steps', href: '/steps', icon: Footprints },
+  { label: 'Settings', href: '/settings', icon: Settings },
 ];
 
 const STORAGE_KEY = 'dashki-sidebar-collapsed';

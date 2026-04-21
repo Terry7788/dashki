@@ -4,8 +4,8 @@
   "description": "Personal Life Dashboard - Track nutrition, fitness, todos, and more",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0f0f1a",
-  "theme_color": "#6366f1",
+  "background_color": "#111111",
+  "theme_color": "#111111",
   "icons": [
     {
       "src": "/web/icon-192.png",
