@@ -124,6 +124,7 @@ function GoalsSection() {
   const [calorieDraft, setCalorieDraft] = useState('');
   const [proteinDraft, setProteinDraft] = useState('');
   const [stepDraft, setStepDraft] = useState('');
+  const [weightDraft, setWeightDraft] = useState('');
   const [saving, setSaving] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -136,6 +137,7 @@ function GoalsSection() {
       setCalorieDraft(String(g.calories ?? ''));
       setProteinDraft(String(g.protein ?? ''));
       setStepDraft(String(g.steps ?? ''));
+      setWeightDraft(g.weight_kg !== null ? String(g.weight_kg) : '');
     } catch (e: any) {
       setError(e?.message || 'Failed to load goals');
     } finally {
@@ -156,14 +158,23 @@ function GoalsSection() {
   const draftCalories = parseField(calorieDraft);
   const draftProtein = parseField(proteinDraft);
   const draftSteps = parseField(stepDraft);
+  // Weight is optional — empty string means "no goal set" (null), otherwise
+  // it must parse to a positive number.
+  const draftWeight = weightDraft.trim() === ''
+    ? null
+    : parseField(weightDraft);
+  const draftWeightValid = weightDraft.trim() === '' || draftWeight !== null;
+
   const savedCalories = savedGoals?.calories ?? null;
   const savedProtein = savedGoals?.protein ?? null;
   const savedSteps = savedGoals?.steps ?? null;
+  const savedWeight = savedGoals?.weight_kg ?? null;
 
   const isDirty =
     draftCalories !== savedCalories ||
     draftProtein !== savedProtein ||
-    draftSteps !== savedSteps;
+    draftSteps !== savedSteps ||
+    draftWeight !== savedWeight;
 
   // For the steps goal, must be a positive integer (matches backend validation).
   const stepsValid = draftSteps === null || Number.isInteger(draftSteps);
@@ -172,12 +183,13 @@ function GoalsSection() {
     draftCalories !== null &&
     draftProtein !== null &&
     draftSteps !== null &&
-    stepsValid;
+    stepsValid &&
+    draftWeightValid;
 
   async function handleSave() {
     setError(null);
     if (!allValid) {
-      setError('All goals must be positive numbers (steps must be whole).');
+      setError('Calories/protein/steps must be positive numbers (steps whole). Weight is optional.');
       return;
     }
     setSaving(true);
@@ -186,11 +198,14 @@ function GoalsSection() {
         calories: draftCalories,
         protein: draftProtein,
         steps: draftSteps,
+        // Send null to clear, number to set
+        weight_kg: draftWeight,
       });
       setSavedGoals(updated);
       setCalorieDraft(String(updated.calories ?? ''));
       setProteinDraft(String(updated.protein ?? ''));
       setStepDraft(String(updated.steps ?? ''));
+      setWeightDraft(updated.weight_kg !== null ? String(updated.weight_kg) : '');
       setSavedFlash(true);
       setTimeout(() => setSavedFlash(false), 1500);
     } catch (e: any) {
@@ -200,6 +215,7 @@ function GoalsSection() {
         setCalorieDraft(String(savedGoals.calories ?? ''));
         setProteinDraft(String(savedGoals.protein ?? ''));
         setStepDraft(String(savedGoals.steps ?? ''));
+        setWeightDraft(savedGoals.weight_kg !== null ? String(savedGoals.weight_kg) : '');
       }
     } finally {
       setSaving(false);
@@ -214,7 +230,7 @@ function GoalsSection() {
       </h2>
       <GlassCard>
         <div className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <GlassInput
               label="Calories (kcal)"
               type="number"
@@ -245,10 +261,22 @@ function GoalsSection() {
               step={500}
               disabled={loading || saving}
             />
+            <GlassInput
+              label="Weight (kg)"
+              type="number"
+              inputMode="decimal"
+              value={weightDraft}
+              onChange={(e) => setWeightDraft(e.target.value)}
+              min={0}
+              step={0.1}
+              placeholder="optional"
+              disabled={loading || saving}
+            />
           </div>
           <p className="text-xs text-white/40">
             Goals are saved to your Dashki database — they persist across all your
-            devices and don&rsquo;t reset.
+            devices and don&rsquo;t reset. Weight is optional; when set, it appears
+            as a red line on the weight chart.
           </p>
 
           {error && (

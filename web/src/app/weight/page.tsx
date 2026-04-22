@@ -8,13 +8,15 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
+  ReferenceLine,
+  Label,
   ResponsiveContainer,
 } from 'recharts';
 import { GlassCard, GlassButton, GlassInput } from '@/components/ui';
-import { getWeightEntries, addWeightEntry } from '@/lib/api';
+import { getWeightEntries, addWeightEntry, getGoals } from '@/lib/api';
 import type { WeightEntry } from '@/lib/types';
 import { useSocketEvent } from '@/lib/useSocketEvent';
-import { Scale, Trash2 } from 'lucide-react';
+import { Scale, Trash2, Target } from 'lucide-react';
 
 // ─── Inline API helper ────────────────────────────────────────────────────────
 
@@ -84,6 +86,10 @@ export default function WeightPage() {
   const [weightKg, setWeightKg] = useState('');
   const [logging, setLogging] = useState(false);
 
+  // Weight goal — fetched from /api/goals so it's editable in Settings.
+  // null when the user hasn't set one yet.
+  const [goalWeight, setGoalWeight] = useState<number | null>(null);
+
   const loadEntries = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -97,12 +103,23 @@ export default function WeightPage() {
     setLoading(false);
   }, []);
 
+  const loadGoals = useCallback(async () => {
+    try {
+      const g = await getGoals();
+      setGoalWeight(g.weight_kg ?? null);
+    } catch (_) {
+      // silent — chart just won't show the line
+    }
+  }, []);
+
   useEffect(() => {
     loadEntries();
-  }, [loadEntries]);
+    loadGoals();
+  }, [loadEntries, loadGoals]);
 
   useSocketEvent('weight-updated', loadEntries);
   useSocketEvent('weight-deleted', loadEntries);
+  useSocketEvent('goals-updated', loadGoals);
 
   // ── Derived stats ──
   const stats = useMemo(() => {
@@ -175,17 +192,31 @@ export default function WeightPage() {
   ];
 
   // ── Y axis domain with padding ──
+  // Includes the goal weight in the calculation so the red goal line is
+  // always visible on the chart, even when the user is far from it.
   const yDomain = useMemo((): [number | string, number | string] => {
     if (!chartData.length) return ['auto', 'auto'];
-    const weights = chartData.map((d) => d.weight);
-    const min = Math.min(...weights);
-    const max = Math.max(...weights);
+    const values = chartData.map((d) => d.weight);
+    if (goalWeight !== null) values.push(goalWeight);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
     const pad = Math.max((max - min) * 0.2, 1);
     return [
       parseFloat((min - pad).toFixed(1)),
       parseFloat((max + pad).toFixed(1)),
     ];
-  }, [chartData]);
+  }, [chartData, goalWeight]);
+
+  // ── Goal proximity (for header chip) ──
+  const goalProximity = useMemo(() => {
+    if (goalWeight === null || !entries.length) return null;
+    const current = entries[entries.length - 1].weight_kg;
+    const diff = current - goalWeight;
+    return {
+      diff: Math.abs(diff),
+      direction: diff > 0 ? 'above' : diff < 0 ? 'below' : 'on',
+    };
+  }, [entries, goalWeight]);
 
   return (
     <div className="px-4 md:px-6 py-8 max-w-4xl mx-auto space-y-6">
@@ -217,7 +248,22 @@ export default function WeightPage() {
       {/* ── Chart ── */}
       <GlassCard>
         <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-          <h2 className="text-white font-semibold">Weight Over Time</h2>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h2 className="text-white font-semibold">Weight Over Time</h2>
+            {goalWeight !== null && (
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-red-500/10 border border-red-400/30">
+                <Target className="w-3 h-3 text-red-400" />
+                <span className="text-xs text-red-300 font-medium">
+                  Goal {goalWeight.toFixed(1)} kg
+                </span>
+                {goalProximity && goalProximity.direction !== 'on' && (
+                  <span className="text-[10px] text-red-300/60">
+                    · {goalProximity.diff.toFixed(1)} kg {goalProximity.direction}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
           <div className="flex gap-1.5">
             {ranges.map((r) => (
               <button
@@ -264,6 +310,24 @@ export default function WeightPage() {
                 tickFormatter={(v) => `${v}`}
               />
               <Tooltip content={<CustomTooltip />} />
+              {/* Goal line — dashed red horizontal across the chart */}
+              {goalWeight !== null && (
+                <ReferenceLine
+                  y={goalWeight}
+                  stroke="#ef4444"
+                  strokeWidth={2}
+                  strokeDasharray="5 4"
+                  ifOverflow="extendDomain"
+                >
+                  <Label
+                    value={`Goal ${goalWeight.toFixed(1)} kg`}
+                    position="insideTopRight"
+                    fill="#ef4444"
+                    fontSize={11}
+                    fontWeight={600}
+                  />
+                </ReferenceLine>
+              )}
               <Line
                 type="monotone"
                 dataKey="weight"
