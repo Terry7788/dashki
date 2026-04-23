@@ -284,19 +284,42 @@ function FoodPicker({ onAdd }: FoodPickerProps) {
               >
               <button
                 onClick={() => toggleFood(food)}
-                className="w-full flex items-center justify-between px-4 py-3 text-left"
+                className="w-full flex items-start justify-between gap-3 px-4 py-3 text-left"
               >
-                <div className="flex items-center gap-3">
-                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                {/*
+                  Left side wraps naturally:
+                  - min-w-0 + flex-1 lets the name column shrink below its
+                    intrinsic width inside the parent flex container (without
+                    this Tailwind class flexbox refuses to shrink and the name
+                    pushes the whole row off the right edge of the screen on
+                    mobile).
+                  - items-start aligns the checkbox with the FIRST line of a
+                    wrapped name, not the visual centre of the multi-line
+                    block (which looks weird).
+                  - break-words handles foods whose name is one long unbroken
+                    string with no spaces.
+                */}
+                <div className="flex items-start gap-3 min-w-0 flex-1">
+                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5 ${
                     isSelected ? 'border-indigo-400 bg-indigo-400' : 'border-white/30'
                   }`}>
                     {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
                   </div>
-                  <span className="text-sm font-medium text-white truncate">{food.name}</span>
+                  <span className="text-sm font-medium text-white break-words leading-snug">
+                    {food.name}
+                  </span>
                 </div>
-                <span className="text-xs text-white/50 shrink-0">
-                  {foodCalories(food)} kcal · {foodProtein(food)}g pro
-                </span>
+                {/*
+                  Right side stacks vertically (kcal on top, protein below)
+                  rather than the previous "377 kcal · 32g pro" single line.
+                  Stacking saves ~40–50px of horizontal space that goes back
+                  to the food name on narrow screens. tabular-nums keeps the
+                  numbers aligned despite varying digit widths.
+                */}
+                <div className="flex flex-col items-end shrink-0 text-xs text-white/50 leading-snug tabular-nums">
+                  <span>{foodCalories(food)} kcal</span>
+                  <span>{foodProtein(food)}g pro</span>
+                </div>
               </button>
               {/* Inline servings input for selected foods */}
               {isSelected && (
