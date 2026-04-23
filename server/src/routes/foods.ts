@@ -66,18 +66,18 @@ const SELECT_SQL = `
 
 // ─── GET / — list foods ───────────────────────────────────────────────────────
 //
-// Sorting: the 10 most-recently-used foods (by latest JournalEntries.logged_at
+// Sorting: the 20 most-recently-used foods (by latest JournalEntries.logged_at
 // for that food_id) are returned first in recency order, then everything
 // else is appended in alphabetical name order. Each row carries a boolean
 // `recently_used` flag so the frontend can render a divider between the two
 // groups.
 //
 // Why JS post-processing rather than a single SQL query: SQLite's lack of
-// NULLS LAST + the "first 10 by recency, then everything else alpha" rule
+// NULLS LAST + the "first N by recency, then everything else alpha" rule
 // is awkward to express as a single ORDER BY. Two passes in JS is clear,
 // fast at this scale (hundreds of foods), and doesn't require a CTE.
 
-const RECENT_FOODS_LIMIT = 10;
+const RECENT_FOODS_LIMIT = 20;
 
 router.get('/', (req: Request, res: Response) => {
   const search = ((req.query.search as string) || '').trim();
