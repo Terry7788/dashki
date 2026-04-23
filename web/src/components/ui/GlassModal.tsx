@@ -77,17 +77,20 @@ export default function GlassModal({
 
   if (!isOpen) return null;
 
-  // Outer wrapper: padding determines whether the panel floats or fills.
-  // mobileFullscreen drops the padding below sm so the panel claims the
-  // entire viewport on phones.
-  const wrapperPadding = mobileFullscreen
-    ? 'p-0 sm:p-4 sm:items-center sm:justify-center items-stretch justify-stretch'
-    : 'p-4 items-center justify-center';
+  // Outer wrapper has consistent 16px padding everywhere so the modal sits
+  // away from the screen edges — that breathing room is what stops iOS
+  // Safari's URL bar (top) and toolbar (bottom) from overlapping the
+  // header / footer. Same padding for both modes; mobileFullscreen now
+  // differs only in how the panel's max-height is computed.
+  const wrapperPadding = 'p-4 items-center justify-center';
 
-  // Panel: rounded + max-height for the floating case, full-height + no
-  // rounding for the mobile fullscreen case.
+  // Panel max-height uses dvh (dynamic viewport height) on mobile so that
+  // when iOS Safari's URL bar shows/hides, the modal correctly resizes to
+  // fit the visible area — vh would lock to the un-collapsed full viewport
+  // and overflow when the URL bar is visible. The 2rem subtracts the
+  // wrapper's p-4 (16px × 2) so the modal never exceeds visible space.
   const panelShape = mobileFullscreen
-    ? 'h-full sm:h-auto sm:max-h-[90vh] rounded-none sm:rounded-3xl'
+    ? 'max-h-[calc(100dvh-2rem)] sm:max-h-[90vh] rounded-2xl sm:rounded-3xl'
     : 'max-h-[90vh] rounded-3xl';
 
   return (
