@@ -20,6 +20,8 @@ export interface Food {
   calories?: number;
   /** raw protein field from API (same as protein_per_100g) */
   protein?: number;
+  /** True for foods that appear in the top "Recently used" group of GET /api/foods. */
+  recently_used?: boolean;
   created_at: string;
 }
 

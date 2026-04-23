@@ -65,20 +65,66 @@ const SELECT_SQL = `
 `;
 
 // ─── GET / — list foods ───────────────────────────────────────────────────────
+//
+// Sorting: the 10 most-recently-used foods (by latest JournalEntries.logged_at
+// for that food_id) are returned first in recency order, then everything
+// else is appended in alphabetical name order. Each row carries a boolean
+// `recently_used` flag so the frontend can render a divider between the two
+// groups.
+//
+// Why JS post-processing rather than a single SQL query: SQLite's lack of
+// NULLS LAST + the "first 10 by recency, then everything else alpha" rule
+// is awkward to express as a single ORDER BY. Two passes in JS is clear,
+// fast at this scale (hundreds of foods), and doesn't require a CTE.
+
+const RECENT_FOODS_LIMIT = 10;
 
 router.get('/', (req: Request, res: Response) => {
   const search = ((req.query.search as string) || '').trim();
   const pattern = search ? `%${search}%` : '%';
 
+  // Pull the food row + its latest journal-entry timestamp via a correlated
+  // subquery. last_used is null for foods that have never been logged.
   db.all(
-    `${SELECT_SQL} WHERE name LIKE ? ORDER BY name ASC`,
+    `SELECT
+       f.id, f.name, f.base_amount, f.base_unit,
+       f.calories, f.protein, f.carbs, f.fat,
+       f.serving_size_g, f.created_at,
+       (SELECT MAX(logged_at) FROM JournalEntries WHERE food_id = f.id) AS last_used
+     FROM Foods f
+     WHERE f.name LIKE ?`,
     [pattern],
-    (err, rows: Record<string, unknown>[]) => {
+    (err, rows: Array<Record<string, unknown> & { last_used: string | null }>) => {
       if (err) {
         console.error('[error] GET /api/foods', err);
         return res.status(500).json({ error: 'Failed to fetch foods' });
       }
-      res.json((rows || []).map(mapFood));
+
+      const all = rows || [];
+
+      // Group A — recently used: at most RECENT_FOODS_LIMIT, sorted by
+      // last_used DESC (most-recent first).
+      const used = all
+        .filter((r) => r.last_used !== null)
+        .sort((a, b) =>
+          (b.last_used as string).localeCompare(a.last_used as string)
+        );
+      const recent = used.slice(0, RECENT_FOODS_LIMIT);
+      const recentIds = new Set(recent.map((r) => r.id));
+
+      // Group B — everything else, sorted alphabetically by name (case-insensitive).
+      const rest = all
+        .filter((r) => !recentIds.has(r.id))
+        .sort((a, b) =>
+          (a.name as string).localeCompare(b.name as string, undefined, { sensitivity: 'base' })
+        );
+
+      const ordered = [...recent, ...rest].map((r) => ({
+        ...mapFood(r),
+        recently_used: recentIds.has(r.id),
+      }));
+
+      res.json(ordered);
     }
   );
 });

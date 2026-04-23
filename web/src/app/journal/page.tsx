@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Loader2 } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
+import { ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Loader2, Clock } from 'lucide-react';
 import { GlassCard, GlassButton, GlassInput, GlassModal } from '@/components/ui';
 import {
   getJournalEntries,
@@ -246,18 +246,42 @@ function FoodPicker({ onAdd }: FoodPickerProps) {
         {!loading && foods.length === 0 && (
           <p className="text-center text-white/40 text-sm py-4">No foods found</p>
         )}
-        {foods.map((food) => {
+        {foods.map((food, idx) => {
           const selected = getSelectedFood(food.id);
           const isSelected = !!selected;
+
+          // Section dividers: backend returns recently-used foods first.
+          // Insert a small "Recently used" heading above the first one, and
+          // an "All foods" heading at the boundary where recently_used flips
+          // to false. Skip dividers when filtering by a search query — the
+          // grouping is most useful in the unfiltered browse view.
+          const isFirst = idx === 0;
+          const prevWasRecent = idx > 0 ? foods[idx - 1].recently_used : false;
+          const showRecentHeader =
+            !query.trim() && isFirst && food.recently_used === true;
+          const showAllHeader =
+            !query.trim() && prevWasRecent === true && food.recently_used !== true;
+
           return (
-            <div
-              key={food.id}
-              className={`rounded-2xl border transition-all duration-200 ${
-                isSelected
-                  ? 'bg-indigo-500/20 border-indigo-400/50'
-                  : 'bg-white/5 hover:bg-white/10 border-white/10'
-              }`}
-            >
+            <Fragment key={food.id}>
+              {showRecentHeader && (
+                <div className="text-[10px] font-semibold uppercase tracking-widest text-white/40 px-1 pt-1 flex items-center gap-1.5">
+                  <Clock className="w-3 h-3" />
+                  Recently used
+                </div>
+              )}
+              {showAllHeader && (
+                <div className="text-[10px] font-semibold uppercase tracking-widest text-white/40 px-1 pt-3">
+                  All foods
+                </div>
+              )}
+              <div
+                className={`rounded-2xl border transition-all duration-200 ${
+                  isSelected
+                    ? 'bg-indigo-500/20 border-indigo-400/50'
+                    : 'bg-white/5 hover:bg-white/10 border-white/10'
+                }`}
+              >
               <button
                 onClick={() => toggleFood(food)}
                 className="w-full flex items-center justify-between px-4 py-3 text-left"
@@ -302,7 +326,8 @@ function FoodPicker({ onAdd }: FoodPickerProps) {
                   </span>
                 </div>
               )}
-            </div>
+              </div>
+            </Fragment>
           );
         })}
       </div>
