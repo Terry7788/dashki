@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Loader2, Clock } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Minus, Trash2, Pencil, Loader2, Clock, Search } from 'lucide-react';
 import { GlassCard, GlassButton, GlassInput, GlassModal } from '@/components/ui';
 import {
   getJournalEntries,
@@ -135,15 +135,21 @@ interface SelectedFood {
 }
 
 interface FoodPickerProps {
-  onAdd: (food: Food, servings: number) => void;
+  /**
+   * Selected foods are state-of-the-modal, owned by the parent so the
+   * sticky bottom bar can render the summary + Add button across the
+   * whole modal panel (not just inside the picker).
+   */
+  selectedFoods: SelectedFood[];
+  setSelectedFoods: (next: SelectedFood[]) => void;
 }
 
-function FoodPicker({ onAdd }: FoodPickerProps) {
+function FoodPicker({ selectedFoods, setSelectedFoods }: FoodPickerProps) {
   const [query, setQuery] = useState('');
   const [foods, setFoods] = useState<Food[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedFoods, setSelectedFoods] = useState<SelectedFood[]>([]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Load all foods on mount, then filter by search
   useEffect(() => {
@@ -163,6 +169,19 @@ function FoodPicker({ onAdd }: FoodPickerProps) {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [query]);
 
+  // Auto-focus the search input on mount, but only on devices with a real
+  // hover capability (keyboards). Touch devices skip this so opening the
+  // modal doesn't immediately pop the on-screen keyboard.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const isHoverCapable = window.matchMedia('(hover: hover)').matches;
+    if (isHoverCapable && searchInputRef.current) {
+      // Delay slightly so the modal scale-in animation finishes first.
+      const t = setTimeout(() => searchInputRef.current?.focus(), 150);
+      return () => clearTimeout(t);
+    }
+  }, []);
+
   function toggleFood(food: Food) {
     const existing = selectedFoods.find((sf) => sf.food.id === food.id);
     if (existing) {
@@ -172,89 +191,52 @@ function FoodPicker({ onAdd }: FoodPickerProps) {
     }
   }
 
-  function updateServingsForFood(foodId: number, newServings: string) {
-    const numServings = newServings === '' ? 0 : parseFloat(newServings);
+  function setServingsForFood(foodId: number, next: number) {
+    const clamped = Math.max(0, Math.round(next * 10) / 10); // 1 decimal precision
     setSelectedFoods(selectedFoods.map((sf) =>
-      sf.food.id === foodId ? { ...sf, servings: isNaN(numServings) ? 0 : numServings } : sf
+      sf.food.id === foodId ? { ...sf, servings: clamped } : sf
     ));
-  }
-
-  function isFoodSelected(foodId: number): boolean {
-    return selectedFoods.some((sf) => sf.food.id === foodId);
   }
 
   function getSelectedFood(foodId: number): SelectedFood | undefined {
     return selectedFoods.find((sf) => sf.food.id === foodId);
   }
 
-  function handleAddAll() {
-    for (const { food, servings } of selectedFoods) {
-      onAdd(food, servings);
-    }
-    setSelectedFoods([]);
-    setQuery('');
-  }
-
-  // Calculate totals
-  const totalCalories = selectedFoods.reduce((sum, sf) => sum + calcNutrition(sf.food, sf.servings).calories, 0);
-  const totalProtein = selectedFoods.reduce((sum, sf) => sum + calcNutrition(sf.food, sf.servings).protein, 0);
-
   return (
     <div className="space-y-3">
-      {/* Selected summary bar - always visible at top when there are selections */}
-      {selectedFoods.length > 0 && (
-        <div className="p-3 rounded-2xl bg-indigo-500/20 border border-indigo-400/30">
-          <p className="text-sm font-medium text-white">
-            {selectedFoods.length} selected · {Math.round(totalCalories)} kcal · {totalProtein.toFixed(1)}g protein
-          </p>
-          <div className="flex flex-wrap gap-1 mt-2">
-            {selectedFoods.map((sf) => (
-              <span
-                key={sf.food.id}
-                className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-white/10 rounded-full text-white/80"
-              >
-                {sf.food.name}
-                <button
-                  onClick={() => toggleFood(sf.food)}
-                  className="hover:text-red-400"
-                >
-                  ×
-                </button>
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
+      {/* Search bar — bigger, with icon prefix and clear button */}
       <div className="relative">
-        <GlassInput
-          placeholder="Search foods…"
+        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 pointer-events-none" />
+        <input
+          ref={searchInputRef}
+          type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search foods…"
+          className="w-full pl-10 pr-10 py-3.5 text-base sm:text-sm bg-white/[0.06] border border-white/[0.12] rounded-2xl text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-indigo-400/40 focus:border-indigo-400/40 transition-all duration-200"
         />
         {query && (
           <button
             onClick={() => setQuery('')}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white"
+            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-white/40 hover:text-white hover:bg-white/10"
+            aria-label="Clear search"
           >
-            ×
+            <Plus className="w-4 h-4 rotate-45" />
           </button>
         )}
       </div>
-      <div className="max-h-96 overflow-y-auto space-y-2 pr-1">
-        {loading && <p className="text-center text-white/40 text-sm py-4">Searching…</p>}
+
+      {/* Food list — bigger touch targets */}
+      <div className="space-y-2 pr-1">
+        {loading && <p className="text-center text-white/40 text-sm py-6">Searching…</p>}
         {!loading && foods.length === 0 && (
-          <p className="text-center text-white/40 text-sm py-4">No foods found</p>
+          <p className="text-center text-white/40 text-sm py-6">No foods found</p>
         )}
         {foods.map((food, idx) => {
           const selected = getSelectedFood(food.id);
           const isSelected = !!selected;
 
-          // Section dividers: backend returns recently-used foods first.
-          // Insert a small "Recently used" heading above the first one, and
-          // an "All foods" heading at the boundary where recently_used flips
-          // to false. Skip dividers when filtering by a search query — the
-          // grouping is most useful in the unfiltered browse view.
+          // Section dividers (recently used / all foods) — only when not searching.
           const isFirst = idx === 0;
           const prevWasRecent = idx > 0 ? foods[idx - 1].recently_used : false;
           const showRecentHeader =
@@ -278,89 +260,131 @@ function FoodPicker({ onAdd }: FoodPickerProps) {
               <div
                 className={`rounded-2xl border transition-all duration-200 ${
                   isSelected
-                    ? 'bg-indigo-500/20 border-indigo-400/50'
+                    ? 'bg-indigo-500/20 border-indigo-400/60 shadow-sm shadow-indigo-500/10'
                     : 'bg-white/5 hover:bg-white/10 border-white/10'
                 }`}
               >
-              <button
-                onClick={() => toggleFood(food)}
-                className="w-full flex items-start justify-between gap-3 px-4 py-3 text-left"
-              >
-                {/*
-                  Left side wraps naturally:
-                  - min-w-0 + flex-1 lets the name column shrink below its
-                    intrinsic width inside the parent flex container (without
-                    this Tailwind class flexbox refuses to shrink and the name
-                    pushes the whole row off the right edge of the screen on
-                    mobile).
-                  - items-start aligns the checkbox with the FIRST line of a
-                    wrapped name, not the visual centre of the multi-line
-                    block (which looks weird).
-                  - break-words handles foods whose name is one long unbroken
-                    string with no spaces.
-                */}
-                <div className="flex items-start gap-3 min-w-0 flex-1">
-                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5 ${
-                    isSelected ? 'border-indigo-400 bg-indigo-400' : 'border-white/30'
-                  }`}>
-                    {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
+                <button
+                  onClick={() => toggleFood(food)}
+                  className="w-full flex items-start justify-between gap-3 px-4 py-4 text-left"
+                >
+                  <div className="flex items-start gap-3 min-w-0 flex-1">
+                    {/* Bigger checkbox: 24px (was 20px) for easier tapping */}
+                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5 transition-colors ${
+                      isSelected ? 'border-indigo-400 bg-indigo-400' : 'border-white/30'
+                    }`}>
+                      {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-white" />}
+                    </div>
+                    <span className="text-sm font-medium text-white break-words leading-snug">
+                      {food.name}
+                    </span>
                   </div>
-                  <span className="text-sm font-medium text-white break-words leading-snug">
-                    {food.name}
-                  </span>
-                </div>
-                {/*
-                  Right side stacks vertically (kcal on top, protein below)
-                  rather than the previous "377 kcal · 32g pro" single line.
-                  Stacking saves ~40–50px of horizontal space that goes back
-                  to the food name on narrow screens. tabular-nums keeps the
-                  numbers aligned despite varying digit widths.
-                */}
-                <div className="flex flex-col items-end shrink-0 text-xs text-white/50 leading-snug tabular-nums">
-                  <span>{foodCalories(food)} kcal</span>
-                  <span>{foodProtein(food)}g pro</span>
-                </div>
-              </button>
-              {/* Inline servings input for selected foods */}
-              {isSelected && (
-                <div className="px-4 pb-3 flex items-center gap-2">
-                  <span className="text-xs text-white/50">Servings:</span>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      min={0}
-                      step={0.1}
-                      value={selected.servings === 0 ? '' : selected.servings}
-                      onChange={(e) => updateServingsForFood(food.id, e.target.value)}
-                      onClick={(e) => e.stopPropagation()}
-                      placeholder="-"
-                      className="w-20 px-2 pr-6 py-1 text-sm bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
-                    />
-                    <button
-                      onClick={(e) => { e.stopPropagation(); updateServingsForFood(food.id, ''); }}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-white/30 hover:text-white text-xs"
-                    >
-                      ×
-                    </button>
+                  <div className="flex flex-col items-end shrink-0 text-xs text-white/50 leading-snug tabular-nums">
+                    <span>{foodCalories(food)} kcal</span>
+                    <span>{foodProtein(food)}g pro</span>
                   </div>
-                  <span className="text-xs text-indigo-300">
-                    {Math.round(calcNutrition(food, selected.servings).calories)} kcal
-                  </span>
-                </div>
-              )}
+                </button>
+
+                {/* Servings stepper for selected items — much friendlier on
+                    mobile than typing decimals into a small input box. */}
+                {isSelected && (
+                  <ServingsStepper
+                    food={food}
+                    servings={selected.servings}
+                    onChange={(next) => setServingsForFood(food.id, next)}
+                  />
+                )}
               </div>
             </Fragment>
           );
         })}
       </div>
+    </div>
+  );
+}
 
-      {/* Add all button */}
-      {selectedFoods.length > 0 && (
-        <GlassButton variant="primary" className="w-full" onClick={handleAddAll}>
-          Add {selectedFoods.length} Food{selectedFoods.length > 1 ? 's' : ''} to Journal
-        </GlassButton>
-      )}
+// ─── Servings Stepper ─────────────────────────────────────────────────────────
+
+interface ServingsStepperProps {
+  food: Food;
+  servings: number;
+  onChange: (next: number) => void;
+}
+
+function ServingsStepper({ food, servings, onChange }: ServingsStepperProps) {
+  // Step is 1 for whole-serving items, 0.5 for finer increments.
+  // Tapping the value enters a custom input mode for unusual amounts.
+  const [editingCustom, setEditingCustom] = useState(false);
+  const [customDraft, setCustomDraft] = useState(String(servings));
+
+  function commitCustom() {
+    const n = parseFloat(customDraft);
+    if (Number.isFinite(n) && n >= 0) onChange(n);
+    setEditingCustom(false);
+  }
+
+  // Stop the step buttons from triggering the parent button's onClick (toggle).
+  function stop(e: React.MouseEvent) {
+    e.stopPropagation();
+  }
+
+  return (
+    <div
+      className="px-4 pb-3 flex items-center gap-3"
+      onClick={stop}
+    >
+      <span className="text-xs text-white/50 shrink-0">Servings</span>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={(e) => { stop(e); onChange(Math.max(0, servings - 0.5)); }}
+          aria-label="Decrease servings"
+          disabled={servings <= 0}
+          className="w-9 h-9 flex items-center justify-center rounded-xl bg-white/10 hover:bg-white/15 active:bg-white/20 text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        >
+          <Minus className="w-4 h-4" />
+        </button>
+
+        {editingCustom ? (
+          <input
+            type="number"
+            inputMode="decimal"
+            min={0}
+            step={0.1}
+            autoFocus
+            value={customDraft}
+            onChange={(e) => setCustomDraft(e.target.value)}
+            onBlur={commitCustom}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commitCustom();
+              if (e.key === 'Escape') { setCustomDraft(String(servings)); setEditingCustom(false); }
+            }}
+            onClick={stop}
+            className="w-14 px-2 py-1 text-sm bg-white/10 border border-indigo-400/60 rounded-lg text-white text-center focus:outline-none focus:ring-2 focus:ring-indigo-400/40 tabular-nums"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={(e) => { stop(e); setCustomDraft(String(servings)); setEditingCustom(true); }}
+            className="min-w-[3.5rem] px-2 py-1 text-sm font-semibold text-white tabular-nums hover:bg-white/10 rounded-lg transition-colors"
+            title="Tap to type a custom amount"
+          >
+            {servings === 0 ? '—' : Number.isInteger(servings) ? servings : servings.toFixed(1)}
+          </button>
+        )}
+
+        <button
+          type="button"
+          onClick={(e) => { stop(e); onChange(servings + 0.5); }}
+          aria-label="Increase servings"
+          className="w-9 h-9 flex items-center justify-center rounded-xl bg-white/10 hover:bg-white/15 active:bg-white/20 text-white transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+        </button>
+      </div>
+      <span className="text-xs text-indigo-300 ml-auto tabular-nums">
+        {Math.round(calcNutrition(food, servings).calories)} kcal
+      </span>
     </div>
   );
 }
@@ -388,6 +412,15 @@ function AddFoodModal({ isOpen, onClose, mealType, date, onAdded }: AddFoodModal
   const [quickCalories, setQuickCalories] = useState('');
   const [quickProtein, setQuickProtein] = useState('');
 
+  // Lifted from FoodPicker so the sticky bottom bar (rendered as the modal's
+  // footer) can show the running total + Add button across the whole panel
+  // rather than below the food list.
+  const [selectedFoods, setSelectedFoods] = useState<SelectedFood[]>([]);
+  // Reset selection whenever the modal closes so re-opening starts fresh.
+  useEffect(() => {
+    if (!isOpen) setSelectedFoods([]);
+  }, [isOpen]);
+
   useEffect(() => {
     if (tab === 'meals' && savedMeals.length === 0) {
       setLoadingMeals(true);
@@ -398,24 +431,29 @@ function AddFoodModal({ isOpen, onClose, mealType, date, onAdded }: AddFoodModal
     }
   }, [tab, savedMeals.length]);
 
-  async function handleAddFood(food: Food, servings: number) {
+  async function handleAddSelectedFoods() {
+    if (selectedFoods.length === 0) return;
     setSaving(true);
     setError('');
-    const { calories, protein } = calcNutrition(food, servings);
     try {
-      const entry = await addJournalEntry({
-        date,
-        meal_type: mealType,
-        food_id: food.id,
-        food_name_snapshot: food.name,
-        servings,
-        calories_snapshot: calories,
-        protein_snapshot: protein,
-      });
-      onAdded(entry);
+      for (const { food, servings } of selectedFoods) {
+        if (servings <= 0) continue;
+        const { calories, protein } = calcNutrition(food, servings);
+        const entry = await addJournalEntry({
+          date,
+          meal_type: mealType,
+          food_id: food.id,
+          food_name_snapshot: food.name,
+          servings,
+          calories_snapshot: calories,
+          protein_snapshot: protein,
+        });
+        onAdded(entry);
+      }
+      setSelectedFoods([]);
       onClose();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to add entry');
+      setError(e instanceof Error ? e.message : 'Failed to add entries');
     } finally {
       setSaving(false);
     }
@@ -493,11 +531,48 @@ function AddFoodModal({ isOpen, onClose, mealType, date, onAdded }: AddFoodModal
   }
 
   const tabClass = (t: typeof tab) =>
-    `flex-1 py-2 text-sm font-medium rounded-xl transition-all duration-200 ${
+    `flex-1 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 flex items-center justify-center gap-1.5 ${
       tab === t
         ? 'bg-white/15 text-white border border-white/20'
         : 'text-white/50 hover:text-white'
     }`;
+
+  // Selection summary for the sticky footer
+  const totalCalories = selectedFoods.reduce(
+    (sum, sf) => sum + calcNutrition(sf.food, sf.servings).calories,
+    0
+  );
+  const totalProtein = selectedFoods.reduce(
+    (sum, sf) => sum + calcNutrition(sf.food, sf.servings).protein,
+    0
+  );
+
+  // Sticky bottom bar — only meaningful for the foods tab. Meals add inline
+  // on tap; quick-add has its own button. So footer is null for those tabs
+  // and the modal renders without the bottom band.
+  const footer = tab === 'foods' && selectedFoods.length > 0
+    ? (
+      <div className="flex items-center gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-white tabular-nums">
+            {selectedFoods.length} selected · {Math.round(totalCalories)} kcal
+          </p>
+          <p className="text-xs text-white/50 tabular-nums">
+            {totalProtein.toFixed(1)}g protein
+          </p>
+        </div>
+        <GlassButton
+          variant="primary"
+          onClick={handleAddSelectedFoods}
+          disabled={saving}
+        >
+          {saving
+            ? 'Adding…'
+            : `Add to ${MEAL_LABELS[mealType]}`}
+        </GlassButton>
+      </div>
+    )
+    : null;
 
   return (
     <GlassModal
@@ -505,25 +580,33 @@ function AddFoodModal({ isOpen, onClose, mealType, date, onAdded }: AddFoodModal
       onClose={onClose}
       title={`Add to ${MEAL_LABELS[mealType]}`}
       size="lg"
-      minHeight="min-h-[600px]"
+      mobileFullscreen
+      footer={footer}
     >
       <div className="space-y-4">
-        {/* Tabs */}
-        <div className="flex gap-2 p-1 rounded-2xl bg-white/5 border border-white/10">
-          <button className={tabClass('foods')} onClick={() => setTab('foods')}>🍎 Foods</button>
-          <button className={tabClass('meals')} onClick={() => setTab('meals')}>🍽️ Saved Meals</button>
-          <button className={tabClass('quick')} onClick={() => setTab('quick')}>⚡ Quick Add</button>
+        {/* Tabs — shorter labels so they don't crowd on narrow screens */}
+        <div className="flex gap-1 p-1 rounded-2xl bg-white/5 border border-white/10">
+          <button className={tabClass('foods')} onClick={() => setTab('foods')}>
+            <span aria-hidden>🍎</span> Foods
+          </button>
+          <button className={tabClass('meals')} onClick={() => setTab('meals')}>
+            <span aria-hidden>🍽️</span> Meals
+          </button>
+          <button className={tabClass('quick')} onClick={() => setTab('quick')}>
+            <span aria-hidden>⚡</span> Quick
+          </button>
         </div>
 
         {error && (
           <p className="text-sm text-red-400 bg-red-500/10 border border-red-400/20 rounded-xl px-3 py-2">{error}</p>
         )}
 
-        {saving && (
-          <p className="text-sm text-indigo-400 text-center">Saving…</p>
+        {tab === 'foods' && (
+          <FoodPicker
+            selectedFoods={selectedFoods}
+            setSelectedFoods={setSelectedFoods}
+          />
         )}
-
-        {tab === 'foods' && <FoodPicker onAdd={handleAddFood} />}
 
         {tab === 'quick' && (
           <div className="space-y-4">
