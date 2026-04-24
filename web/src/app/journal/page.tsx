@@ -581,6 +581,11 @@ function AddFoodModal({ isOpen, onClose, mealType, date, onAdded }: AddFoodModal
       title={`Add to ${MEAL_LABELS[mealType]}`}
       size="lg"
       mobileFullscreen
+      // Floor the modal at ~80% of the viewport on tablet+ so it doesn't
+      // visibly shrink when search filters the food list down to a couple
+      // of rows. Mobile-fullscreen handles the same goal differently
+      // (forced height) — see GlassModal.
+      minHeight="sm:min-h-[80vh]"
       footer={footer}
     >
       <div className="space-y-4">

@@ -113,16 +113,21 @@ export default function GlassModal({
     'pb-[max(1rem,env(safe-area-inset-bottom))]'
   );
 
-  // Panel max-height:
-  //   - mobileFullscreen on phones uses svh (small viewport height) which
-  //     ALWAYS gives the visible amount (whereas dvh updates dynamically
-  //     and vh locks to the un-collapsed viewport). svh is the safest
-  //     bet — it never overflows the visible area.
-  //   - The calc subtracts the wrapper's vertical padding so the modal
-  //     fits inside the wrapper without the rounded corners getting clipped.
-  //   - On sm+ (tablet/desktop) we go back to a comfortable 90vh.
+  // Panel size:
+  //   - mobileFullscreen on phones uses h-[calc(...)] (NOT max-h) so the
+  //     panel ALWAYS claims the full available height regardless of how
+  //     much content is inside. This stops the modal from visibly
+  //     shrinking when you filter the food list to 1-2 results — its
+  //     overall size stays constant, and the body just shows empty space
+  //     below the list.
+  //   - svh (small viewport height) is the smallest stable visible amount
+  //     so the panel never overflows the iOS Safari URL bar / notch.
+  //     The calc subtracts the wrapper's safe-area padding.
+  //   - On sm+ (tablet/desktop) the panel goes back to max-h:90vh and
+  //     consumers can opt into a min-height via the minHeight prop for a
+  //     consistent floor (see AddFoodModal).
   const panelShape = mobileFullscreen
-    ? 'max-h-[calc(100svh-max(1rem,env(safe-area-inset-top))-max(1rem,env(safe-area-inset-bottom)))] sm:max-h-[90vh] rounded-2xl sm:rounded-3xl'
+    ? 'h-[calc(100svh-max(1rem,env(safe-area-inset-top))-max(1rem,env(safe-area-inset-bottom)))] sm:h-auto sm:max-h-[90vh] rounded-2xl sm:rounded-3xl'
     : 'max-h-[90vh] rounded-3xl';
 
   return (
