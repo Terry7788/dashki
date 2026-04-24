@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode, useEffect, useCallback } from 'react';
+import { ReactNode, useEffect, useCallback, useRef } from 'react';
 import clsx from 'clsx';
 import { X } from 'lucide-react';
 
@@ -64,33 +64,65 @@ export default function GlassModal({
     [onClose]
   );
 
+  // Remember the page's scroll position when the modal opens so we can
+  // restore it after the body-scroll-lock is lifted.
+  const savedScrollYRef = useRef(0);
+
   useEffect(() => {
     if (!isOpen) return;
     document.addEventListener('keydown', handleKeyDown);
-    // Lock scroll
-    document.body.style.overflow = 'hidden';
+
+    // ── Body scroll lock — iOS-friendly version ─────────────────────────
+    // `overflow: hidden` alone doesn't stop iOS Safari from scrolling the
+    // page behind the modal. The reliable fix is to pin the body in place
+    // with position:fixed and offset by the current scroll position so the
+    // viewport visually stays put. On unmount we undo all three styles
+    // and restore scroll. Works on iOS Safari, desktop, and Android.
+    savedScrollYRef.current = window.scrollY;
+    const body = document.body;
+    body.style.position = 'fixed';
+    body.style.top = `-${savedScrollYRef.current}px`;
+    body.style.left = '0';
+    body.style.right = '0';
+    body.style.overflow = 'hidden';
+    body.style.width = '100%';
+
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = '';
+      body.style.position = '';
+      body.style.top = '';
+      body.style.left = '';
+      body.style.right = '';
+      body.style.overflow = '';
+      body.style.width = '';
+      window.scrollTo(0, savedScrollYRef.current);
     };
   }, [isOpen, handleKeyDown]);
 
   if (!isOpen) return null;
 
-  // Outer wrapper has consistent 16px padding everywhere so the modal sits
-  // away from the screen edges — that breathing room is what stops iOS
-  // Safari's URL bar (top) and toolbar (bottom) from overlapping the
-  // header / footer. Same padding for both modes; mobileFullscreen now
-  // differs only in how the panel's max-height is computed.
-  const wrapperPadding = 'p-4 items-center justify-center';
+  // Outer wrapper padding accounts for iOS safe areas (notch + home
+  // indicator + URL/toolbar). env(safe-area-inset-*) is 0 on devices
+  // without notches, so the max(...) fallback gives at least 16px of
+  // breathing room everywhere. Without this, on iPhone 14 Pro the
+  // modal header sits underneath the notch / dynamic island.
+  const wrapperPadding = clsx(
+    'items-center justify-center',
+    'pl-4 pr-4',
+    'pt-[max(1rem,env(safe-area-inset-top))]',
+    'pb-[max(1rem,env(safe-area-inset-bottom))]'
+  );
 
-  // Panel max-height uses dvh (dynamic viewport height) on mobile so that
-  // when iOS Safari's URL bar shows/hides, the modal correctly resizes to
-  // fit the visible area — vh would lock to the un-collapsed full viewport
-  // and overflow when the URL bar is visible. The 2rem subtracts the
-  // wrapper's p-4 (16px × 2) so the modal never exceeds visible space.
+  // Panel max-height:
+  //   - mobileFullscreen on phones uses svh (small viewport height) which
+  //     ALWAYS gives the visible amount (whereas dvh updates dynamically
+  //     and vh locks to the un-collapsed viewport). svh is the safest
+  //     bet — it never overflows the visible area.
+  //   - The calc subtracts the wrapper's vertical padding so the modal
+  //     fits inside the wrapper without the rounded corners getting clipped.
+  //   - On sm+ (tablet/desktop) we go back to a comfortable 90vh.
   const panelShape = mobileFullscreen
-    ? 'max-h-[calc(100dvh-2rem)] sm:max-h-[90vh] rounded-2xl sm:rounded-3xl'
+    ? 'max-h-[calc(100svh-max(1rem,env(safe-area-inset-top))-max(1rem,env(safe-area-inset-bottom)))] sm:max-h-[90vh] rounded-2xl sm:rounded-3xl'
     : 'max-h-[90vh] rounded-3xl';
 
   return (
