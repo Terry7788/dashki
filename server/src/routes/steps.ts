@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../db';
 import { getIo } from '../socket';
+import { syncStepsHabitForToday, todayLocalIso } from '../dashko-sync';
 
 const router = Router();
 
@@ -147,6 +148,9 @@ router.post('/', (req: Request, res: Response) => {
 
         const aggregate = { id: this.lastID, date, steps: stepsNum };
         try { getIo().emit('steps-updated', aggregate); } catch (_) {}
+        if (date === todayLocalIso()) {
+          void syncStepsHabitForToday(date);
+        }
         res.status(201).json(aggregate);
       }
     );
@@ -176,6 +180,10 @@ function emitAggregateForDate(date: string) {
       try { getIo().emit('steps-updated', payload); } catch (_) {}
     }
   );
+  // If the changed date is today, push to Dashko (fire-and-forget).
+  if (date === todayLocalIso()) {
+    void syncStepsHabitForToday(date);
+  }
 }
 
 // GET /logs?date=YYYY-MM-DD — list entries for a single day (ordered oldest→newest)

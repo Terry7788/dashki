@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../db';
 import { getIo } from '../socket';
+import { syncWeightGoal } from '../dashko-sync';
 
 const router = Router();
 
@@ -93,6 +94,7 @@ router.post('/', (req: Request, res: Response) => {
             return res.status(500).json({ error: 'Failed to fetch weight entry' });
           }
           try { getIo().emit('weight-updated', entry); } catch (_) {}
+          void syncWeightGoal(weightNum);
           res.status(201).json(entry);
         }
       );

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../db';
 import { getIo } from '../socket';
+import { syncCalorieHabit, todayLocalIso } from '../dashko-sync';
 
 const router = Router();
 
@@ -166,6 +167,9 @@ router.post('/', (req: Request, res: Response) => {
             return res.status(500).json({ error: 'Failed to fetch created entry' });
           }
           try { getIo().emit('journal-entry-created', entry); } catch (_) {}
+          if (date === todayLocalIso()) {
+            void syncCalorieHabit(date);
+          }
           res.status(201).json(entry);
         }
       );
