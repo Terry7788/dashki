@@ -25,6 +25,24 @@ function dashkoConfigured(): boolean {
   return Boolean(API_URL && PAT);
 }
 
+// Log once at startup so it's obvious from Railway logs whether this instance
+// will push to Dashko or not. Important: this app is also used by other
+// people (e.g. Dashki-teela), and they should never see anything but
+// "disabled" here.
+(() => {
+  if (!dashkoConfigured()) {
+    console.log('[dashko-sync] disabled (DASHKO_API_URL and DASHKO_PAT not set)');
+    return;
+  }
+  const features: string[] = [];
+  if (STEP_HABIT_ID) features.push(`steps@>=${STEP_THRESHOLD}`);
+  if (CALORIE_HABIT_ID) features.push('calories');
+  if (WEIGHT_GOAL_ID) features.push('weight');
+  console.log(
+    `[dashko-sync] enabled target=${API_URL} features=${features.join(',') || '(none)'}`,
+  );
+})();
+
 async function callDashko(procedure: string, input: Record<string, unknown>): Promise<unknown> {
   if (!dashkoConfigured()) return null;
   const url = `${API_URL}/trpc/${procedure}`;
