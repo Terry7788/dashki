@@ -102,15 +102,16 @@ export async function syncCalorieHabit(date: string): Promise<void> {
   });
 }
 
-/** Pushes the most recent weight (rounded to nearest kg) to a Dashko count
- *  goal's currentValue. Goal target stores the target weight in kg. */
+/** Pushes the most recent weight to a Dashko weight_target goal as kg*10 (1
+ *  decimal precision). Dashko stores body weight scaled-by-10 so 83.4 kg
+ *  serialises as the integer 834 — matches what weight_target goals expect. */
 export async function syncWeightGoal(weightKg: number): Promise<void> {
   if (!WEIGHT_GOAL_ID || !dashkoConfigured()) return;
-  const rounded = Math.round(weightKg);
-  if (!Number.isFinite(rounded) || rounded <= 0) return;
+  const scaled = Math.round(weightKg * 10);
+  if (!Number.isFinite(scaled) || scaled <= 0) return;
   await callDashko('goals.setProgress', {
     goalId: WEIGHT_GOAL_ID,
-    currentValue: rounded,
+    currentValue: scaled,
   });
 }
 
