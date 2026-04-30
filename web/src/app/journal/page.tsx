@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Minus, Trash2, Pencil, Loader2, Clock, Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Minus, Trash2, Pencil, Loader2, Clock, Search, Copy, MoreHorizontal } from 'lucide-react';
 import { GlassCard, GlassButton, GlassInput, GlassModal } from '@/components/ui';
 import {
   getJournalEntries,
@@ -896,37 +896,379 @@ function EditGoalsModal({ isOpen, onClose, goals, onSave }: EditGoalsModalProps)
   );
 }
 
+// ─── Meal Picker Popover (used by copy icon and "Copy to ▸" submenu) ──────
+
+interface MealPickerPopoverProps {
+  currentMeal: MealType;
+  onPick: (target: MealType) => void;
+  onClose: () => void;
+  /** Tailwind positioning classes — defaults to anchored under the trigger */
+  positionClass?: string;
+}
+
+function MealPickerPopover({ currentMeal, onPick, onClose, positionClass }: MealPickerPopoverProps) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleMouseDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    }
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose();
+    }
+    document.addEventListener('mousedown', handleMouseDown);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleMouseDown);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      ref={ref}
+      onClick={(e) => e.stopPropagation()}
+      className={`absolute z-50 min-w-[160px] py-1 rounded-2xl bg-slate-900/95 backdrop-blur-xl border border-white/10 shadow-2xl ${positionClass ?? 'right-0 top-full mt-1'}`}
+    >
+      <p className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-white/40">
+        Copy to
+      </p>
+      {MEAL_TYPES.map((m) => (
+        <button
+          key={m}
+          type="button"
+          disabled={m === currentMeal}
+          onClick={() => onPick(m)}
+          className="w-full px-3 py-2 text-left text-sm text-white hover:bg-white/10 disabled:text-white/30 disabled:cursor-not-allowed"
+        >
+          {MEAL_LABELS[m]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─── Entry Action Menu (3-dot + right-click) ───────────────────────────────
+
+interface EntryActionMenuProps {
+  anchor: { x: number; y: number };
+  currentMeal: MealType;
+  onEdit: () => void;
+  onCopy: (target: MealType) => void;
+  onDelete: () => void;
+  onClose: () => void;
+}
+
+function EntryActionMenu({ anchor, currentMeal, onEdit, onCopy, onDelete, onClose }: EntryActionMenuProps) {
+  const [submenuOpen, setSubmenuOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleMouseDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    }
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose();
+    }
+    document.addEventListener('mousedown', handleMouseDown);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleMouseDown);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [onClose]);
+
+  // Clamp anchor so the menu stays inside the viewport.
+  const menuW = 200;
+  const menuH = 156;
+  const x = typeof window !== 'undefined' ? Math.min(anchor.x, window.innerWidth - menuW - 8) : anchor.x;
+  const y = typeof window !== 'undefined' ? Math.min(anchor.y, window.innerHeight - menuH - 8) : anchor.y;
+
+  return (
+    <div
+      ref={ref}
+      style={{ position: 'fixed', left: Math.max(8, x), top: Math.max(8, y), zIndex: 50 }}
+      className="min-w-[180px] py-1 rounded-2xl bg-slate-900/95 backdrop-blur-xl border border-white/10 shadow-2xl"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <button
+        type="button"
+        onClick={onEdit}
+        className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
+      >
+        <Pencil className="w-4 h-4 text-white/60" />
+        Edit
+      </button>
+
+      {/* Copy to ▸ submenu */}
+      <div
+        className="relative"
+        onMouseEnter={() => setSubmenuOpen(true)}
+        onMouseLeave={() => setSubmenuOpen(false)}
+      >
+        <button
+          type="button"
+          onClick={() => setSubmenuOpen((v) => !v)}
+          className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
+        >
+          <span className="flex items-center gap-2">
+            <Copy className="w-4 h-4 text-white/60" />
+            Copy to
+          </span>
+          <ChevronRight className="w-3.5 h-3.5 text-white/40" />
+        </button>
+        {submenuOpen && (
+          <div className="absolute left-full top-0 ml-1 min-w-[160px] py-1 rounded-2xl bg-slate-900/95 backdrop-blur-xl border border-white/10 shadow-2xl">
+            {MEAL_TYPES.map((m) => (
+              <button
+                key={m}
+                type="button"
+                disabled={m === currentMeal}
+                onClick={() => onCopy(m)}
+                className="w-full px-3 py-2 text-left text-sm text-white hover:bg-white/10 disabled:text-white/30 disabled:cursor-not-allowed"
+              >
+                {MEAL_LABELS[m]}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="my-1 mx-3 border-t border-white/10" />
+
+      <button
+        type="button"
+        onClick={onDelete}
+        className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-red-400 hover:bg-red-500/10"
+      >
+        <Trash2 className="w-4 h-4" />
+        Delete
+      </button>
+    </div>
+  );
+}
+
+// ─── Entry Row ─────────────────────────────────────────────────────────────
+
+interface EntryRowProps {
+  entry: JournalEntry;
+  pointerCapable: boolean;
+  onEdit: (entry: JournalEntry) => void;
+  onDelete: (id: number) => Promise<void> | void;
+  onCopy: (entry: JournalEntry, target: MealType) => Promise<void> | void;
+  onDragStartEntry: () => void;
+  onDragEndEntry: () => void;
+}
+
+function EntryRow({
+  entry,
+  pointerCapable,
+  onEdit,
+  onDelete,
+  onCopy,
+  onDragStartEntry,
+  onDragEndEntry,
+}: EntryRowProps) {
+  const [menuAnchor, setMenuAnchor] = useState<{ x: number; y: number } | null>(null);
+  const [copyOpen, setCopyOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const threeDotRef = useRef<HTMLButtonElement>(null);
+
+  function handleDragStart(e: React.DragEvent) {
+    e.dataTransfer.setData('text/plain', String(entry.id));
+    e.dataTransfer.effectAllowed = 'move';
+    setDragging(true);
+    onDragStartEntry();
+  }
+  function handleDragEnd() {
+    setDragging(false);
+    onDragEndEntry();
+  }
+
+  function handleContextMenu(e: React.MouseEvent) {
+    e.preventDefault();
+    setCopyOpen(false);
+    setMenuAnchor({ x: e.clientX, y: e.clientY });
+  }
+
+  function openMenuFromButton() {
+    const rect = threeDotRef.current?.getBoundingClientRect();
+    if (rect) {
+      setCopyOpen(false);
+      setMenuAnchor({ x: rect.left, y: rect.bottom + 4 });
+    }
+  }
+
+  async function handleDelete() {
+    setDeleting(true);
+    try {
+      await onDelete(entry.id);
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function handleCopy(target: MealType) {
+    setCopyOpen(false);
+    setMenuAnchor(null);
+    await onCopy(entry, target);
+  }
+
+  return (
+    <div
+      draggable={pointerCapable}
+      onDragStart={pointerCapable ? handleDragStart : undefined}
+      onDragEnd={pointerCapable ? handleDragEnd : undefined}
+      onContextMenu={handleContextMenu}
+      className={`flex items-center gap-2 px-4 py-3 rounded-2xl bg-white/5 border border-white/10 group transition-opacity ${
+        dragging ? 'opacity-40' : ''
+      } ${pointerCapable ? 'cursor-grab active:cursor-grabbing' : ''}`}
+    >
+      <button
+        type="button"
+        onClick={() => onEdit(entry)}
+        className="flex-1 text-left min-w-0 cursor-pointer"
+      >
+        <p className="text-sm font-medium text-white truncate">{entry.food_name_snapshot}</p>
+        <p className="text-xs text-white/50">
+          {entry.servings} serving{entry.servings !== 1 ? 's' : ''} · {entry.calories_snapshot} kcal · {entry.protein_snapshot}g protein
+        </p>
+      </button>
+
+      {/* Copy icon → opens meal picker directly */}
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => { setMenuAnchor(null); setCopyOpen((v) => !v); }}
+          className="p-1.5 rounded-xl text-white/40 hover:text-indigo-300 hover:bg-indigo-500/10 transition-all duration-200 opacity-60 group-hover:opacity-100"
+          aria-label="Copy to another meal"
+          title="Copy to another meal"
+        >
+          <Copy className="w-4 h-4" />
+        </button>
+        {copyOpen && (
+          <MealPickerPopover
+            currentMeal={entry.meal_type}
+            onPick={handleCopy}
+            onClose={() => setCopyOpen(false)}
+          />
+        )}
+      </div>
+
+      {/* 3-dot icon → opens action menu */}
+      <button
+        ref={threeDotRef}
+        type="button"
+        onClick={openMenuFromButton}
+        disabled={deleting}
+        className="p-1.5 rounded-xl text-white/40 hover:text-white hover:bg-white/10 transition-all duration-200 opacity-60 group-hover:opacity-100 disabled:opacity-30"
+        aria-label="More actions"
+        title="More actions"
+      >
+        {deleting ? (
+          <Loader2 className="w-4 h-4 animate-spin" />
+        ) : (
+          <MoreHorizontal className="w-4 h-4" />
+        )}
+      </button>
+
+      {menuAnchor && (
+        <EntryActionMenu
+          anchor={menuAnchor}
+          currentMeal={entry.meal_type}
+          onEdit={() => { setMenuAnchor(null); onEdit(entry); }}
+          onCopy={(target) => { handleCopy(target); }}
+          onDelete={() => { setMenuAnchor(null); handleDelete(); }}
+          onClose={() => setMenuAnchor(null)}
+        />
+      )}
+    </div>
+  );
+}
+
 // ─── Meal Section ──────────────────────────────────────────────────────────
 
 interface MealSectionProps {
   type: MealType;
   entries: JournalEntry[];
-  date: string;
-  onAdded: (entry: JournalEntry) => void;
+  pointerCapable: boolean;
   onDeleted: (id: number) => void;
   onEditRequest: (entry: JournalEntry) => void;
   onRequestAdd: (mealType: MealType) => void;
+  onCopyEntry: (entry: JournalEntry, target: MealType) => Promise<void> | void;
+  onMoveEntry: (id: number, target: MealType) => Promise<void> | void;
+  /** Set true while ANY drag is active so other sections can highlight on hover */
+  draggingActive: boolean;
+  onDragStartEntry: () => void;
+  onDragEndEntry: () => void;
 }
 
-function MealSection({ type, entries, date, onAdded, onDeleted, onEditRequest, onRequestAdd }: MealSectionProps) {
+function MealSection({
+  type,
+  entries,
+  pointerCapable,
+  onDeleted,
+  onEditRequest,
+  onRequestAdd,
+  onCopyEntry,
+  onMoveEntry,
+  draggingActive,
+  onDragStartEntry,
+  onDragEndEntry,
+}: MealSectionProps) {
   const [collapsed, setCollapsed] = useState(false);
-  const [deleting, setDeleting] = useState<number | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const dragCounter = useRef(0);
 
   const totalCal = entries.reduce((a, e) => a + e.calories_snapshot, 0);
   const totalPro = entries.reduce((a, e) => a + e.protein_snapshot, 0);
 
   async function handleDelete(id: number) {
-    setDeleting(id);
     try {
       await deleteJournalEntry(id);
       onDeleted(id);
-    } catch { /* ignore */ } finally {
-      setDeleting(null);
+    } catch { /* ignore */ }
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    if (!pointerCapable) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  }
+  function handleDragEnter(e: React.DragEvent) {
+    if (!pointerCapable) return;
+    e.preventDefault();
+    dragCounter.current += 1;
+    setDragOver(true);
+  }
+  function handleDragLeave() {
+    if (!pointerCapable) return;
+    dragCounter.current = Math.max(0, dragCounter.current - 1);
+    if (dragCounter.current === 0) setDragOver(false);
+  }
+  async function handleDrop(e: React.DragEvent) {
+    if (!pointerCapable) return;
+    e.preventDefault();
+    dragCounter.current = 0;
+    setDragOver(false);
+    const id = parseInt(e.dataTransfer.getData('text/plain'), 10);
+    if (Number.isFinite(id)) {
+      await onMoveEntry(id, type);
     }
   }
 
   return (
-    <GlassCard padding={false} className="overflow-hidden">
+    <GlassCard
+      padding={false}
+      className={`overflow-hidden transition-all duration-150 ${
+        dragOver
+          ? 'ring-2 ring-indigo-400/70 bg-indigo-500/5'
+          : draggingActive
+            ? 'ring-1 ring-white/15'
+            : ''
+      }`}
+    >
       {/* Header */}
       <button
         onClick={() => setCollapsed(!collapsed)}
@@ -946,37 +1288,30 @@ function MealSection({ type, entries, date, onAdded, onDeleted, onEditRequest, o
       </button>
 
       {!collapsed && (
-        <div className="px-5 pb-4 space-y-2">
+        <div
+          className="px-5 pb-4 space-y-2"
+          onDragOver={handleDragOver}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
           {entries.length === 0 && (
-            <p className="text-sm text-white/30 text-center py-2">Nothing logged yet</p>
+            <p className="text-sm text-white/30 text-center py-2">
+              {dragOver ? `Drop to move here` : 'Nothing logged yet'}
+            </p>
           )}
 
           {entries.map((entry) => (
-            <div
+            <EntryRow
               key={entry.id}
-              className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-white/5 border border-white/10 group"
-            >
-              <button
-                onClick={() => onEditRequest(entry)}
-                className="flex-1 text-left min-w-0"
-              >
-                <p className="text-sm font-medium text-white truncate">{entry.food_name_snapshot}</p>
-                <p className="text-xs text-white/50">
-                  {entry.servings} serving{entry.servings !== 1 ? 's' : ''} · {entry.calories_snapshot} kcal · {entry.protein_snapshot}g protein
-                </p>
-              </button>
-              <button
-                onClick={() => handleDelete(entry.id)}
-                disabled={deleting === entry.id}
-                className="p-1.5 rounded-xl text-white/30 hover:text-red-400 hover:bg-red-500/10 transition-all duration-200 opacity-0 group-hover:opacity-100 disabled:opacity-50"
-              >
-                {deleting === entry.id ? (
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white/70 rounded-full animate-spin" />
-                ) : (
-                  <Trash2 className="w-4 h-4" />
-                )}
-              </button>
-            </div>
+              entry={entry}
+              pointerCapable={pointerCapable}
+              onEdit={onEditRequest}
+              onDelete={handleDelete}
+              onCopy={onCopyEntry}
+              onDragStartEntry={onDragStartEntry}
+              onDragEndEntry={onDragEndEntry}
+            />
           ))}
 
           <button
@@ -987,8 +1322,6 @@ function MealSection({ type, entries, date, onAdded, onDeleted, onEditRequest, o
           </button>
         </div>
       )}
-
-      {/* REMOVED: AddFoodModal was here - now rendered at page level */}
     </GlassCard>
   );
 }
@@ -1006,6 +1339,15 @@ export default function JournalPage() {
   const [goals, setGoals] = useState(DEFAULT_GOALS);
   const [goalsModalOpen, setGoalsModalOpen] = useState(false);
   const [addMealType, setAddMealType] = useState<MealType | null>(null);
+  const [pointerCapable, setPointerCapable] = useState(false);
+  const [draggingActive, setDraggingActive] = useState(false);
+
+  // Detect hover-capable input (mouse/trackpad) to gate drag-and-drop.
+  // Touch devices fall back to the 3-dot menu / copy button.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setPointerCapable(window.matchMedia('(hover: hover)').matches);
+  }, []);
 
   // Load goals from API
   useEffect(() => {
@@ -1068,6 +1410,41 @@ export default function JournalPage() {
   function handleEntryUpdated(updated: JournalEntry) {
     setEntries((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
     setEditEntry(null);
+  }
+
+  // Duplicate an entry into another meal on the same day.
+  async function handleEntryCopy(entry: JournalEntry, target: MealType) {
+    setError('');
+    try {
+      const newEntry = await addJournalEntry({
+        date: entry.date,
+        meal_type: target,
+        food_id: entry.food_id ?? undefined,
+        food_name_snapshot: entry.food_name_snapshot,
+        servings: entry.servings,
+        calories_snapshot: entry.calories_snapshot,
+        protein_snapshot: entry.protein_snapshot,
+      });
+      handleEntryAdded(newEntry);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to copy entry');
+    }
+  }
+
+  // Move an entry to a different meal section (drag/drop).
+  // Optimistic update with rollback on failure.
+  async function handleEntryMove(id: number, target: MealType) {
+    const current = entries.find((e) => e.id === id);
+    if (!current || current.meal_type === target) return;
+    const previous = current;
+    setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, meal_type: target } : e)));
+    try {
+      const updated = await updateJournalEntry(id, { meal_type: target });
+      setEntries((prev) => prev.map((e) => (e.id === id ? updated : e)));
+    } catch (e: unknown) {
+      setEntries((prev) => prev.map((entry) => (entry.id === id ? previous : entry)));
+      setError(e instanceof Error ? e.message : 'Failed to move entry');
+    }
   }
 
   // Totals
@@ -1248,11 +1625,15 @@ export default function JournalPage() {
               key={mealType}
               type={mealType}
               entries={byMeal[mealType]}
-              date={dateStr}
-              onAdded={handleEntryAdded}
+              pointerCapable={pointerCapable}
               onDeleted={handleEntryDeleted}
               onEditRequest={setEditEntry}
               onRequestAdd={(type) => setAddMealType(type)}
+              onCopyEntry={handleEntryCopy}
+              onMoveEntry={handleEntryMove}
+              draggingActive={draggingActive}
+              onDragStartEntry={() => setDraggingActive(true)}
+              onDragEndEntry={() => setDraggingActive(false)}
             />
           ))}
         </div>
