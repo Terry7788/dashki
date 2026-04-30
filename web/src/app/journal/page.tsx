@@ -939,19 +939,27 @@ function EntryActionMenu({ anchor, currentMeal, onEdit, onCopy, onDelete, onClos
   // the card instead of the viewport).
   if (typeof document === 'undefined') return null;
 
+  // Shared styling tokens — match the app's "Glass" design language
+  // (similar tone to GlassCard: translucent dark surface, soft border, heavy blur).
+  const surfaceClass =
+    'min-w-[180px] p-1 rounded-2xl bg-[#11151b]/95 backdrop-blur-2xl border border-white/[0.12] shadow-2xl shadow-black/40';
+  const itemBase =
+    'w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-sm text-white transition-colors duration-150';
+  const itemHover = 'hover:bg-white/[0.08]';
+
   return createPortal(
     <div
       ref={ref}
       style={{ position: 'fixed', left: Math.max(8, x), top: Math.max(8, y), zIndex: 50 }}
-      className="min-w-[180px] py-1 rounded-2xl bg-slate-900/95 backdrop-blur-xl border border-white/10 shadow-2xl"
+      className={surfaceClass}
       onClick={(e) => e.stopPropagation()}
     >
       <button
         type="button"
         onClick={onEdit}
-        className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
+        className={`${itemBase} ${itemHover}`}
       >
-        <Pencil className="w-4 h-4 text-white/60" />
+        <Pencil className="w-4 h-4 text-white/55" />
         Edit
       </button>
 
@@ -964,23 +972,23 @@ function EntryActionMenu({ anchor, currentMeal, onEdit, onCopy, onDelete, onClos
         <button
           type="button"
           onClick={() => setSubmenuOpen((v) => !v)}
-          className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
+          className={`${itemBase} ${itemHover} justify-between`}
         >
-          <span className="flex items-center gap-2">
-            <Copy className="w-4 h-4 text-white/60" />
+          <span className="flex items-center gap-2.5">
+            <Copy className="w-4 h-4 text-white/55" />
             Copy to
           </span>
           <ChevronRight className="w-3.5 h-3.5 text-white/40" />
         </button>
         {submenuOpen && (
-          <div className="absolute left-full top-0 ml-1 min-w-[160px] py-1 rounded-2xl bg-slate-900/95 backdrop-blur-xl border border-white/10 shadow-2xl">
+          <div className={`absolute left-full top-0 ml-1 ${surfaceClass}`}>
             {MEAL_TYPES.map((m) => (
               <button
                 key={m}
                 type="button"
                 disabled={m === currentMeal}
                 onClick={() => onCopy(m)}
-                className="w-full px-3 py-2 text-left text-sm text-white hover:bg-white/10 disabled:text-white/30 disabled:cursor-not-allowed"
+                className={`${itemBase} ${itemHover} disabled:text-white/25 disabled:cursor-not-allowed disabled:hover:bg-transparent`}
               >
                 {MEAL_LABELS[m]}
               </button>
@@ -989,12 +997,12 @@ function EntryActionMenu({ anchor, currentMeal, onEdit, onCopy, onDelete, onClos
         )}
       </div>
 
-      <div className="my-1 mx-3 border-t border-white/10" />
+      <div className="my-1 mx-2 border-t border-white/[0.08]" />
 
       <button
         type="button"
         onClick={onDelete}
-        className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-red-400 hover:bg-red-500/10"
+        className={`${itemBase} text-red-300 hover:bg-red-500/15 hover:text-red-200`}
       >
         <Trash2 className="w-4 h-4" />
         Delete
