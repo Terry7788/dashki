@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Dashki is a personal health & productivity dashboard. It tracks food/nutrition (journal), weight, steps, workouts, todos, meals, and a calendar. The app runs as a Next.js frontend talking to an Express/SQLite backend.
+Dashki is a personal health dashboard. It tracks food/nutrition (journal), weight, steps, meals, and a calendar. The app runs as a Next.js frontend talking to an Express/SQLite backend.
 
 ---
 

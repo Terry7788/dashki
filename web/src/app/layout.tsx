@@ -12,7 +12,7 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: 'Dashki — Personal Life Dashboard',
   description:
-    'Track your nutrition, fitness, todos, and more — all in one beautiful place.',
+    'Track your nutrition, weight, and steps — all in one beautiful place.',
   manifest: '/manifest.json',
   icons: {
     icon: '/web/favicon.ico',

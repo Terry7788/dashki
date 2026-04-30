@@ -1,7 +1,7 @@
 {
   "name": "Dashki",
   "short_name": "Dashki",
-  "description": "Personal Life Dashboard - Track nutrition, fitness, todos, and more",
+  "description": "Personal Life Dashboard - Track nutrition, weight, and steps",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#111111",

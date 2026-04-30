@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { GlassCard } from '@/components/ui';
-import { getTodos, getJournalEntries, getWeightEntries, getSteps } from '@/lib/api';
-import type { Todo, JournalEntry, WeightEntry, StepEntry } from '@/lib/types';
-import { ChevronLeft, ChevronRight, CheckSquare, Flame, Scale, Footprints } from 'lucide-react';
+import { getJournalEntries, getWeightEntries, getSteps } from '@/lib/api';
+import type { JournalEntry, WeightEntry, StepEntry } from '@/lib/types';
+import { ChevronLeft, ChevronRight, Flame, Scale, Footprints } from 'lucide-react';
 import clsx from 'clsx';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -84,7 +84,6 @@ function DayCell({
   isCurrentMonth,
   isToday,
   isSelected,
-  hasTodo,
   caloriesForCell,
   proteinForCell,
   stepsForCell,
@@ -94,7 +93,6 @@ function DayCell({
   isCurrentMonth: boolean;
   isToday: boolean;
   isSelected: boolean;
-  hasTodo: boolean;
   caloriesForCell: number | null;
   proteinForCell: number | null;
   stepsForCell: number | null;
@@ -148,20 +146,6 @@ function DayCell({
           )}
         </div>
       )}
-
-      {/* Todo dot (only when no health labels above) */}
-      {hasTodo && !hasData && (
-        <div className="flex gap-0.5 mt-0.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 opacity-80" />
-        </div>
-      )}
-
-      {/* When health labels are present, show todo as small corner dot */}
-      {hasTodo && hasData && (
-        <div className="absolute top-1 right-1">
-          <span className="w-1 h-1 rounded-full bg-indigo-400 opacity-80 inline-block" />
-        </div>
-      )}
     </button>
   );
 }
@@ -170,14 +154,12 @@ function DayCell({
 
 function SidePanel({
   selectedDay,
-  todos,
   caloriesForDay,
   proteinForDay,
   weightForDay,
   stepsForDay,
 }: {
   selectedDay: Date;
-  todos: Todo[];
   caloriesForDay: number | null;
   proteinForDay: number | null;
   weightForDay: number | null;
@@ -189,15 +171,18 @@ function SidePanel({
     month: 'long',
   });
 
-  const dayStr = toLocalDateStr(selectedDay);
-  const dayTodos = todos.filter((t) => t.due_date === dayStr);
+  const hasAny =
+    caloriesForDay !== null ||
+    proteinForDay !== null ||
+    weightForDay !== null ||
+    stepsForDay !== null;
 
   return (
     <div className="space-y-4">
       <h2 className="text-lg font-semibold text-white">{dayLabel}</h2>
 
       {/* Health summary for this day */}
-      {(caloriesForDay !== null || proteinForDay !== null || weightForDay !== null || stepsForDay !== null) && (
+      {hasAny ? (
         <div>
           <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-2 flex items-center gap-1.5">
             <Flame className="w-3.5 h-3.5" /> Health
@@ -257,41 +242,9 @@ function SidePanel({
             )}
           </div>
         </div>
+      ) : (
+        <p className="text-white/30 text-sm">No data logged this day.</p>
       )}
-
-      {/* Todos for this day */}
-      <div>
-        <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-          <CheckSquare className="w-3.5 h-3.5" /> Tasks due
-        </h3>
-        {dayTodos.length === 0 ? (
-          <p className="text-white/30 text-sm">No tasks due this day.</p>
-        ) : (
-          <div className="space-y-2">
-            {dayTodos.map((todo) => (
-              <GlassCard key={todo.id} padding={false} className="px-3 py-2.5">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={clsx(
-                      'w-2 h-2 rounded-full shrink-0',
-                      todo.completed ? 'bg-white/20' : 'bg-indigo-400'
-                    )}
-                  />
-                  <span
-                    className={clsx(
-                      'text-sm',
-                      todo.completed ? 'line-through text-white/30' : 'text-white'
-                    )}
-                  >
-                    {todo.title}
-                  </span>
-                </div>
-              </GlassCard>
-            ))}
-          </div>
-        )}
-      </div>
-
     </div>
   );
 }
@@ -306,8 +259,7 @@ export default function CalendarPage() {
     new Date(today.getFullYear(), today.getMonth(), 1)
   );
   const [selectedDay, setSelectedDay] = useState(today);
-  const [todos, setTodos] = useState<Todo[]>([]);
-  const [todosLoading, setTodosLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
   const [weightEntries, setWeightEntries] = useState<WeightEntry[]>([]);
   const [stepEntries, setStepEntries] = useState<StepEntry[]>([]);
@@ -315,28 +267,17 @@ export default function CalendarPage() {
   const year = currentMonth.getFullYear();
   const month = currentMonth.getMonth();
 
-  // ── Fetch todos ───────────────────────────────────────────────────────────
-
-  useEffect(() => {
-    setTodosLoading(true);
-    getTodos()
-      .then(setTodos)
-      .catch(console.error)
-      .finally(() => setTodosLoading(false));
-  }, []);
-
   // ── Fetch journal entries + steps for the visible month ───────────────────
 
   useEffect(() => {
+    setLoading(true);
     const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`;
     const lastDay = new Date(year, month + 1, 0).getDate();
     const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-    getJournalEntries({ startDate, endDate })
-      .then(setJournalEntries)
-      .catch(console.error);
-    getSteps({ startDate, endDate })
-      .then(setStepEntries)
-      .catch(console.error);
+    Promise.allSettled([
+      getJournalEntries({ startDate, endDate }).then(setJournalEntries),
+      getSteps({ startDate, endDate }).then(setStepEntries),
+    ]).finally(() => setLoading(false));
   }, [year, month]);
 
   // ── Fetch weight entries (all, once) ──────────────────────────────────────
@@ -381,13 +322,6 @@ export default function CalendarPage() {
 
   const cells = buildCalendarGrid(year, month);
 
-  // Build a set of due-date strings for the current month's todos
-  const todoDateSet = new Set(
-    todos
-      .filter((t) => t.due_date)
-      .map((t) => t.due_date as string)
-  );
-
   // Month navigation
   function prevMonth() {
     setCurrentMonth(new Date(year, month - 1, 1));
@@ -431,7 +365,7 @@ export default function CalendarPage() {
                 </button>
               </div>
 
-              {todosLoading ? (
+              {loading ? (
                 <CalendarSkeleton />
               ) : (
                 <>
@@ -458,7 +392,6 @@ export default function CalendarPage() {
                           isCurrentMonth={isCurrentMonth}
                           isToday={isSameDay(date, today)}
                           isSelected={isSameDay(date, selectedDay)}
-                          hasTodo={todoDateSet.has(dateStr)}
                           caloriesForCell={caloriesByDate.get(dateStr) ?? null}
                           proteinForCell={proteinByDate.get(dateStr) ?? null}
                           stepsForCell={stepsByDate.get(dateStr) ?? null}
@@ -482,10 +415,6 @@ export default function CalendarPage() {
                       <span className="text-sky-400 font-semibold">steps</span>
                     </div>
                     <div className="flex items-center gap-1.5 text-xs text-white/40">
-                      <span className="w-2 h-2 rounded-full bg-indigo-400" />
-                      Task due
-                    </div>
-                    <div className="flex items-center gap-1.5 text-xs text-white/40">
                       <span className="w-3 h-3 rounded-full ring-1 ring-indigo-400/60 inline-block" />
                       Today
                     </div>
@@ -500,7 +429,6 @@ export default function CalendarPage() {
             <GlassCard>
               <SidePanel
                 selectedDay={selectedDay}
-                todos={todos}
                 caloriesForDay={caloriesByDate.get(toLocalDateStr(selectedDay)) ?? null}
                 proteinForDay={proteinByDate.get(toLocalDateStr(selectedDay)) ?? null}
                 weightForDay={weightByDate.get(toLocalDateStr(selectedDay)) ?? null}
