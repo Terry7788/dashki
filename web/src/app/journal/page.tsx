@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronLeft, ChevronRight, Plus, Minus, Trash2, Pencil, Loader2, Clock, Search, Copy, MoreHorizontal } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Minus, Trash2, Pencil, Loader2, Clock, Search, Copy, MoreHorizontal, Move } from 'lucide-react';
 import { GlassCard, GlassButton, GlassInput, GlassModal } from '@/components/ui';
 import {
   getJournalEntries,
@@ -899,20 +899,88 @@ function EditGoalsModal({ isOpen, onClose, goals, onSave }: EditGoalsModalProps)
 
 // ─── Entry Action Menu (3-dot + right-click) ───────────────────────────────
 
+// Shared styling tokens for the action menu surface and its items. Kept at
+// module scope so the menu and any submenus pull from the same source.
+const MENU_SURFACE_CLASS =
+  'min-w-[180px] p-1 rounded-2xl bg-[#1a1a1a]/95 backdrop-blur-xl border border-white/[0.08] shadow-2xl shadow-black/40';
+const MENU_ITEM_BASE =
+  'w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-sm text-white transition-colors duration-150';
+const MENU_ITEM_HOVER = 'hover:bg-white/[0.08]';
+
+// Submenu of meal types — used by both "Move to" and "Copy to". Picks a
+// destination meal and fires `onPick`. Auto-flips to the left when there
+// isn't enough room on the right.
+interface MealSubmenuProps {
+  icon: typeof Move;
+  label: string;
+  currentMeal: MealType;
+  onPick: (target: MealType) => void;
+}
+
+function MealSubmenu({ icon: Icon, label, currentMeal, onPick }: MealSubmenuProps) {
+  const [open, setOpen] = useState(false);
+  const [flip, setFlip] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open || !triggerRef.current || typeof window === 'undefined') return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    setFlip(rect.right + 180 + 8 > window.innerWidth);
+  }, [open]);
+
+  return (
+    <div
+      className="relative"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={`${MENU_ITEM_BASE} ${MENU_ITEM_HOVER} justify-between`}
+      >
+        <span className="flex items-center gap-2.5">
+          <Icon className="w-4 h-4 text-white/55" />
+          {label}
+        </span>
+        <ChevronRight className="w-3.5 h-3.5 text-white/40" />
+      </button>
+      {open && (
+        <div
+          className={`absolute top-0 ${
+            flip ? 'right-full mr-1' : 'left-full ml-1'
+          } ${MENU_SURFACE_CLASS}`}
+        >
+          {MEAL_TYPES.map((m) => (
+            <button
+              key={m}
+              type="button"
+              disabled={m === currentMeal}
+              onClick={() => onPick(m)}
+              className={`${MENU_ITEM_BASE} ${MENU_ITEM_HOVER} disabled:text-white/25 disabled:cursor-not-allowed disabled:hover:bg-transparent`}
+            >
+              {MEAL_LABELS[m]}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface EntryActionMenuProps {
   anchor: { x: number; y: number };
   currentMeal: MealType;
   onEdit: () => void;
+  onMove: (target: MealType) => void;
   onCopy: (target: MealType) => void;
   onDelete: () => void;
   onClose: () => void;
 }
 
-function EntryActionMenu({ anchor, currentMeal, onEdit, onCopy, onDelete, onClose }: EntryActionMenuProps) {
-  const [submenuOpen, setSubmenuOpen] = useState(false);
-  const [submenuFlip, setSubmenuFlip] = useState(false);
+function EntryActionMenu({ anchor, currentMeal, onEdit, onMove, onCopy, onDelete, onClose }: EntryActionMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
-  const submenuTriggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     function handleMouseDown(e: MouseEvent) {
@@ -929,17 +997,9 @@ function EntryActionMenu({ anchor, currentMeal, onEdit, onCopy, onDelete, onClos
     };
   }, [onClose]);
 
-  // Flip the Copy-to submenu to the left if there isn't room on the right.
-  useEffect(() => {
-    if (!submenuOpen || !submenuTriggerRef.current || typeof window === 'undefined') return;
-    const rect = submenuTriggerRef.current.getBoundingClientRect();
-    const submenuW = 180;
-    setSubmenuFlip(rect.right + submenuW + 8 > window.innerWidth);
-  }, [submenuOpen]);
-
   // Clamp anchor so the menu stays inside the viewport.
   const menuW = 200;
-  const menuH = 156;
+  const menuH = 196;
   const x = typeof window !== 'undefined' ? Math.min(anchor.x, window.innerWidth - menuW - 8) : anchor.x;
   const y = typeof window !== 'undefined' ? Math.min(anchor.y, window.innerHeight - menuH - 8) : anchor.y;
 
@@ -949,75 +1009,31 @@ function EntryActionMenu({ anchor, currentMeal, onEdit, onCopy, onDelete, onClos
   // the card instead of the viewport).
   if (typeof document === 'undefined') return null;
 
-  // Match GlassModal's dark panel tone (#1a1a1a/95) so the menu reads as part
-  // of the same surface family as the modals and cards.
-  const surfaceClass =
-    'min-w-[180px] p-1 rounded-2xl bg-[#1a1a1a]/95 backdrop-blur-xl border border-white/[0.08] shadow-2xl shadow-black/40';
-  const itemBase =
-    'w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-sm text-white transition-colors duration-150';
-  const itemHover = 'hover:bg-white/[0.08]';
-
   return createPortal(
     <div
       ref={ref}
       style={{ position: 'fixed', left: Math.max(8, x), top: Math.max(8, y), zIndex: 50 }}
-      className={surfaceClass}
+      className={MENU_SURFACE_CLASS}
       onClick={(e) => e.stopPropagation()}
     >
       <button
         type="button"
         onClick={onEdit}
-        className={`${itemBase} ${itemHover}`}
+        className={`${MENU_ITEM_BASE} ${MENU_ITEM_HOVER}`}
       >
         <Pencil className="w-4 h-4 text-white/55" />
         Edit
       </button>
 
-      {/* Copy to ▸ submenu */}
-      <div
-        className="relative"
-        onMouseEnter={() => setSubmenuOpen(true)}
-        onMouseLeave={() => setSubmenuOpen(false)}
-      >
-        <button
-          ref={submenuTriggerRef}
-          type="button"
-          onClick={() => setSubmenuOpen((v) => !v)}
-          className={`${itemBase} ${itemHover} justify-between`}
-        >
-          <span className="flex items-center gap-2.5">
-            <Copy className="w-4 h-4 text-white/55" />
-            Copy to
-          </span>
-          <ChevronRight className="w-3.5 h-3.5 text-white/40" />
-        </button>
-        {submenuOpen && (
-          <div
-            className={`absolute top-0 ${
-              submenuFlip ? 'right-full mr-1' : 'left-full ml-1'
-            } ${surfaceClass}`}
-          >
-            {MEAL_TYPES.map((m) => (
-              <button
-                key={m}
-                type="button"
-                disabled={m === currentMeal}
-                onClick={() => onCopy(m)}
-                className={`${itemBase} ${itemHover} disabled:text-white/25 disabled:cursor-not-allowed disabled:hover:bg-transparent`}
-              >
-                {MEAL_LABELS[m]}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+      <MealSubmenu icon={Move} label="Move to" currentMeal={currentMeal} onPick={onMove} />
+      <MealSubmenu icon={Copy} label="Copy to" currentMeal={currentMeal} onPick={onCopy} />
 
       <div className="my-1 mx-2 border-t border-white/[0.08]" />
 
       <button
         type="button"
         onClick={onDelete}
-        className={`${itemBase} text-red-300 hover:bg-red-500/15 hover:text-red-200`}
+        className={`${MENU_ITEM_BASE} text-red-300 hover:bg-red-500/15 hover:text-red-200`}
       >
         <Trash2 className="w-4 h-4" />
         Delete
@@ -1035,6 +1051,7 @@ interface EntryRowProps {
   onEdit: (entry: JournalEntry) => void;
   onDelete: (id: number) => Promise<void> | void;
   onCopy: (entry: JournalEntry, target: MealType) => Promise<void> | void;
+  onMove: (id: number, target: MealType) => Promise<void> | void;
   onDragStartEntry: () => void;
   onDragEndEntry: () => void;
 }
@@ -1045,6 +1062,7 @@ function EntryRow({
   onEdit,
   onDelete,
   onCopy,
+  onMove,
   onDragStartEntry,
   onDragEndEntry,
 }: EntryRowProps) {
@@ -1086,6 +1104,11 @@ function EntryRow({
   async function handleCopy(target: MealType) {
     setMenuAnchor(null);
     await onCopy(entry, target);
+  }
+
+  async function handleMove(target: MealType) {
+    setMenuAnchor(null);
+    await onMove(entry.id, target);
   }
 
   return (
@@ -1131,6 +1154,7 @@ function EntryRow({
           anchor={menuAnchor}
           currentMeal={entry.meal_type}
           onEdit={() => { setMenuAnchor(null); onEdit(entry); }}
+          onMove={(target) => { handleMove(target); }}
           onCopy={(target) => { handleCopy(target); }}
           onDelete={() => { setMenuAnchor(null); handleDelete(); }}
           onClose={() => setMenuAnchor(null)}
@@ -1262,6 +1286,7 @@ function MealSection({
               onEdit={onEditRequest}
               onDelete={handleDelete}
               onCopy={onCopyEntry}
+              onMove={onMoveEntry}
               onDragStartEntry={onDragStartEntry}
               onDragEndEntry={onDragEndEntry}
             />
