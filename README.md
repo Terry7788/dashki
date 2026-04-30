@@ -19,8 +19,6 @@ Personal life dashboard
 | Food Database   | `/foods` | `/api/foods`          | ✅ Full |
 | Saved Meals     | `/meals` | `/api/meals/saved`    | ✅ Full |
 | Current Meal    | (shared) | `/api/meals/current` | ✅ Full |
-| Gym Tracker     | `/gym` | `/api/gym`              | ✅ Full |
-| To-Do List      | `/todo` | `/api/todos`           | ✅ Full |
 | Calendar        | `/calendar` | `/api/auth`, `/api/calendar` | ✅ UI (Google sync TODO) |
 | Weight Tracker  | `/weight` | `/api/weight`         | ✅ Full |
 | Step Counter    | `/steps` | `/api/steps`           | ✅ Full |
@@ -81,8 +79,6 @@ Dashki/
         currentMeal.ts
         journal.ts
         steps.ts
-        todo.ts
-        gym.ts
         weight.ts
         calendar.ts
     package.json
@@ -96,8 +92,6 @@ Dashki/
         foods/page.tsx  Full CRUD food database
         journal/page.tsx Food journal with daily nutrition tracker
         meals/page.tsx  Saved meal templates
-        gym/page.tsx    Workout session tracker
-        todo/page.tsx   To-do list
         calendar/page.tsx Calendar view (Google sync planned)
         weight/page.tsx Weight log + line chart
         steps/page.tsx  Step counter + bar chart
@@ -155,25 +149,6 @@ Dashki/
 - `GET /api/steps?date=&startDate=&endDate=`
 - `GET /api/steps/today`
 - `POST /api/steps` — upsert `{ date, steps }`
-
-### Todos
-- `GET /api/todos?upcoming=&completed=`
-- `POST /api/todos` — `{ title, due_date? }`
-- `PUT /api/todos/:id`
-- `DELETE /api/todos/:id`
-
-### Gym
-- `GET /api/gym?startDate=&endDate=`
-- `POST /api/gym`
-- `PUT /api/gym/:id`
-- `DELETE /api/gym/:id`
-- `POST /api/gym/:id/exercises`
-- `PUT /api/gym/exercises/:id`
-- `DELETE /api/gym/exercises/:id`
-- `POST /api/gym/exercises/:id/sets`
-- `PUT /api/gym/sets/:id`
-- `DELETE /api/gym/sets/:id`
-- `GET /api/gym/sessions/:id` — full session with exercises + sets
 
 ### Weight
 - `GET /api/weight?startDate=&endDate=&limit=`

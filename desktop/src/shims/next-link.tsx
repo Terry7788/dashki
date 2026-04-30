@@ -17,9 +17,9 @@ interface NextLinkShimProps
 /**
  * Shim for `next/link` in the desktop Electron app.
  *
- * The web app's pages (e.g. `web/src/app/page.tsx`) use `<Link href="/gym">`
+ * The web app's pages (e.g. `web/src/app/page.tsx`) use `<Link href="/foods">`
  * for in-app navigation. The desktop app has no Next.js router — it has tabs.
- * Letting an `<a href="/gym">` click through would navigate the Electron
+ * Letting an `<a href="/foods">` click through would navigate the Electron
  * BrowserWindow away from our bundle. So clicks here are intercepted
  * (preventDefault) but the visual `<a>` still renders for layout fidelity.
  */
