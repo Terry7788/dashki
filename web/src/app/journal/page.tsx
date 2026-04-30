@@ -910,7 +910,9 @@ interface EntryActionMenuProps {
 
 function EntryActionMenu({ anchor, currentMeal, onEdit, onCopy, onDelete, onClose }: EntryActionMenuProps) {
   const [submenuOpen, setSubmenuOpen] = useState(false);
+  const [submenuFlip, setSubmenuFlip] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const submenuTriggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     function handleMouseDown(e: MouseEvent) {
@@ -927,6 +929,14 @@ function EntryActionMenu({ anchor, currentMeal, onEdit, onCopy, onDelete, onClos
     };
   }, [onClose]);
 
+  // Flip the Copy-to submenu to the left if there isn't room on the right.
+  useEffect(() => {
+    if (!submenuOpen || !submenuTriggerRef.current || typeof window === 'undefined') return;
+    const rect = submenuTriggerRef.current.getBoundingClientRect();
+    const submenuW = 180;
+    setSubmenuFlip(rect.right + submenuW + 8 > window.innerWidth);
+  }, [submenuOpen]);
+
   // Clamp anchor so the menu stays inside the viewport.
   const menuW = 200;
   const menuH = 156;
@@ -939,10 +949,10 @@ function EntryActionMenu({ anchor, currentMeal, onEdit, onCopy, onDelete, onClos
   // the card instead of the viewport).
   if (typeof document === 'undefined') return null;
 
-  // Shared styling tokens — match the app's "Glass" design language
-  // (similar tone to GlassCard: translucent dark surface, soft border, heavy blur).
+  // Match GlassModal's dark panel tone (#1a1a1a/95) so the menu reads as part
+  // of the same surface family as the modals and cards.
   const surfaceClass =
-    'min-w-[180px] p-1 rounded-2xl bg-[#11151b]/95 backdrop-blur-2xl border border-white/[0.12] shadow-2xl shadow-black/40';
+    'min-w-[180px] p-1 rounded-2xl bg-[#1a1a1a]/95 backdrop-blur-xl border border-white/[0.08] shadow-2xl shadow-black/40';
   const itemBase =
     'w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-sm text-white transition-colors duration-150';
   const itemHover = 'hover:bg-white/[0.08]';
@@ -970,6 +980,7 @@ function EntryActionMenu({ anchor, currentMeal, onEdit, onCopy, onDelete, onClos
         onMouseLeave={() => setSubmenuOpen(false)}
       >
         <button
+          ref={submenuTriggerRef}
           type="button"
           onClick={() => setSubmenuOpen((v) => !v)}
           className={`${itemBase} ${itemHover} justify-between`}
@@ -981,7 +992,11 @@ function EntryActionMenu({ anchor, currentMeal, onEdit, onCopy, onDelete, onClos
           <ChevronRight className="w-3.5 h-3.5 text-white/40" />
         </button>
         {submenuOpen && (
-          <div className={`absolute left-full top-0 ml-1 ${surfaceClass}`}>
+          <div
+            className={`absolute top-0 ${
+              submenuFlip ? 'right-full mr-1' : 'left-full ml-1'
+            } ${surfaceClass}`}
+          >
             {MEAL_TYPES.map((m) => (
               <button
                 key={m}
