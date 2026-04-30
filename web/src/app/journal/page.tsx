@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronLeft, ChevronRight, Plus, Minus, Trash2, Pencil, Loader2, Clock, Search, Copy, MoreHorizontal } from 'lucide-react';
 import { GlassCard, GlassButton, GlassInput, GlassModal } from '@/components/ui';
 import {
@@ -932,7 +933,13 @@ function EntryActionMenu({ anchor, currentMeal, onEdit, onCopy, onDelete, onClos
   const x = typeof window !== 'undefined' ? Math.min(anchor.x, window.innerWidth - menuW - 8) : anchor.x;
   const y = typeof window !== 'undefined' ? Math.min(anchor.y, window.innerHeight - menuH - 8) : anchor.y;
 
-  return (
+  // Portal to document.body so the menu escapes any ancestor that creates a
+  // containing block for `position: fixed` (the GlassCard parent uses
+  // `backdrop-filter: blur`, which makes fixed children position relative to
+  // the card instead of the viewport).
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <div
       ref={ref}
       style={{ position: 'fixed', left: Math.max(8, x), top: Math.max(8, y), zIndex: 50 }}
@@ -992,7 +999,8 @@ function EntryActionMenu({ anchor, currentMeal, onEdit, onCopy, onDelete, onClos
         <Trash2 className="w-4 h-4" />
         Delete
       </button>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
