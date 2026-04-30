@@ -896,58 +896,6 @@ function EditGoalsModal({ isOpen, onClose, goals, onSave }: EditGoalsModalProps)
   );
 }
 
-// ─── Meal Picker Popover (used by copy icon and "Copy to ▸" submenu) ──────
-
-interface MealPickerPopoverProps {
-  currentMeal: MealType;
-  onPick: (target: MealType) => void;
-  onClose: () => void;
-  /** Tailwind positioning classes — defaults to anchored under the trigger */
-  positionClass?: string;
-}
-
-function MealPickerPopover({ currentMeal, onPick, onClose, positionClass }: MealPickerPopoverProps) {
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handleMouseDown(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    }
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
-    }
-    document.addEventListener('mousedown', handleMouseDown);
-    document.addEventListener('keydown', handleKey);
-    return () => {
-      document.removeEventListener('mousedown', handleMouseDown);
-      document.removeEventListener('keydown', handleKey);
-    };
-  }, [onClose]);
-
-  return (
-    <div
-      ref={ref}
-      onClick={(e) => e.stopPropagation()}
-      className={`absolute z-50 min-w-[160px] py-1 rounded-2xl bg-slate-900/95 backdrop-blur-xl border border-white/10 shadow-2xl ${positionClass ?? 'right-0 top-full mt-1'}`}
-    >
-      <p className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-white/40">
-        Copy to
-      </p>
-      {MEAL_TYPES.map((m) => (
-        <button
-          key={m}
-          type="button"
-          disabled={m === currentMeal}
-          onClick={() => onPick(m)}
-          className="w-full px-3 py-2 text-left text-sm text-white hover:bg-white/10 disabled:text-white/30 disabled:cursor-not-allowed"
-        >
-          {MEAL_LABELS[m]}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 // ─── Entry Action Menu (3-dot + right-click) ───────────────────────────────
 
 interface EntryActionMenuProps {
@@ -1070,7 +1018,6 @@ function EntryRow({
   onDragEndEntry,
 }: EntryRowProps) {
   const [menuAnchor, setMenuAnchor] = useState<{ x: number; y: number } | null>(null);
-  const [copyOpen, setCopyOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [dragging, setDragging] = useState(false);
   const threeDotRef = useRef<HTMLButtonElement>(null);
@@ -1088,16 +1035,12 @@ function EntryRow({
 
   function handleContextMenu(e: React.MouseEvent) {
     e.preventDefault();
-    setCopyOpen(false);
     setMenuAnchor({ x: e.clientX, y: e.clientY });
   }
 
   function openMenuFromButton() {
     const rect = threeDotRef.current?.getBoundingClientRect();
-    if (rect) {
-      setCopyOpen(false);
-      setMenuAnchor({ x: rect.left, y: rect.bottom + 4 });
-    }
+    if (rect) setMenuAnchor({ x: rect.left, y: rect.bottom + 4 });
   }
 
   async function handleDelete() {
@@ -1110,7 +1053,6 @@ function EntryRow({
   }
 
   async function handleCopy(target: MealType) {
-    setCopyOpen(false);
     setMenuAnchor(null);
     await onCopy(entry, target);
   }
@@ -1136,27 +1078,7 @@ function EntryRow({
         </p>
       </button>
 
-      {/* Copy icon → opens meal picker directly */}
-      <div className="relative">
-        <button
-          type="button"
-          onClick={() => { setMenuAnchor(null); setCopyOpen((v) => !v); }}
-          className="p-1.5 rounded-xl text-white/40 hover:text-indigo-300 hover:bg-indigo-500/10 transition-all duration-200 opacity-60 group-hover:opacity-100"
-          aria-label="Copy to another meal"
-          title="Copy to another meal"
-        >
-          <Copy className="w-4 h-4" />
-        </button>
-        {copyOpen && (
-          <MealPickerPopover
-            currentMeal={entry.meal_type}
-            onPick={handleCopy}
-            onClose={() => setCopyOpen(false)}
-          />
-        )}
-      </div>
-
-      {/* 3-dot icon → opens action menu */}
+      {/* 3-dot icon → opens action menu (Edit / Copy to ▸ / Delete) */}
       <button
         ref={threeDotRef}
         type="button"
