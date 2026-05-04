@@ -622,16 +622,28 @@ interface EditEntryModalProps {
 }
 
 function EditEntryModal({ isOpen, onClose, entry, onUpdated }: EditEntryModalProps) {
-  const [servings, setServings] = useState('1');
+  const [quantity, setQuantity] = useState<number>(1);
+  const [unit, setUnit] = useState<Unit>('serving');
   const [mealType, setMealType] = useState<MealType>('breakfast');
+  const [food, setFood] = useState<Food | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  // When an entry opens, hydrate the form and fetch the food (if any) so we
+  // know its units[]. Quick Add entries (food_id null) use a single Amount
+  // field, no toggle.
   useEffect(() => {
-    if (entry) {
-      setServings(String(entry.servings));
-      setMealType(entry.meal_type);
-      setError('');
+    if (!entry) return;
+    setQuantity(entry.quantity ?? entry.servings ?? 1);
+    setUnit((entry.unit as Unit) ?? 'serving');
+    setMealType(entry.meal_type);
+    setError('');
+    setFood(null);
+    if (entry.food_id != null) {
+      fetch(`${BASE_URL}/api/foods/${entry.food_id}`)
+        .then((r) => r.ok ? r.json() : null)
+        .then((f: Food | null) => setFood(f))
+        .catch(() => setFood(null));
     }
   }, [entry]);
 
@@ -640,16 +652,10 @@ function EditEntryModal({ isOpen, onClose, entry, onUpdated }: EditEntryModalPro
     setSaving(true);
     setError('');
     try {
-      const sv = parseFloat(servings) || 1;
-      // Recalculate snapshots proportionally
-      const originalQty = entry.quantity ?? entry.servings ?? 1;
-      const ratio = sv / originalQty;
       const updated = await updateJournalEntry(entry.id, {
-        quantity: sv,
-        unit: 'serving',
+        quantity,
+        unit,
         meal_type: mealType,
-        calories_snapshot: Math.round(entry.calories_snapshot * ratio),
-        protein_snapshot: Math.round(entry.protein_snapshot * ratio * 10) / 10,
       });
       onUpdated(updated);
       onClose();
@@ -660,20 +666,37 @@ function EditEntryModal({ isOpen, onClose, entry, onUpdated }: EditEntryModalPro
     }
   }
 
+  const isQuickAdd = entry?.food_id == null;
+
   return (
     <GlassModal isOpen={isOpen} onClose={onClose} title="Edit Entry" size="sm">
       {entry && (
         <div className="space-y-4">
           <p className="font-medium text-white">{entry.food_name_snapshot}</p>
-          <GlassInput
-            label="Servings"
-            type="number"
-            inputMode="decimal"
-            value={servings}
-            onChange={(e) => setServings(e.target.value)}
-            min={0.1}
-            step={0.1}
-          />
+
+          {isQuickAdd || !food ? (
+            // Quick Add: simple single quantity input (no unit toggle)
+            <GlassInput
+              label="Amount"
+              type="number"
+              inputMode="decimal"
+              value={String(quantity)}
+              onChange={(e) => setQuantity(parseFloat(e.target.value) || 0)}
+              min={0.1}
+              step={0.1}
+            />
+          ) : (
+            // Food-bound: full QuantityInput with unit toggle
+            <div className="rounded-2xl bg-white/[0.04] border border-white/10">
+              <QuantityInput
+                food={food}
+                quantity={quantity}
+                unit={unit}
+                onChange={(next) => { setQuantity(next.quantity); setUnit(next.unit); }}
+              />
+            </div>
+          )}
+
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-white/60 pl-1">Meal</label>
             <select
@@ -686,10 +709,12 @@ function EditEntryModal({ isOpen, onClose, entry, onUpdated }: EditEntryModalPro
               ))}
             </select>
           </div>
+
           {error && <p className="text-sm text-red-400">{error}</p>}
+
           <div className="flex gap-3">
             <GlassButton variant="default" className="flex-1" onClick={onClose}>Cancel</GlassButton>
-            <GlassButton variant="primary" className="flex-1" onClick={handleSave} disabled={saving}>
+            <GlassButton variant="primary" className="flex-1" onClick={handleSave} disabled={saving || quantity <= 0}>
               {saving ? 'Saving…' : 'Save'}
             </GlassButton>
           </div>
