@@ -144,7 +144,10 @@ export function QuantityInput({ food, quantity, unit, onChange }: QuantityInputP
             min={0}
             step={1}
             value={editingCustom ? customDraft : (quantity === 0 ? '' : String(quantity))}
-            onFocus={() => { setCustomDraft(String(quantity)); setEditingCustom(true); }}
+            // When quantity is 0 (i.e. the field is showing the placeholder),
+            // focus into an empty draft so the first keystroke is the user's
+            // own digit — not the cursor sitting after a pre-filled "0".
+            onFocus={() => { setCustomDraft(quantity === 0 ? '' : String(quantity)); setEditingCustom(true); }}
             onChange={(e) => updateDraft(e.target.value)}
             onBlur={commitCustom}
             onKeyDown={(e) => {
