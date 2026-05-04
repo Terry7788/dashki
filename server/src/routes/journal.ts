@@ -247,56 +247,127 @@ router.put('/:id', (req: Request, res: Response) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id' });
 
-  const { servings, meal_type, logged_at, calories_snapshot, protein_snapshot } = req.body || {};
+  const {
+    quantity: rawQuantity,
+    unit: rawUnit,
+    servings,
+    meal_type,
+    logged_at,
+    calories_snapshot,
+    protein_snapshot,
+  } = req.body || {};
 
-  const fields: string[] = [];
-  const params: unknown[] = [];
+  // First fetch the existing row so we know food_id (for snapshot recompute).
+  db.get(
+    `${SELECT_ENTRY_SQL} WHERE id = ?`,
+    [id],
+    (fetchErr, existing: any) => {
+      if (fetchErr) return res.status(500).json({ error: 'Failed to fetch entry' });
+      if (!existing) return res.status(404).json({ error: 'Journal entry not found' });
 
-  if (servings !== undefined) {
-    const v = toNumber(servings);
-    if (v === null || v <= 0) return res.status(400).json({ error: 'Invalid servings' });
-    fields.push('servings = ?'); params.push(v);
-  }
-  if (meal_type !== undefined) {
-    const validMealTypes = ['breakfast', 'lunch', 'dinner', 'snack'];
-    if (!validMealTypes.includes(meal_type)) return res.status(400).json({ error: 'Invalid meal_type' });
-    fields.push('meal_type = ?'); params.push(meal_type);
-  }
-  if (logged_at !== undefined) { fields.push('logged_at = ?'); params.push(logged_at); }
-  if (calories_snapshot !== undefined) {
-    const v = toNumber(calories_snapshot, 0);
-    fields.push('calories_snapshot = ?'); params.push(v);
-  }
-  if (protein_snapshot !== undefined) {
-    const v = toNumber(protein_snapshot, null);
-    fields.push('protein_snapshot = ?'); params.push(v);
-  }
+      const fields: string[] = [];
+      const params: unknown[] = [];
 
-  if (fields.length === 0) return res.status(400).json({ error: 'No fields to update' });
+      // Resolve new quantity/unit if either is being changed.
+      const validUnits = ['g', 'ml', 'serving'] as const;
+      const newUnit = validUnits.includes(rawUnit) ? rawUnit : (rawUnit === undefined ? undefined : null);
+      if (newUnit === null) return res.status(400).json({ error: 'Invalid unit' });
 
-  params.push(id);
-  db.run(
-    `UPDATE JournalEntries SET ${fields.join(', ')} WHERE id = ?`,
-    params,
-    function (this: { changes: number }, err) {
-      if (err) {
-        console.error('[error] PUT /api/journal/:id', err);
-        return res.status(500).json({ error: 'Failed to update journal entry' });
+      let newQuantity: number | undefined;
+      if (rawQuantity !== undefined) {
+        const q = toNumber(rawQuantity);
+        if (q === null || q <= 0) return res.status(400).json({ error: 'Invalid quantity' });
+        newQuantity = q;
+      } else if (servings !== undefined) {
+        const sv = toNumber(servings);
+        if (sv === null || sv <= 0) return res.status(400).json({ error: 'Invalid servings' });
+        newQuantity = sv;
       }
-      if (this.changes === 0) return res.status(404).json({ error: 'Journal entry not found' });
 
-      db.get(
-        `${SELECT_ENTRY_SQL} WHERE id = ?`,
-        [id],
-        (err2, entry) => {
-          if (err2) {
-            console.error('[error] PUT /api/journal/:id fetch', err2);
-            return res.status(500).json({ error: 'Failed to fetch updated entry' });
-          }
-          try { getIo().emit('journal-entry-updated', entry); } catch (_) {}
-          res.json(entry);
+      const finalQuantity = newQuantity ?? existing.quantity;
+      const finalUnit = (newUnit ?? existing.unit) as 'g'|'ml'|'serving';
+
+      // If the entry has a food_id and quantity/unit changed, recompute snapshots
+      // server-side from the food. Otherwise (Quick Add or unrelated PUT), accept
+      // client-supplied snapshot fields if any.
+      const quantityOrUnitChanged = newQuantity !== undefined || newUnit !== undefined;
+      const isQuickAdd = existing.food_id == null;
+
+      const finishUpdate = (calForCol: number | null, proForCol: number | null, servingsForCol: number) => {
+        if (newQuantity !== undefined || servings !== undefined) {
+          fields.push('quantity = ?'); params.push(finalQuantity);
+          fields.push('servings = ?'); params.push(servingsForCol);
         }
-      );
+        if (newUnit !== undefined) {
+          fields.push('unit = ?'); params.push(finalUnit);
+        }
+        if (meal_type !== undefined) {
+          if (!['breakfast','lunch','dinner','snack'].includes(meal_type))
+            return res.status(400).json({ error: 'Invalid meal_type' });
+          fields.push('meal_type = ?'); params.push(meal_type);
+        }
+        if (logged_at !== undefined) { fields.push('logged_at = ?'); params.push(logged_at); }
+        if (calForCol !== null) { fields.push('calories_snapshot = ?'); params.push(calForCol); }
+        if (proForCol !== null) { fields.push('protein_snapshot = ?'); params.push(proForCol); }
+
+        if (fields.length === 0) return res.status(400).json({ error: 'No fields to update' });
+
+        params.push(id);
+        db.run(
+          `UPDATE JournalEntries SET ${fields.join(', ')} WHERE id = ?`,
+          params,
+          function (this: { changes: number }, err) {
+            if (err) {
+              console.error('[error] PUT /api/journal/:id', err);
+              return res.status(500).json({ error: 'Failed to update journal entry' });
+            }
+            if (this.changes === 0) return res.status(404).json({ error: 'Journal entry not found' });
+
+            db.get(
+              `${SELECT_ENTRY_SQL} WHERE id = ?`,
+              [id],
+              (err2, entry) => {
+                if (err2) return res.status(500).json({ error: 'Failed to fetch updated entry' });
+                try { getIo().emit('journal-entry-updated', entry); } catch (_) {}
+                res.json(entry);
+              }
+            );
+          }
+        );
+      };
+
+      if (quantityOrUnitChanged && !isQuickAdd) {
+        // Recompute snapshots from the food.
+        db.get(
+          `SELECT base_amount, base_unit, serving_size_g, calories, protein
+           FROM Foods WHERE id = ?`,
+          [existing.food_id],
+          (foodErr, foodRow: any) => {
+            if (foodErr || !foodRow) {
+              return res.status(500).json({ error: 'Failed to look up food for nutrition recompute' });
+            }
+            try {
+              const food = {
+                base_amount: foodRow.base_amount,
+                base_unit: (foodRow.base_unit === 'grams' ? 'g' : foodRow.base_unit) as 'g'|'ml'|'serving',
+                serving_size_g: foodRow.serving_size_g,
+                calories: foodRow.calories,
+                protein: foodRow.protein,
+              };
+              const { calories, protein } = nutritionFor(food, finalQuantity, finalUnit);
+              const ratio = computeRatio(food, finalQuantity, finalUnit);
+              finishUpdate(calories, protein, ratio);
+            } catch (e: any) {
+              return res.status(400).json({ error: e?.message || 'Invalid quantity/unit' });
+            }
+          }
+        );
+      } else {
+        // Quick Add or unrelated PUT — accept client-supplied snapshots.
+        const cal = calories_snapshot !== undefined ? toNumber(calories_snapshot, 0)! : null;
+        const pro = protein_snapshot !== undefined ? toNumber(protein_snapshot, null) : null;
+        finishUpdate(cal, pro, finalQuantity); // legacy `servings` = quantity for QuickAdd
+      }
     }
   );
 });
