@@ -50,10 +50,13 @@ function deriveUnits(rawBaseUnit: string, baseAmount: number, rawServingSizeG: n
       { unit: 'serving', label: `1 serving (${servingSize}ml)`, default: servingIsDefault },
     ];
   }
-  // serving base
+  // serving base — always render g first then serving for consistency
+  // with the g- and ml-base layouts (Terry's preference: weight/volume
+  // unit always sits left, serving sits right). The `default` flag still
+  // makes serving the initially-selected pill.
   return [
-    { unit: 'serving', label: 'serving', default: true },
     { unit: 'g', label: `g (${servingSize}g per serving)`, default: false },
+    { unit: 'serving', label: 'serving', default: true },
   ];
 }
 
