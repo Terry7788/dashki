@@ -106,3 +106,49 @@ test('convertQuantity serving→g for cookie pack: 1 serving (half pack) → 30g
 test('convertQuantity is identity when units match', () => {
   assert.equal(convertQuantity(chicken, 137, 'g', 'g'), 137);
 });
+
+// ─── Property tests (DSHKI-15) ────────────────────────────────────────────────
+// These pin contracts the happy-path tests don't: round-trip preservation,
+// kcal preservation across unit toggle, and zero-quantity behaviour. Closes
+// gaps flagged in the PR 1 code review.
+
+test('round-trip: convert → convert back returns ~original (bread g↔serving)', () => {
+  const original = 137;
+  const there = convertQuantity(bread, original, 'g', 'serving');
+  const back = convertQuantity(bread, there, 'serving', 'g');
+  // Within 1e-9 — cumulative float error only
+  assert.ok(Math.abs(back - original) < 1e-9, `round-trip drift: ${original} → ${there} → ${back}`);
+});
+
+test('round-trip: serving → g → serving for cookie pack (base_amount > 1)', () => {
+  const original = 1.5;
+  const there = convertQuantity(cookiePack, original, 'serving', 'g');
+  const back = convertQuantity(cookiePack, there, 'g', 'serving');
+  assert.ok(Math.abs(back - original) < 1e-9, `round-trip drift: ${original} → ${there} → ${back}`);
+});
+
+test('kcal preservation across g↔serving conversion (bread)', () => {
+  const a = nutritionFor(bread, 70, 'g').calories;
+  const equivalent = convertQuantity(bread, 70, 'g', 'serving');
+  const b = nutritionFor(bread, equivalent, 'serving').calories;
+  assert.equal(a, b, 'kcal must be invariant under unit conversion');
+});
+
+test('kcal preservation across serving↔g for cookie pack', () => {
+  const a = nutritionFor(cookiePack, 1.5, 'serving').calories;
+  const equivalent = convertQuantity(cookiePack, 1.5, 'serving', 'g');
+  const b = nutritionFor(cookiePack, equivalent, 'g').calories;
+  assert.equal(a, b, 'kcal must be invariant under unit conversion');
+});
+
+test('zero quantity returns zero nutrition', () => {
+  const r = nutritionFor(chicken, 0, 'g');
+  assert.equal(r.calories, 0);
+  assert.equal(r.protein, 0);
+});
+
+test('zero quantity returns zero for serving-base food too', () => {
+  const r = nutritionFor(cookiePack, 0, 'serving');
+  assert.equal(r.calories, 0);
+  assert.equal(r.protein, 0);
+});

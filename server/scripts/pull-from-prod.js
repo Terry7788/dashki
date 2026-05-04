@@ -32,6 +32,13 @@ if (process.env.NODE_ENV === 'production') {
   console.error('REFUSE: NODE_ENV=production. This script is local-only.');
   process.exit(1);
 }
+// Belt-and-braces: Railway sets RAILWAY_ENVIRONMENT on its runtime. If for
+// some reason this script ended up there with a non-volume DATABASE_PATH,
+// we still don't want to wipe-and-reinsert from prod into… prod.
+if (process.env.RAILWAY_ENVIRONMENT) {
+  console.error('REFUSE: Running inside a Railway environment.');
+  process.exit(1);
+}
 // Check raw env var value (before OS path resolution) so /data/ and /mnt/ are
 // always caught regardless of whether path.resolve() rewrites them on Windows.
 const normalizedDbPath = LOCAL_DB_PATH.replace(/\\/g, '/');
@@ -102,25 +109,37 @@ function run(db, sql, params = []) {
 }
 
 async function wipeAndInsert(data) {
-  // Backup existing DB
+  // Backup existing DB. Wrapped in its own try so a backup failure shows a
+  // clear, attributable message rather than a generic "Pull failed: EACCES"
+  // — and aborts BEFORE we touch the DB so the user's data is safe.
   if (fs.existsSync(LOCAL_DB_PATH)) {
     const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const backup = `${LOCAL_DB_PATH}.bak-${ts}`;
-    fs.copyFileSync(LOCAL_DB_PATH, backup);
-    console.log(`Backed up: ${backup}`);
+    try {
+      fs.copyFileSync(LOCAL_DB_PATH, backup);
+      console.log(`Backed up: ${backup}`);
+    } catch (err) {
+      console.error(`Backup failed; aborting before wipe. ${err.message}`);
+      throw err;
+    }
   }
 
   const db = new sqlite3.Database(LOCAL_DB_PATH);
 
-  // Wipe — preserves schema/indexes
-  await run(db, 'DELETE FROM JournalEntries');
-  await run(db, 'DELETE FROM SavedMealItems');
-  await run(db, 'DELETE FROM SavedMeals');
-  await run(db, 'DELETE FROM Foods');
-  await run(db, 'DELETE FROM WeightEntries');
-  await run(db, 'DELETE FROM StepLogEntries');
-  await run(db, 'DELETE FROM StepEntries');
-  // Goals + UserPreferences are singletons (id=1) — UPDATE not DELETE.
+  // Wrap wipe + insert in a transaction. Atomicity (a crash mid-load rolls
+  // back instead of leaving a half-loaded DB) plus a substantial speedup —
+  // hundreds of inserts in one commit instead of one auto-commit per row.
+  await run(db, 'BEGIN IMMEDIATE');
+  try {
+    // Wipe — preserves schema/indexes
+    await run(db, 'DELETE FROM JournalEntries');
+    await run(db, 'DELETE FROM SavedMealItems');
+    await run(db, 'DELETE FROM SavedMeals');
+    await run(db, 'DELETE FROM Foods');
+    await run(db, 'DELETE FROM WeightEntries');
+    await run(db, 'DELETE FROM StepLogEntries');
+    await run(db, 'DELETE FROM StepEntries');
+    // Goals + UserPreferences are singletons (id=1) — UPDATE not DELETE.
 
   // Foods
   for (const f of data.foods) {
@@ -184,11 +203,19 @@ async function wipeAndInsert(data) {
        data.goals.updated_at ?? new Date().toISOString()]);
   }
 
-  // Preferences (singleton)
-  if (data.preferences) {
-    await run(db,
-      `UPDATE UserPreferences SET theme=?, display_name=? WHERE id=1`,
-      [data.preferences.theme ?? 'dark', data.preferences.display_name ?? null]);
+    // Preferences (singleton)
+    if (data.preferences) {
+      await run(db,
+        `UPDATE UserPreferences SET theme=?, display_name=? WHERE id=1`,
+        [data.preferences.theme ?? 'dark', data.preferences.display_name ?? null]);
+    }
+
+    await run(db, 'COMMIT');
+  } catch (err) {
+    // ROLLBACK is best-effort — if it itself fails the local DB has the
+    // backup .bak file to recover from.
+    try { await run(db, 'ROLLBACK'); } catch (_) {}
+    throw err;
   }
 
   await new Promise((res, rej) => db.close(err => err ? rej(err) : res()));
