@@ -1,26 +1,38 @@
+// ─── Units ──────────────────────────────────────────────────────────────────
+
+export type Unit = 'g' | 'ml' | 'serving';
+
+export interface FoodUnitOption {
+  unit: Unit;
+  label: string;
+  default: boolean;
+}
+
 // ─── Food & Nutrition ──────────────────────────────────────────────────────
 
 export interface Food {
   id: number;
   name: string;
-  /** kcal per 100g (returned as `calories` from the API) */
+  /** kcal per 100g (returned as `calories` from the API) — kept for legacy callsites */
   calories_per_100g: number;
-  /** grams of protein per 100g (returned as `protein` from the API) */
+  /** g protein per 100g (legacy) */
   protein_per_100g: number;
-  /** grams of carbs per 100g */
+  /** g carbs per 100g (legacy) */
   carbs_per_100g: number;
-  /** grams of fat per 100g */
+  /** g fat per 100g (legacy) */
   fat_per_100g: number;
-  /** optional serving size in grams (e.g. 1 slice = 30g) */
-  serving_size_g?: number;
-  // Also exposed from API as camelCase:
+  /** RAW serving_size_g column value if set (or fallback for legacy callsites) */
+  serving_size_g?: number | null;
+  // Canonical base unit fields (camelCase + snake_case both available from API):
   baseAmount?: number;
-  baseUnit?: string;
-  /** raw calories field from API (same as calories_per_100g) */
+  baseUnit?: Unit;
+  base_amount?: number;
+  base_unit?: Unit;
+  /** Per-base-amount nutrition (the source of truth for the math helper) */
   calories?: number;
-  /** raw protein field from API (same as protein_per_100g) */
-  protein?: number;
-  /** True for foods that appear in the top "Recently used" group of GET /api/foods. */
+  protein?: number | null;
+  /** Available unit options for the picker (always at least one element) */
+  units?: FoodUnitOption[];
   recently_used?: boolean;
   created_at: string;
 }
@@ -37,77 +49,74 @@ export interface SavedMeal {
 
 export interface SavedMealItem {
   id: number;
-  /** food_id from DB (returned as foodId from API) */
   foodId: number;
-  servings: number;
+  /** New unit-aware fields (PR 3) */
+  quantity?: number;
+  unit?: Unit;
+  /** Legacy field — still populated server-side until PR 3 ships */
+  servings?: number;
   name: string;
   baseAmount: number;
-  baseUnit: string;
+  baseUnit: Unit;
   calories: number;
   protein: number | null;
 }
 
-// ─── Current Meal (in-progress meal being built) ────────────────────────────
+// ─── Current Meal ───────────────────────────────────────────────────────────
 
 export interface CurrentMealItem {
   id: number;
-  /** null if isTemporary */
   foodId: number | null;
   servings: number;
   isTemporary: boolean;
   name: string;
   baseAmount: number;
-  baseUnit: string;
+  baseUnit: Unit;
   calories: number;
   protein: number | null;
 }
 
-// ─── Journal ─────────────────────────────────────────────────────────────────
+// ─── Journal ────────────────────────────────────────────────────────────────
 
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 
 export interface JournalEntry {
   id: number;
-  date: string;           // ISO date string "YYYY-MM-DD"
+  date: string;
   meal_type: MealType;
-  logged_at: string;      // ISO datetime
+  logged_at: string;
   food_id: number | null;
   food_name_snapshot: string;
-  servings: number;
+  /** New unit-aware fields */
+  quantity: number;
+  unit: Unit;
+  /** Legacy — kept until PR 2 backend cleanup */
+  servings?: number;
   calories_snapshot: number;
   protein_snapshot: number;
+  /** Optional: server may embed the food's units[] for the Edit modal */
+  food_units?: FoodUnitOption[];
 }
 
-// ─── Steps ───────────────────────────────────────────────────────────────────
+// ─── Steps / Weight / Goals / Summary — unchanged ──────────────────────────
 
-export interface StepEntry {
-  id: number;
-  date: string;   // "YYYY-MM-DD"
-  steps: number;
-}
+export interface StepEntry { id: number; date: string; steps: number; }
 
-// Individual step log entry — multiple per day (like JournalEntry).
-// The aggregate StepEntry returned by GET /api/steps is the SUM of all
-// StepLogEntry.steps for that date.
 export interface StepLogEntry {
   id: number;
-  date: string;       // "YYYY-MM-DD"
+  date: string;
   steps: number;
   note: string | null;
-  logged_at: string;  // "YYYY-MM-DDTHH:MM:SS" local time
+  logged_at: string;
   created_at: string;
 }
-
-// ─── Weight ──────────────────────────────────────────────────────────────────
 
 export interface WeightEntry {
   id: number;
-  date: string;       // "YYYY-MM-DD"
+  date: string;
   weight_kg: number;
   created_at: string;
 }
-
-// ─── Goals ───────────────────────────────────────────────────────────────────
 
 export interface Goals {
   id: number;
@@ -120,8 +129,6 @@ export interface Goals {
   updated_at: string;
 }
 
-// ─── Dashboard Summary ───────────────────────────────────────────────────────
-
 export interface DailySummary {
   date: string;
   calories: number;
@@ -129,12 +136,9 @@ export interface DailySummary {
   entries: JournalEntry[];
 }
 
-// ─── API Response Wrappers ───────────────────────────────────────────────────
+// ─── API Response Wrappers ─────────────────────────────────────────────────
 
-export interface ApiError {
-  error: string;
-  message?: string;
-}
+export interface ApiError { error: string; message?: string; }
 
 export interface PaginatedResponse<T> {
   data: T[];

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../db';
 import { getIo } from '../socket';
+import { nutritionFor, canonicalUnit, type Unit as CanonicalUnit } from '../nutrition';
 
 const router = Router();
 
@@ -12,28 +13,71 @@ function toNumber(value: unknown, fallback: number | null = null): number | null
   return Number.isFinite(n) ? n : fallback;
 }
 
+interface UnitOption {
+  unit: CanonicalUnit;
+  label: string;
+  default: boolean;
+}
+
+/**
+ * Derive the units the picker can offer for a food. The convention is:
+ *   - If both base unit and serving_size_g are present, expose both with the
+ *     "serving" option set as default (most natural way to log).
+ *   - If only the base unit is present (no serving size), expose that alone.
+ *
+ * IMPORTANT: We use the RAW serving_size_g column value here, NOT the mapped
+ * fallback (some g-based foods have serving_size_g === base_amount as a
+ * fallback derived in mapFood, which would create a meaningless "serving"
+ * toggle for raw ingredients like chicken). Pass the raw row value.
+ */
+function deriveUnits(rawBaseUnit: string, baseAmount: number, rawServingSizeG: number | null): UnitOption[] {
+  const base = canonicalUnit(rawBaseUnit);
+
+  if (base === 'g') {
+    if (rawServingSizeG == null) {
+      return [{ unit: 'g', label: 'g', default: true }];
+    }
+    return [
+      { unit: 'g', label: 'g', default: false },
+      { unit: 'serving', label: `1 serving (${rawServingSizeG}g)`, default: true },
+    ];
+  }
+  if (base === 'ml') {
+    // serving_size_g is grams-only by name, so ml-base foods always expose only ml.
+    return [{ unit: 'ml', label: 'ml', default: true }];
+  }
+  // serving base
+  if (rawServingSizeG == null) {
+    return [{ unit: 'serving', label: 'serving', default: true }];
+  }
+  return [
+    { unit: 'serving', label: 'serving', default: true },
+    { unit: 'g', label: `g (${rawServingSizeG}g per serving)`, default: false },
+  ];
+}
+
 /**
  * Map a raw DB row into the shape the frontend expects.
- * The DB stores values per serving (based on baseAmount/baseUnit). 
- * We calculate per-100g values only when baseUnit is 'grams'.
+ * The DB stores values per serving (based on baseAmount/baseUnit).
+ * We calculate per-100g values only when baseUnit is 'g'/'grams'.
  */
 function mapFood(row: Record<string, unknown>): Record<string, unknown> {
-  const baseAmount = row.base_amount as number ?? 100;
-  const baseUnit = row.base_unit as string ?? 'grams';
-  const calories = row.calories as number ?? 0;
-  const protein = row.protein as number ?? 0;
-  const carbs = row.carbs as number ?? 0;
-  const fat = row.fat as number ?? 0;
+  const baseAmount = (row.base_amount as number | undefined) ?? 100;
+  const rawBaseUnit = (row.base_unit as string | undefined) ?? 'grams';
+  const baseUnit = canonicalUnit(rawBaseUnit);   // canonical 'g' / 'ml' / 'serving'
+  const calories = (row.calories as number | undefined) ?? 0;
+  const protein = (row.protein as number | undefined) ?? 0;
+  const carbs = (row.carbs as number | undefined) ?? 0;
+  const fat = (row.fat as number | undefined) ?? 0;
+  const rawServingSizeG = (row.serving_size_g as number | null | undefined) ?? null;
 
-  // Only calculate per-100g when baseUnit is 'grams'
-  // For 'servings', 'ml', etc. - keep original values
+  // Per-100g view (legacy field — the frontend still uses these).
   let caloriesPer100 = calories;
   let proteinPer100 = protein;
   let carbsPer100 = carbs;
   let fatPer100 = fat;
-  
-  if (baseUnit === 'grams' && baseAmount !== 100) {
-    // Convert from baseAmount to per-100g
+
+  if (baseUnit === 'g' && baseAmount !== 100) {
     const factor = baseAmount / 100;
     caloriesPer100 = Math.round(calories * factor * 10) / 10;
     proteinPer100 = Math.round(protein * factor * 10) / 10;
@@ -48,13 +92,18 @@ function mapFood(row: Record<string, unknown>): Record<string, unknown> {
     protein_per_100g: proteinPer100,
     carbs_per_100g: carbsPer100,
     fat_per_100g: fatPer100,
-    serving_size_g: row.serving_size_g ?? (baseUnit === 'grams' ? baseAmount : null),
+    // serving_size_g: keep the legacy fallback for old frontend code paths that
+    // still read it, but units[] uses the raw column value.
+    serving_size_g: rawServingSizeG ?? (baseUnit === 'g' ? baseAmount : null),
     calories,
     protein,
     carbs,
     fat,
     baseAmount,
-    baseUnit,
+    baseUnit,                          // canonical now ('g' not 'grams')
+    base_amount: baseAmount,           // snake_case alias for spec consumers
+    base_unit: baseUnit,
+    units: deriveUnits(rawBaseUnit, baseAmount, rawServingSizeG),
     created_at: row.created_at,
   };
 }
@@ -274,21 +323,61 @@ router.put('/:id', (req: Request, res: Response) => {
           }
           const mapped = mapFood(food!);
 
-          // Sync all journal entries that reference this food with updated snapshots
-          db.run(
-            `UPDATE JournalEntries
-             SET calories_snapshot = CAST(ROUND(? * servings) AS REAL),
-                 protein_snapshot  = ROUND(? * servings, 1),
-                 food_name_snapshot = ?
-             WHERE food_id = ?`,
-            [mapped.calories, mapped.protein ?? 0, mapped.name, id],
-            (journalErr) => {
-              if (journalErr) {
-                console.error('[error] PUT /api/foods/:id journal sync', journalErr);
+          // Sync all journal entries that reference this food. Each entry may
+          // now be in a different unit (g, ml, serving), so we recompute per
+          // row via nutritionFor rather than the old broadcast `calories *
+          // servings` formula.
+          db.all(
+            `SELECT id, quantity, unit FROM JournalEntries WHERE food_id = ?`,
+            [id],
+            (selectErr, rows: Array<{ id: number; quantity: number; unit: string }>) => {
+              if (selectErr) {
+                console.error('[error] PUT /api/foods/:id journal select', selectErr);
               }
-              try { getIo().emit('food-updated', mapped); } catch (_) {}
-              try { getIo().emit('journal-entry-updated', {}); } catch (_) {}
-              res.json(mapped);
+
+              const foodForCalc = {
+                base_amount: mapped.base_amount as number,
+                base_unit: mapped.baseUnit as 'g'|'ml'|'serving',
+                serving_size_g: (mapped.serving_size_g as number | null),
+                calories: mapped.calories as number,
+                protein: mapped.protein as number | null,
+              };
+
+              let remaining = (rows || []).length;
+              if (remaining === 0) {
+                try { getIo().emit('food-updated', mapped); } catch (_) {}
+                return res.json(mapped);
+              }
+
+              for (const row of rows || []) {
+                try {
+                  const u = (row.unit ?? 'serving') as 'g'|'ml'|'serving';
+                  const { calories, protein } = nutritionFor(foodForCalc, row.quantity ?? 1, u);
+                  db.run(
+                    `UPDATE JournalEntries
+                     SET calories_snapshot = ?, protein_snapshot = ?, food_name_snapshot = ?
+                     WHERE id = ?`,
+                    [calories, protein, mapped.name, row.id],
+                    (updErr) => {
+                      if (updErr) console.error('[error] journal resync row', row.id, updErr);
+                      if (--remaining === 0) {
+                        try { getIo().emit('food-updated', mapped); } catch (_) {}
+                        try { getIo().emit('journal-entry-updated', {}); } catch (_) {}
+                        res.json(mapped);
+                      }
+                    }
+                  );
+                } catch (e) {
+                  // Unsupported unit combo for this row — skip the resync (snapshot stays stale,
+                  // user will see old kcal until they re-enter). Log loudly.
+                  console.error('[error] journal resync skipped row', row.id, e);
+                  if (--remaining === 0) {
+                    try { getIo().emit('food-updated', mapped); } catch (_) {}
+                    try { getIo().emit('journal-entry-updated', {}); } catch (_) {}
+                    res.json(mapped);
+                  }
+                }
+              }
             }
           );
         }

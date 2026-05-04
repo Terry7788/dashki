@@ -153,9 +153,12 @@ export function addJournalEntry(data: {
   meal_type: MealType;
   food_id?: number;
   food_name_snapshot: string;
-  servings: number;
-  calories_snapshot: number;
-  protein_snapshot: number;
+  /** New unit-aware fields — server computes snapshots when food_id is set */
+  quantity: number;
+  unit: 'g' | 'ml' | 'serving';
+  /** Quick Add only (food_id absent) */
+  calories_snapshot?: number;
+  protein_snapshot?: number;
 }): Promise<JournalEntry> {
   return request<JournalEntry>('/api/journal', {
     method: 'POST',
@@ -167,7 +170,9 @@ export function updateJournalEntry(
   id: number,
   data: Partial<{
     meal_type: MealType;
-    servings: number;
+    quantity: number;
+    unit: 'g' | 'ml' | 'serving';
+    /** Quick Add only */
     calories_snapshot: number;
     protein_snapshot: number;
   }>

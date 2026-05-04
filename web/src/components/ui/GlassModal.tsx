@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode, useEffect, useCallback, useRef } from 'react';
+import { ReactNode, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import clsx from 'clsx';
 import { X } from 'lucide-react';
 
@@ -68,16 +68,29 @@ export default function GlassModal({
   // restore it after the body-scroll-lock is lifted.
   const savedScrollYRef = useRef(0);
 
-  useEffect(() => {
+  // ── Body scroll lock — iOS-friendly version ──────────────────────────
+  // `overflow: hidden` alone doesn't stop iOS Safari from scrolling the
+  // page behind the modal. The reliable fix is to pin the body in place
+  // with position:fixed and offset by the current scroll position so the
+  // viewport visually stays put. On unmount we undo all three styles
+  // and restore scroll. Works on iOS Safari, desktop, and Android.
+  //
+  // IMPORTANT: this effect MUST depend only on `isOpen`, not on the
+  // keydown handler (which is recreated every parent render because the
+  // parent passes onClose inline). Otherwise every parent re-render
+  // (e.g. `setEntries` after adding a food) tears down and rebuilds the
+  // scroll lock — the cleanup's `window.scrollTo` races with the body
+  // unlock and the page snaps back to 0.
+  //
+  // useLayoutEffect (not useEffect) so the cleanup runs SYNCHRONOUSLY
+  // before the browser paints. With useEffect the DOM commit (modal
+  // removed) paints FIRST with body still position:fixed at top:-Ypx,
+  // visually showing the page at scrollY=0 (jump to top), then the
+  // cleanup fires and scrollTo corrects it (move down). useLayoutEffect
+  // closes that gap so the unlock + scrollTo land in the same frame.
+  useLayoutEffect(() => {
     if (!isOpen) return;
-    document.addEventListener('keydown', handleKeyDown);
 
-    // ── Body scroll lock — iOS-friendly version ─────────────────────────
-    // `overflow: hidden` alone doesn't stop iOS Safari from scrolling the
-    // page behind the modal. The reliable fix is to pin the body in place
-    // with position:fixed and offset by the current scroll position so the
-    // viewport visually stays put. On unmount we undo all three styles
-    // and restore scroll. Works on iOS Safari, desktop, and Android.
     savedScrollYRef.current = window.scrollY;
     const body = document.body;
     body.style.position = 'fixed';
@@ -88,15 +101,29 @@ export default function GlassModal({
     body.style.width = '100%';
 
     return () => {
-      document.removeEventListener('keydown', handleKeyDown);
       body.style.position = '';
       body.style.top = '';
       body.style.left = '';
       body.style.right = '';
       body.style.overflow = '';
       body.style.width = '';
-      window.scrollTo(0, savedScrollYRef.current);
+      // behavior:'instant' overrides the global `html { scroll-behavior:
+      // smooth }` from globals.css. Without it, the body unlock makes the
+      // page visually snap to scrollY=0 and then SMOOTH-scroll back to the
+      // saved position over ~300ms — looks like "jump to top, then animate
+      // down". Instant scroll lands in the same paint frame as the unlock.
+      window.scrollTo({ top: savedScrollYRef.current, left: 0, behavior: 'instant' as ScrollBehavior });
     };
+  }, [isOpen]);
+
+  // Keydown listener split into its own effect so re-binding it (when
+  // the parent's onClose changes identity) doesn't disturb the scroll
+  // lock above. Adding/removing a document listener is cheap and has no
+  // visual side effects.
+  useEffect(() => {
+    if (!isOpen) return;
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, handleKeyDown]);
 
   if (!isOpen) return null;

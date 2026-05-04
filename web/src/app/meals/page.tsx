@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Plus, Trash2, UtensilsCrossed, Search, ChevronLeft, BookOpen, Pencil, X } from 'lucide-react';
+import { Plus, Trash2, UtensilsCrossed, Search, ChevronLeft, BookOpen, Pencil, X, ChevronDown } from 'lucide-react';
 import { GlassCard, GlassButton, GlassInput, GlassModal } from '@/components/ui';
 import { getSavedMeals, createSavedMeal, updateSavedMeal, deleteSavedMeal, addJournalEntry } from '@/lib/api';
 import type { SavedMeal, Food, MealType } from '@/lib/types';
@@ -211,7 +211,7 @@ function CreateMealModal({ isOpen, onClose, onCreated, editingMeal }: CreateMeal
               calories: item.calories,
               protein: item.protein,
             } as Food,
-            servings: item.servings,
+            servings: item.quantity ?? item.servings ?? 1,
           }))
         );
       } else {
@@ -418,18 +418,16 @@ function AddToJournalModal({ isOpen, onClose, meal }: AddToJournalModalProps) {
       }
 
       for (const item of fullMeal.items) {
-        const res = await fetch(`${BASE_URL}/api/foods/${item.foodId}`);
-        if (!res.ok) continue;
-        const food: Food = await res.json();
-        const { calories, protein } = calcNutrition(food, item.servings);
+        // Server computes snapshots when food_id is set; pass quantity in 'serving'
+        // unit (PR 3 will swap this to per-item unit-aware shape).
+        const quantity = item.quantity ?? item.servings ?? 1;
         await addJournalEntry({
           date: today,
           meal_type: mealType,
-          food_id: food.id,
-          food_name_snapshot: food.name,
-          servings: item.servings,
-          calories_snapshot: calories,
-          protein_snapshot: protein,
+          food_id: item.foodId,
+          food_name_snapshot: item.name ?? `Food ${item.foodId}`,
+          quantity,
+          unit: 'serving',
         });
       }
       setSuccess(true);
@@ -449,15 +447,18 @@ function AddToJournalModal({ isOpen, onClose, meal }: AddToJournalModalProps) {
         )}
         <div className="flex flex-col gap-1.5">
           <label className="text-sm font-medium text-gray-500 dark:text-white/60 pl-1">Meal</label>
-          <select
-            value={mealType}
-            onChange={(e) => setMealType(e.target.value as MealType)}
-            className="w-full px-4 py-3 bg-black/[0.04] border border-black/[0.10] text-gray-900 dark:bg-white/10 dark:border-white/20 dark:text-white rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#2E8B57]/40 focus:border-[#2E8B57]/60 transition-all duration-200"
-          >
-            {MEAL_TYPES.map((m) => (
-              <option key={m} value={m}>{MEAL_LABELS[m]}</option>
-            ))}
-          </select>
+          <div className="relative">
+            <select
+              value={mealType}
+              onChange={(e) => setMealType(e.target.value as MealType)}
+              className="w-full pl-4 pr-10 py-3 bg-black/[0.04] border border-black/[0.10] text-gray-900 dark:bg-white/10 dark:border-white/20 dark:text-white rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#2E8B57]/40 focus:border-[#2E8B57]/60 transition-all duration-200 appearance-none [color-scheme:dark] cursor-pointer"
+            >
+              {MEAL_TYPES.map((m) => (
+                <option key={m} value={m} className="bg-[#1a1a1a] text-white">{MEAL_LABELS[m]}</option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 dark:text-white/50 pointer-events-none" />
+          </div>
         </div>
         {error && <p className="text-sm text-red-400">{error}</p>}
         {success && (
@@ -533,10 +534,13 @@ function MealCard({ meal, onAddToJournal, onDelete, onEdit }: MealCardProps) {
   
   // Calculate totals
   const totals = (meal.items || []).reduce(
-    (acc, item) => ({
-      calories: acc.calories + (item.calories ?? 0) * item.servings,
-      protein: acc.protein + (item.protein ?? 0) * item.servings,
-    }),
+    (acc, item) => {
+      const qty = item.quantity ?? item.servings ?? 1;
+      return {
+        calories: acc.calories + (item.calories ?? 0) * qty,
+        protein: acc.protein + (item.protein ?? 0) * qty,
+      };
+    },
     { calories: 0, protein: 0 }
   );
 
@@ -644,7 +648,7 @@ export default function MealsPage() {
             calories: item.calories,
             protein: item.protein,
           } as Food,
-          servings: item.servings,
+          servings: item.quantity ?? item.servings ?? 1,
         }))
       );
     } else if (createOpen) {

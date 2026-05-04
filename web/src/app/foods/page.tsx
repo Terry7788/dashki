@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Plus, Pencil, Trash2, Search, Leaf, BookOpen, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Leaf, BookOpen, X, ChevronDown } from 'lucide-react';
 import { GlassCard, GlassButton, GlassInput, GlassModal } from '@/components/ui';
 import { getFoods, createFood, updateFood, deleteFood, addJournalEntry } from '@/lib/api';
 import type { Food, MealType } from '@/lib/types';
@@ -204,24 +204,30 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-gray-500 dark:text-white/60 pl-1">Unit</label>
-            <select
-              value={form.base_unit}
-              onChange={(e) => {
-                const newUnit = e.target.value as BaseUnit;
-                // Auto-adjust base amount when switching units
-                if (newUnit === 'servings') {
-                  set('base_amount', '1');
-                } else if (newUnit === 'grams' || newUnit === 'ml') {
-                  set('base_amount', '100');
-                }
-                set('base_unit', newUnit);
-              }}
-              className="w-full h-[46px] px-3 sm:px-4 bg-black/[0.04] border border-black/[0.10] text-gray-900 dark:bg-white/10 dark:border-white/20 dark:text-white rounded-xl sm:rounded-2xl text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-[#2E8B57]/40 focus:border-[#2E8B57]/60 transition-all duration-200"
-            >
-              <option value="grams">Grams</option>
-              <option value="ml">ml</option>
-              <option value="servings">Servings</option>
-            </select>
+            {/* Native <select> with dark-themed dropdown panel:
+                - [color-scheme:dark] tells the browser to render the native
+                  dropdown chrome in dark mode (Chrome/Firefox/Edge respect this)
+                - appearance-none + custom ChevronDown for a clean closed state
+                - Each <option> gets explicit bg/text so options are readable
+                  even in browsers that don't fully honour color-scheme */}
+            <div className="relative">
+              <select
+                value={form.base_unit}
+                onChange={(e) => {
+                  const newUnit = e.target.value as BaseUnit;
+                  // Auto-adjust base amount when switching units
+                  if (newUnit === 'servings') set('base_amount', '1');
+                  else if (newUnit === 'grams' || newUnit === 'ml') set('base_amount', '100');
+                  set('base_unit', newUnit);
+                }}
+                className="w-full h-[46px] pl-3 sm:pl-4 pr-10 bg-black/[0.04] border border-black/[0.10] text-gray-900 dark:bg-white/10 dark:border-white/20 dark:text-white rounded-xl sm:rounded-2xl text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-[#2E8B57]/40 focus:border-[#2E8B57]/60 transition-all duration-200 appearance-none [color-scheme:dark] cursor-pointer"
+              >
+                <option value="grams" className="bg-[#1a1a1a] text-white">Grams</option>
+                <option value="ml" className="bg-[#1a1a1a] text-white">ml</option>
+                <option value="servings" className="bg-[#1a1a1a] text-white">Servings</option>
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 dark:text-white/50 pointer-events-none" />
+            </div>
           </div>
         </div>
 
@@ -367,15 +373,18 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
               <div className="grid grid-cols-2 gap-2">
                 <div className="flex flex-col gap-1.5">
                   <label className="text-sm font-medium text-gray-500 dark:text-white/60 pl-1">Meal</label>
-                  <select
-                    value={journalMealType}
-                    onChange={(e) => setJournalMealType(e.target.value as MealType)}
-                    className="w-full h-[46px] px-3 sm:px-4 bg-black/[0.04] border border-black/[0.10] text-gray-900 dark:bg-white/10 dark:border-white/20 dark:text-white rounded-xl sm:rounded-2xl text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-[#2E8B57]/40 focus:border-[#2E8B57]/60 transition-all duration-200"
-                  >
-                    {MEAL_TYPES.map((m) => (
-                      <option key={m} value={m}>{MEAL_LABELS[m]}</option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <select
+                      value={journalMealType}
+                      onChange={(e) => setJournalMealType(e.target.value as MealType)}
+                      className="w-full h-[46px] pl-3 sm:pl-4 pr-10 bg-black/[0.04] border border-black/[0.10] text-gray-900 dark:bg-white/10 dark:border-white/20 dark:text-white rounded-xl sm:rounded-2xl text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-[#2E8B57]/40 focus:border-[#2E8B57]/60 transition-all duration-200 appearance-none [color-scheme:dark] cursor-pointer"
+                    >
+                      {MEAL_TYPES.map((m) => (
+                        <option key={m} value={m} className="bg-[#1a1a1a] text-white">{MEAL_LABELS[m]}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 dark:text-white/50 pointer-events-none" />
+                  </div>
                 </div>
                 <GlassInput
                   label="Servings"
@@ -494,15 +503,18 @@ function AddToJournalModal({ food, isOpen, onClose, onAdd }: AddToJournalModalPr
         )}
         <div className="flex flex-col gap-1.5">
           <label className="text-sm font-medium text-white/60 pl-1">Meal</label>
-          <select
-            value={mealType}
-            onChange={(e) => setMealType(e.target.value as MealType)}
-            className="w-full h-[46px] px-4 bg-white/10 border border-white/20 text-white rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2E8B57]/40 focus:border-[#2E8B57]/60 transition-all duration-200"
-          >
-            {MEAL_TYPES.map((m) => (
-              <option key={m} value={m} className="bg-[#1a1a1a]">{MEAL_LABELS[m]}</option>
-            ))}
-          </select>
+          <div className="relative">
+            <select
+              value={mealType}
+              onChange={(e) => setMealType(e.target.value as MealType)}
+              className="w-full h-[46px] pl-4 pr-10 bg-white/10 border border-white/20 text-white rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2E8B57]/40 focus:border-[#2E8B57]/60 transition-all duration-200 appearance-none [color-scheme:dark] cursor-pointer"
+            >
+              {MEAL_TYPES.map((m) => (
+                <option key={m} value={m} className="bg-[#1a1a1a] text-white">{MEAL_LABELS[m]}</option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/50 pointer-events-none" />
+          </div>
         </div>
         <GlassInput
           label="Servings"
@@ -651,17 +663,16 @@ export default function FoodsPage() {
 
   function handleAddToJournal(food: Food, mealType: MealType, servings: number) {
     const today = new Date().toLocaleString('en-CA').split(',')[0]; // YYYY-MM-DD in local time
-    const calories = (food.calories_per_100g ?? food.calories ?? 0) * servings;
-    const protein = (food.protein_per_100g ?? food.protein ?? 0) * servings;
-    
+    // Server computes calorie/protein snapshots when food_id is set; pass quantity
+    // in 'serving' unit (this page's UI still uses the legacy serving-multiplier
+    // pattern — full QuantityInput swap is not in scope here).
     addJournalEntry({
       date: today,
       meal_type: mealType,
       food_id: food.id,
       food_name_snapshot: food.name,
-      servings,
-      calories_snapshot: Math.round(calories),
-      protein_snapshot: Math.round(protein * 10) / 10,
+      quantity: servings,
+      unit: 'serving',
     }).catch((e: unknown) => console.error('Failed to add to journal:', e));
   }
 

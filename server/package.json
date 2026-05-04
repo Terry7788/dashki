@@ -5,7 +5,9 @@
   "scripts": {
     "build": "tsc && node -p \"require('fs').copyFileSync('./src/seed-foods.json', './dist/seed-foods.json')\"",
     "start": "node dist/index.js",
-    "dev": "ts-node-dev --respawn --transpile-only src/index.ts"
+    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "test": "tsc -p tsconfig.json && node --test dist/*.test.js",
+    "pull:prod": "node scripts/pull-from-prod.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

@@ -228,6 +228,64 @@ export function initDb(): Promise<void> {
         }
       });
 
+      // ── Migration: add quantity + unit to JournalEntries (DSHKI-8) ─────────
+      // SQLite ALTER TABLE can't add NOT NULL columns retroactively; we add
+      // them as nullable and enforce via the route code. Backfill from the
+      // legacy `servings` column so existing entries stay readable.
+      db.all(`PRAGMA table_info(JournalEntries)`, [], (pragmaErr, columns: Array<{ name: string }>) => {
+        if (pragmaErr) return;
+        const existingCols = new Set(columns.map((c) => c.name));
+        const migrations: string[] = [];
+
+        if (!existingCols.has('quantity')) {
+          migrations.push('ALTER TABLE JournalEntries ADD COLUMN quantity REAL');
+        }
+        if (!existingCols.has('unit')) {
+          migrations.push('ALTER TABLE JournalEntries ADD COLUMN unit TEXT');
+        }
+
+        for (const sql of migrations) {
+          db.run(sql, [], (err) => {
+            if (err) console.error('[db] migration error:', err.message);
+            else console.log(`[db] ran migration: ${sql}`);
+          });
+        }
+
+        // Backfill: any row where quantity IS NULL gets quantity=servings, unit='serving'.
+        // Idempotent — safe to re-run. Skipped once the legacy `servings` column has
+        // been dropped (PR 2 / Task 2.8) — at that point any new rows are written
+        // by routes that always populate quantity/unit, so the backfill is moot.
+        if (existingCols.has('servings')) {
+          db.run(
+            `UPDATE JournalEntries
+             SET quantity = servings, unit = 'serving'
+             WHERE quantity IS NULL OR unit IS NULL`,
+            [],
+            function (this: { changes: number }, err) {
+              if (err) console.error('[db] backfill error:', err.message);
+              else if (this.changes > 0) {
+                console.log(`[db] backfilled ${this.changes} JournalEntries with quantity/unit`);
+              }
+            }
+          );
+        }
+      });
+
+      // ── Migration: drop legacy `servings` column from JournalEntries (DSHKI-8 PR 2) ──
+      // SQLite ALTER TABLE DROP COLUMN was added in 3.35 (2021). Use a guarded
+      // try/catch via PRAGMA so this is safe on older SQLite builds (logs a
+      // warning but continues — the unused column is harmless).
+      db.all(`PRAGMA table_info(JournalEntries)`, [], (pragmaErr, columns: Array<{ name: string }>) => {
+        if (pragmaErr) return;
+        const existingCols = new Set(columns.map((c) => c.name));
+        if (existingCols.has('servings')) {
+          db.run('ALTER TABLE JournalEntries DROP COLUMN servings', [], (err) => {
+            if (err) console.warn('[db] could not drop legacy JournalEntries.servings:', err.message);
+            else console.log('[db] ran migration: DROP COLUMN JournalEntries.servings');
+          });
+        }
+      });
+
       // ── Sentinel to confirm serialization completed ────────────────────────
       db.run('SELECT 1', (err) => {
         if (err) reject(err);

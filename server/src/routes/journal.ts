@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { db } from '../db';
 import { getIo } from '../socket';
 import { syncCalorieHabit, todayLocalIso } from '../dashko-sync';
+import { nutritionFor, canonicalUnit } from '../nutrition';
 
 const router = Router();
 
@@ -18,7 +19,8 @@ function todayStr(): string {
 }
 
 const SELECT_ENTRY_SQL = `
-  SELECT id, date, meal_type, logged_at, food_id, food_name_snapshot, servings,
+  SELECT id, date, meal_type, logged_at, food_id, food_name_snapshot,
+         quantity, unit,
          calories_snapshot, protein_snapshot, created_at
   FROM JournalEntries
 `;
@@ -124,14 +126,19 @@ router.post('/', (req: Request, res: Response) => {
     logged_at,
     food_id,
     food_name_snapshot,
+    // New shape:
+    quantity: rawQuantity,
+    unit: rawUnit,
+    // Legacy shape (still accepted in PR 1):
     servings,
-    calories_snapshot,
-    protein_snapshot,
+    // Quick Add (food_id absent) only:
+    calories_snapshot: clientCalories,
+    protein_snapshot: clientProtein,
   } = req.body || {};
 
-  if (!date || !meal_type || !food_name_snapshot || servings === undefined || calories_snapshot === undefined) {
+  if (!date || !meal_type || !food_name_snapshot) {
     return res.status(400).json({
-      error: 'Missing required fields: date, meal_type, food_name_snapshot, servings, calories_snapshot',
+      error: 'Missing required fields: date, meal_type, food_name_snapshot',
     });
   }
 
@@ -140,39 +147,95 @@ router.post('/', (req: Request, res: Response) => {
     return res.status(400).json({ error: 'meal_type must be one of: breakfast, lunch, dinner, snack' });
   }
 
-  const servingsNum = toNumber(servings);
-  if (servingsNum === null || servingsNum <= 0) return res.status(400).json({ error: 'Invalid servings' });
+  // Resolve quantity + unit from either the new or legacy shape.
+  const validUnits = ['g', 'ml', 'serving'] as const;
+  const unit: 'g' | 'ml' | 'serving' = validUnits.includes(rawUnit) ? rawUnit : 'serving';
 
-  const caloriesNum = toNumber(calories_snapshot, 0)!;
-  const proteinNum = toNumber(protein_snapshot, null);
+  let quantity = toNumber(rawQuantity);
+  if (quantity === null) {
+    // Fall back to legacy `servings` field
+    const sv = toNumber(servings);
+    if (sv === null || sv <= 0) {
+      return res.status(400).json({ error: 'Missing or invalid quantity (or servings)' });
+    }
+    quantity = sv;
+  }
+  if (quantity <= 0) return res.status(400).json({ error: 'Invalid quantity' });
+
   const loggedAt = logged_at || new Date().toISOString();
   const foodIdVal = food_id ? Number(food_id) : null;
 
-  db.run(
-    `INSERT INTO JournalEntries (date, meal_type, logged_at, food_id, food_name_snapshot, servings, calories_snapshot, protein_snapshot)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [date, meal_type, loggedAt, foodIdVal, food_name_snapshot, servingsNum, caloriesNum, proteinNum],
-    function (this: { lastID: number }, err) {
-      if (err) {
-        console.error('[error] POST /api/journal', err);
-        return res.status(500).json({ error: 'Failed to add journal entry' });
-      }
-      const newId = this.lastID;
-      db.get(
-        `${SELECT_ENTRY_SQL} WHERE id = ?`,
-        [newId],
-        (err2, entry) => {
-          if (err2) {
-            console.error('[error] POST /api/journal fetch', err2);
-            return res.status(500).json({ error: 'Failed to fetch created entry' });
-          }
-          try { getIo().emit('journal-entry-created', entry); } catch (_) {}
-          if (date === todayLocalIso()) {
-            void syncCalorieHabit(date);
-          }
-          res.status(201).json(entry);
+  // Compute snapshots:
+  //   - food_id absent (Quick Add): trust client-supplied snapshots
+  //   - food_id present: look up the food, compute via nutritionFor
+  const finishInsert = (caloriesNum: number, proteinNum: number | null) => {
+    db.run(
+      `INSERT INTO JournalEntries
+         (date, meal_type, logged_at, food_id, food_name_snapshot,
+          quantity, unit,
+          calories_snapshot, protein_snapshot)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [date, meal_type, loggedAt, foodIdVal, food_name_snapshot,
+       quantity, unit,
+       caloriesNum, proteinNum],
+      function (this: { lastID: number }, err) {
+        if (err) {
+          console.error('[error] POST /api/journal', err);
+          return res.status(500).json({ error: 'Failed to add journal entry' });
         }
-      );
+        const newId = this.lastID;
+        db.get(
+          `${SELECT_ENTRY_SQL} WHERE id = ?`,
+          [newId],
+          (err2, entry) => {
+            if (err2) {
+              console.error('[error] POST /api/journal fetch', err2);
+              return res.status(500).json({ error: 'Failed to fetch created entry' });
+            }
+            try { getIo().emit('journal-entry-created', entry); } catch (_) {}
+            if (date === todayLocalIso()) {
+              void syncCalorieHabit(date);
+            }
+            res.status(201).json(entry);
+          }
+        );
+      }
+    );
+  };
+
+  if (foodIdVal === null) {
+    // Quick Add path
+    const cal = toNumber(clientCalories, 0)!;
+    const pro = toNumber(clientProtein, null);
+    finishInsert(cal, pro);
+    return;
+  }
+
+  // food_id path: look up the food, compute via nutritionFor
+  db.get(
+    `SELECT base_amount, base_unit, serving_size_g, calories, protein
+     FROM Foods WHERE id = ?`,
+    [foodIdVal],
+    (err, foodRow: any) => {
+      if (err || !foodRow) {
+        console.error('[error] POST /api/journal food lookup', err);
+        return res.status(500).json({ error: 'Failed to look up food for nutrition computation' });
+      }
+      try {
+        const food = {
+          base_amount: foodRow.base_amount,
+          base_unit: canonicalUnit(foodRow.base_unit),
+          serving_size_g: foodRow.serving_size_g,
+          calories: foodRow.calories,
+          protein: foodRow.protein,
+        };
+        const { calories, protein } = nutritionFor(food, quantity!, unit);
+        // Legacy `servings` column is computed as the unit-less ratio so an
+        // unmigrated frontend reading the row still gets a sensible value.
+        finishInsert(calories, protein);
+      } catch (e: any) {
+        return res.status(400).json({ error: e?.message || 'Invalid quantity/unit' });
+      }
     }
   );
 });
@@ -183,56 +246,125 @@ router.put('/:id', (req: Request, res: Response) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id' });
 
-  const { servings, meal_type, logged_at, calories_snapshot, protein_snapshot } = req.body || {};
+  const {
+    quantity: rawQuantity,
+    unit: rawUnit,
+    servings,
+    meal_type,
+    logged_at,
+    calories_snapshot,
+    protein_snapshot,
+  } = req.body || {};
 
-  const fields: string[] = [];
-  const params: unknown[] = [];
+  // First fetch the existing row so we know food_id (for snapshot recompute).
+  db.get(
+    `${SELECT_ENTRY_SQL} WHERE id = ?`,
+    [id],
+    (fetchErr, existing: any) => {
+      if (fetchErr) return res.status(500).json({ error: 'Failed to fetch entry' });
+      if (!existing) return res.status(404).json({ error: 'Journal entry not found' });
 
-  if (servings !== undefined) {
-    const v = toNumber(servings);
-    if (v === null || v <= 0) return res.status(400).json({ error: 'Invalid servings' });
-    fields.push('servings = ?'); params.push(v);
-  }
-  if (meal_type !== undefined) {
-    const validMealTypes = ['breakfast', 'lunch', 'dinner', 'snack'];
-    if (!validMealTypes.includes(meal_type)) return res.status(400).json({ error: 'Invalid meal_type' });
-    fields.push('meal_type = ?'); params.push(meal_type);
-  }
-  if (logged_at !== undefined) { fields.push('logged_at = ?'); params.push(logged_at); }
-  if (calories_snapshot !== undefined) {
-    const v = toNumber(calories_snapshot, 0);
-    fields.push('calories_snapshot = ?'); params.push(v);
-  }
-  if (protein_snapshot !== undefined) {
-    const v = toNumber(protein_snapshot, null);
-    fields.push('protein_snapshot = ?'); params.push(v);
-  }
+      const fields: string[] = [];
+      const params: unknown[] = [];
 
-  if (fields.length === 0) return res.status(400).json({ error: 'No fields to update' });
+      // Resolve new quantity/unit if either is being changed.
+      const validUnits = ['g', 'ml', 'serving'] as const;
+      const newUnit = validUnits.includes(rawUnit) ? rawUnit : (rawUnit === undefined ? undefined : null);
+      if (newUnit === null) return res.status(400).json({ error: 'Invalid unit' });
 
-  params.push(id);
-  db.run(
-    `UPDATE JournalEntries SET ${fields.join(', ')} WHERE id = ?`,
-    params,
-    function (this: { changes: number }, err) {
-      if (err) {
-        console.error('[error] PUT /api/journal/:id', err);
-        return res.status(500).json({ error: 'Failed to update journal entry' });
+      let newQuantity: number | undefined;
+      if (rawQuantity !== undefined) {
+        const q = toNumber(rawQuantity);
+        if (q === null || q <= 0) return res.status(400).json({ error: 'Invalid quantity' });
+        newQuantity = q;
+      } else if (servings !== undefined) {
+        const sv = toNumber(servings);
+        if (sv === null || sv <= 0) return res.status(400).json({ error: 'Invalid servings' });
+        newQuantity = sv;
       }
-      if (this.changes === 0) return res.status(404).json({ error: 'Journal entry not found' });
 
-      db.get(
-        `${SELECT_ENTRY_SQL} WHERE id = ?`,
-        [id],
-        (err2, entry) => {
-          if (err2) {
-            console.error('[error] PUT /api/journal/:id fetch', err2);
-            return res.status(500).json({ error: 'Failed to fetch updated entry' });
-          }
-          try { getIo().emit('journal-entry-updated', entry); } catch (_) {}
-          res.json(entry);
+      const finalQuantity = newQuantity ?? existing.quantity;
+      const finalUnit = (newUnit ?? existing.unit) as 'g'|'ml'|'serving';
+
+      // If the entry has a food_id and quantity/unit changed, recompute snapshots
+      // server-side from the food. Otherwise (Quick Add or unrelated PUT), accept
+      // client-supplied snapshot fields if any.
+      const quantityOrUnitChanged = newQuantity !== undefined || newUnit !== undefined;
+      const isQuickAdd = existing.food_id == null;
+
+      const finishUpdate = (calForCol: number | null, proForCol: number | null) => {
+        if (newQuantity !== undefined || servings !== undefined) {
+          fields.push('quantity = ?'); params.push(finalQuantity);
         }
-      );
+        if (newUnit !== undefined) {
+          fields.push('unit = ?'); params.push(finalUnit);
+        }
+        if (meal_type !== undefined) {
+          if (!['breakfast','lunch','dinner','snack'].includes(meal_type))
+            return res.status(400).json({ error: 'Invalid meal_type' });
+          fields.push('meal_type = ?'); params.push(meal_type);
+        }
+        if (logged_at !== undefined) { fields.push('logged_at = ?'); params.push(logged_at); }
+        if (calForCol !== null) { fields.push('calories_snapshot = ?'); params.push(calForCol); }
+        if (proForCol !== null) { fields.push('protein_snapshot = ?'); params.push(proForCol); }
+
+        if (fields.length === 0) return res.status(400).json({ error: 'No fields to update' });
+
+        params.push(id);
+        db.run(
+          `UPDATE JournalEntries SET ${fields.join(', ')} WHERE id = ?`,
+          params,
+          function (this: { changes: number }, err) {
+            if (err) {
+              console.error('[error] PUT /api/journal/:id', err);
+              return res.status(500).json({ error: 'Failed to update journal entry' });
+            }
+            if (this.changes === 0) return res.status(404).json({ error: 'Journal entry not found' });
+
+            db.get(
+              `${SELECT_ENTRY_SQL} WHERE id = ?`,
+              [id],
+              (err2, entry) => {
+                if (err2) return res.status(500).json({ error: 'Failed to fetch updated entry' });
+                try { getIo().emit('journal-entry-updated', entry); } catch (_) {}
+                res.json(entry);
+              }
+            );
+          }
+        );
+      };
+
+      if (quantityOrUnitChanged && !isQuickAdd) {
+        // Recompute snapshots from the food.
+        db.get(
+          `SELECT base_amount, base_unit, serving_size_g, calories, protein
+           FROM Foods WHERE id = ?`,
+          [existing.food_id],
+          (foodErr, foodRow: any) => {
+            if (foodErr || !foodRow) {
+              return res.status(500).json({ error: 'Failed to look up food for nutrition recompute' });
+            }
+            try {
+              const food = {
+                base_amount: foodRow.base_amount,
+                base_unit: canonicalUnit(foodRow.base_unit),
+                serving_size_g: foodRow.serving_size_g,
+                calories: foodRow.calories,
+                protein: foodRow.protein,
+              };
+              const { calories, protein } = nutritionFor(food, finalQuantity, finalUnit);
+              finishUpdate(calories, protein);
+            } catch (e: any) {
+              return res.status(400).json({ error: e?.message || 'Invalid quantity/unit' });
+            }
+          }
+        );
+      } else {
+        // Quick Add or unrelated PUT — accept client-supplied snapshots.
+        const cal = calories_snapshot !== undefined ? toNumber(calories_snapshot, 0)! : null;
+        const pro = protein_snapshot !== undefined ? toNumber(protein_snapshot, null) : null;
+        finishUpdate(cal, pro);
+      }
     }
   );
 });
