@@ -21,6 +21,16 @@ export function QuantityInput({ food, quantity, unit, onChange }: QuantityInputP
 
   const stop = (e: React.MouseEvent | React.KeyboardEvent) => e.stopPropagation();
 
+  // Fires on each keystroke while the input is focused — keeps parent state
+  // (and the live kcal preview) in sync with what the user is typing.
+  // Empty / unparseable values don't propagate (parent keeps its last good
+  // quantity), so the preview shows the previous valid number rather than 0.
+  const updateDraft = (next: string) => {
+    setCustomDraft(next);
+    const n = parseFloat(next);
+    if (Number.isFinite(n) && n >= 0) onChange({ quantity: n, unit });
+  };
+
   const commitCustom = () => {
     const n = parseFloat(customDraft);
     if (Number.isFinite(n) && n >= 0) onChange({ quantity: n, unit });
@@ -89,7 +99,7 @@ export function QuantityInput({ food, quantity, unit, onChange }: QuantityInputP
               <input
                 type="number" inputMode="decimal" min={0} step={0.1} autoFocus
                 value={customDraft}
-                onChange={(e) => setCustomDraft(e.target.value)}
+                onChange={(e) => updateDraft(e.target.value)}
                 onBlur={commitCustom}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') commitCustom();
@@ -126,7 +136,7 @@ export function QuantityInput({ food, quantity, unit, onChange }: QuantityInputP
             step={1}
             value={editingCustom ? customDraft : (quantity === 0 ? '' : String(quantity))}
             onFocus={() => { setCustomDraft(String(quantity)); setEditingCustom(true); }}
-            onChange={(e) => setCustomDraft(e.target.value)}
+            onChange={(e) => updateDraft(e.target.value)}
             onBlur={commitCustom}
             onKeyDown={(e) => {
               if (e.key === 'Enter') commitCustom();
