@@ -15,12 +15,24 @@ interface FoodFormData {
   name: string;
   base_amount: string;
   base_unit: BaseUnit;
+  /** Calories per (base_amount × base_unit) — NOT necessarily per 100g.
+   *  Field name is legacy; the value semantics follow the current unit/amount. */
   calories_per_100g: string;
   protein_per_100g: string;
   carbs_per_100g: string;
   fat_per_100g: string;
   serving_size_g: string;
 }
+
+/** Human-readable label for "per (amount × unit)" — used in field captions
+ *  so users know what the value they're typing represents. */
+function formatBaseLabel(unit: BaseUnit, amount: string | number): string {
+  const n = typeof amount === 'string' ? parseFloat(amount) || 0 : amount;
+  if (unit === 'servings') return n === 1 ? '1 serving' : `${n} servings`;
+  if (unit === 'ml') return `${n}ml`;
+  return `${n}g`;
+}
+
 
 const defaultForm = (): FoodFormData => ({
   name: '',
@@ -90,15 +102,32 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
 
   useEffect(() => {
     if (editingFood) {
+      // Load the food's ACTUAL base — not always 'grams'/'100'. mapFood's
+      // calories_per_100g alias is misnamed for non-grams foods (it returns
+      // the raw per-base value when unit isn't grams), so prefer the raw
+      // `calories`/`protein`/etc fields which always represent
+      // "per (base_amount × base_unit)". Cast through `unknown` because
+      // the Food type doesn't declare `carbs`/`fat` directly even though
+      // the API returns them, and the canonical Unit doesn't include the
+      // legacy DB string 'grams' which we still defensively handle.
+      const f = editingFood as Food & {
+        carbs?: number; fat?: number; baseUnit?: string; base_unit?: string;
+      };
+      const rawBaseUnit = (f.baseUnit ?? f.base_unit ?? 'g') as string;
+      const dbUnit: BaseUnit =
+        rawBaseUnit === 'g' || rawBaseUnit === 'grams' ? 'grams'
+        : rawBaseUnit === 'ml' ? 'ml'
+        : 'servings';
+      const baseAmount = f.baseAmount ?? f.base_amount ?? 100;
       setForm({
-        name: editingFood.name,
-        base_amount: '100',
-        base_unit: 'grams',
-        calories_per_100g: String(editingFood.calories_per_100g ?? editingFood.calories ?? ''),
-        protein_per_100g: String(editingFood.protein_per_100g ?? editingFood.protein ?? ''),
-        carbs_per_100g: String(editingFood.carbs_per_100g ?? ''),
-        fat_per_100g: String(editingFood.fat_per_100g ?? ''),
-        serving_size_g: editingFood.serving_size_g != null ? String(editingFood.serving_size_g) : '',
+        name: f.name,
+        base_amount: String(baseAmount),
+        base_unit: dbUnit,
+        calories_per_100g: String(f.calories ?? f.calories_per_100g ?? ''),
+        protein_per_100g: String(f.protein ?? f.protein_per_100g ?? ''),
+        carbs_per_100g: String(f.carbs ?? f.carbs_per_100g ?? ''),
+        fat_per_100g: String(f.fat ?? f.fat_per_100g ?? ''),
+        serving_size_g: f.serving_size_g != null ? String(f.serving_size_g) : '',
       });
     } else {
       setForm(defaultForm());
@@ -124,14 +153,23 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
 
     setSaving(true);
     setServerError('');
+    // Send base_amount/baseUnit on every save so unit toggles in the form
+    // actually persist. Earlier the payload dropped these silently — the
+    // food's stored base_unit never changed even when the user switched
+    // it in the modal. Backend accepts either camelCase or snake_case
+    // and normalises legacy 'grams'/'servings' on read via mapFood, so
+    // sending the form's BaseUnit values is fine on the wire even though
+    // the canonical Unit type is narrower.
     const payload = {
       name: form.name.trim(),
+      baseAmount: Number(form.base_amount) || 100,
+      baseUnit: form.base_unit,
       calories_per_100g: Number(form.calories_per_100g),
       protein_per_100g: Number(form.protein_per_100g) || 0,
       carbs_per_100g: Number(form.carbs_per_100g) || 0,
       fat_per_100g: Number(form.fat_per_100g) || 0,
       serving_size_g: form.serving_size_g ? Number(form.serving_size_g) : undefined,
-    };
+    } as unknown as Omit<Food, 'id' | 'created_at'>;
 
     try {
       let food: Food;
@@ -215,7 +253,11 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
                 value={form.base_unit}
                 onChange={(e) => {
                   const newUnit = e.target.value as BaseUnit;
-                  // Auto-adjust base amount when switching units
+                  if (newUnit === form.base_unit) return;
+                  // Adjust base_amount to a sensible default for the new unit,
+                  // but leave the nutrient values alone — auto-converting them
+                  // mid-edit overwrites what the user is actively typing. The
+                  // dynamic field labels make it clear what each value means.
                   if (newUnit === 'servings') set('base_amount', '1');
                   else if (newUnit === 'grams' || newUnit === 'ml') set('base_amount', '100');
                   set('base_unit', newUnit);
@@ -234,7 +276,7 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
         <div className="grid grid-cols-2 gap-2 sm:gap-3">
           <div className="relative">
             <GlassInput
-              label="Calories (per 100g) *"
+              label={`Calories (per ${formatBaseLabel(form.base_unit, form.base_amount)}) *`}
               type="number"
               inputMode="decimal"
               value={form.calories_per_100g}
@@ -258,7 +300,7 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
           </div>
           <div className="relative">
             <GlassInput
-              label="Protein (per 100g)"
+              label={`Protein (per ${formatBaseLabel(form.base_unit, form.base_amount)})`}
               type="number"
               inputMode="decimal"
               value={form.protein_per_100g}
@@ -282,7 +324,7 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
         <div className="grid grid-cols-2 gap-2 sm:gap-3">
           <div className="relative">
             <GlassInput
-              label="Carbs (per 100g)"
+              label={`Carbs (per ${formatBaseLabel(form.base_unit, form.base_amount)})`}
               type="number"
               inputMode="decimal"
               value={form.carbs_per_100g}
@@ -303,7 +345,7 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
           </div>
           <div className="relative">
             <GlassInput
-              label="Fat (per 100g)"
+              label={`Fat (per ${formatBaseLabel(form.base_unit, form.base_amount)})`}
               type="number"
               inputMode="decimal"
               value={form.fat_per_100g}
@@ -547,20 +589,64 @@ interface FoodRowProps {
 }
 
 function FoodRow({ food, onEdit, onDelete, onAddToJournal }: FoodRowProps) {
-  const calories = food.calories ?? food.calories_per_100g ?? 0;
-  const protein = food.protein ?? food.protein_per_100g ?? 0;
-  const carbs = food.carbs_per_100g ?? 0;
-  const fat = food.fat_per_100g ?? 0;
+  const rawCalories = food.calories ?? food.calories_per_100g ?? 0;
+  const rawProtein = food.protein ?? food.protein_per_100g ?? 0;
+  const rawCarbs = food.carbs_per_100g ?? 0;
+  const rawFat = food.fat_per_100g ?? 0;
+
+  const baseAmount = food.baseAmount ?? food.base_amount ?? 100;
+  // Cast through string so we can defensively handle legacy DB values
+  // ('grams' / 'servings') alongside the canonical 'g' / 'serving' / 'ml'.
+  const baseUnit = (food.baseUnit ?? food.base_unit ?? 'g') as string;
+  const servingG = food.serving_size_g ?? null;
+
+  // Display logic: prefer per-serving for any food that has a serving size
+  // defined (Terry's preference — "if there's a serving, show me the
+  // serving info, not the per-100g info"). For grams-base foods we derive
+  // per-serving values from the stored per-100g raw values. For ml-base
+  // foods we can't cross dimensions, so we display per the food's base.
+  let perBase: string;
+  let calories: number;
+  let protein: number;
+  let carbs: number;
+  let fat: number;
+
+  if (baseUnit === 'serving') {
+    // Already per serving — show as-is, no conversion
+    perBase = baseAmount === 1 ? 'per 1 serving' : `per ${baseAmount} servings`;
+    calories = rawCalories;
+    protein = rawProtein;
+    carbs = rawCarbs;
+    fat = rawFat;
+  } else if ((baseUnit === 'g' || baseUnit === 'grams') && servingG != null && servingG > 0) {
+    // Grams base + serving size set → show per-serving (derived)
+    const factor = servingG / baseAmount;
+    perBase = `per 1 serving (${servingG}g)`;
+    calories = Math.round(rawCalories * factor);
+    protein = Math.round(rawProtein * factor * 10) / 10;
+    carbs = Math.round(rawCarbs * factor * 10) / 10;
+    fat = Math.round(rawFat * factor * 10) / 10;
+  } else if (baseUnit === 'ml') {
+    perBase = `per ${baseAmount}ml`;
+    calories = rawCalories;
+    protein = rawProtein;
+    carbs = rawCarbs;
+    fat = rawFat;
+  } else {
+    // grams base, no serving size → show per the base
+    perBase = `per ${baseAmount}g`;
+    calories = rawCalories;
+    protein = rawProtein;
+    carbs = rawCarbs;
+    fat = rawFat;
+  }
 
   return (
     <div className="flex flex-row items-center gap-3 sm:gap-4 px-3 sm:px-5 py-3 sm:py-4 rounded-2xl sm:rounded-3xl bg-white/[0.06] border border-white/10 hover:bg-white/[0.09] transition-all duration-200 group">
       <div className="flex-1 min-w-0">
         <p className="font-medium text-white truncate">{food.name}</p>
         <p className="text-xs text-white/50 mt-0.5">
-          per 100g · {calories} kcal · {protein}g protein
-          {food.serving_size_g != null && (
-            <span> · serving {food.serving_size_g}g</span>
-          )}
+          {perBase} · {calories} kcal · {protein}g protein
         </p>
       </div>
 
