@@ -286,6 +286,63 @@ export function initDb(): Promise<void> {
         }
       });
 
+      // ── Migration: add quantity + unit to SavedMealItems (DSHKI-11 PR 3) ──────
+      // Mirror of the JournalEntries migration above. Adds the two new columns
+      // and backfills from the legacy `servings` column so existing meal items
+      // keep their data. Guarded by PRAGMA so it's idempotent.
+      db.all(`PRAGMA table_info(SavedMealItems)`, [], (pragmaErr, columns: Array<{ name: string }>) => {
+        if (pragmaErr) return;
+        const existingCols = new Set(columns.map((c) => c.name));
+        const migrations: string[] = [];
+
+        if (!existingCols.has('quantity')) {
+          migrations.push('ALTER TABLE SavedMealItems ADD COLUMN quantity REAL');
+        }
+        if (!existingCols.has('unit')) {
+          migrations.push('ALTER TABLE SavedMealItems ADD COLUMN unit TEXT');
+        }
+
+        for (const sql of migrations) {
+          db.run(sql, [], (err) => {
+            if (err) console.error('[db] migration error:', err.message);
+            else console.log(`[db] ran migration: ${sql}`);
+          });
+        }
+
+        // Backfill: any row where quantity IS NULL gets quantity=servings, unit='serving'.
+        // Idempotent — safe to re-run. Skipped once the legacy `servings` column has
+        // been dropped (PR 3) — at that point any new rows are written by routes that
+        // always populate quantity/unit, so the backfill is moot.
+        if (existingCols.has('servings')) {
+          db.run(
+            `UPDATE SavedMealItems
+             SET quantity = servings, unit = 'serving'
+             WHERE quantity IS NULL OR unit IS NULL`,
+            [],
+            function (this: { changes: number }, err) {
+              if (err) console.error('[db] backfill error:', err.message);
+              else if (this.changes > 0) {
+                console.log(`[db] backfilled ${this.changes} SavedMealItems with quantity/unit`);
+              }
+            }
+          );
+        }
+      });
+
+      // ── Migration: drop legacy `servings` column from SavedMealItems (DSHKI-11 PR 3) ──
+      // Same pattern as JournalEntries drop above. SQLite 3.35+ only; safe to
+      // fail gracefully on older builds (column becomes dead weight but harmless).
+      db.all(`PRAGMA table_info(SavedMealItems)`, [], (pragmaErr, columns: Array<{ name: string }>) => {
+        if (pragmaErr) return;
+        const existingCols = new Set(columns.map((c) => c.name));
+        if (existingCols.has('servings')) {
+          db.run('ALTER TABLE SavedMealItems DROP COLUMN servings', [], (err) => {
+            if (err) console.warn('[db] could not drop legacy SavedMealItems.servings:', err.message);
+            else console.log('[db] ran migration: DROP COLUMN SavedMealItems.servings');
+          });
+        }
+      });
+
       // ── Sentinel to confirm serialization completed ────────────────────────
       db.run('SELECT 1', (err) => {
         if (err) reject(err);

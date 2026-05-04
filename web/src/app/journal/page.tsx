@@ -353,15 +353,16 @@ function AddFoodModal({ isOpen, onClose, mealType, date, onAdded }: AddFoodModal
       }
 
       for (const item of fullMeal.items) {
-        // Server computes snapshots when food_id is set; pass quantity in 'serving' unit
+        // Server computes snapshots when food_id is set; log in each item's native unit
         const quantity = item.quantity ?? item.servings ?? 1;
+        const unit = (item.unit as Unit) ?? 'serving';
         const entry = await addJournalEntry({
           date,
           meal_type: mealType,
           food_id: item.foodId,
           food_name_snapshot: item.name ?? `Food ${item.foodId}`,
           quantity,
-          unit: 'serving',
+          unit,
         });
         onAdded(entry);
       }

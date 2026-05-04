@@ -83,7 +83,7 @@ export function getSavedMeals(): Promise<SavedMeal[]> {
 
 export function createSavedMeal(data: {
   name: string;
-  items: Array<{ food_id: number; servings: number }>;
+  items: Array<{ food_id: number; quantity: number; unit: 'g' | 'ml' | 'serving' }>;
 }): Promise<SavedMeal> {
   return request<SavedMeal>('/api/meals/saved', {
     method: 'POST',
@@ -95,7 +95,7 @@ export function deleteSavedMeal(id: number): Promise<void> {
   return request<void>(`/api/meals/saved/${id}`, { method: 'DELETE' });
 }
 
-export function updateSavedMeal(id: number, data: { name: string; items: { food_id: number; servings: number }[] }): Promise<SavedMeal> {
+export function updateSavedMeal(id: number, data: { name: string; items: { food_id: number; quantity: number; unit: 'g' | 'ml' | 'serving' }[] }): Promise<SavedMeal> {
   return request<SavedMeal>(`/api/meals/saved/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 }
 
