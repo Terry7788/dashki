@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode, useEffect, useCallback, useRef } from 'react';
+import { ReactNode, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import clsx from 'clsx';
 import { X } from 'lucide-react';
 
@@ -81,7 +81,14 @@ export default function GlassModal({
   // (e.g. `setEntries` after adding a food) tears down and rebuilds the
   // scroll lock — the cleanup's `window.scrollTo` races with the body
   // unlock and the page snaps back to 0.
-  useEffect(() => {
+  //
+  // useLayoutEffect (not useEffect) so the cleanup runs SYNCHRONOUSLY
+  // before the browser paints. With useEffect the DOM commit (modal
+  // removed) paints FIRST with body still position:fixed at top:-Ypx,
+  // visually showing the page at scrollY=0 (jump to top), then the
+  // cleanup fires and scrollTo corrects it (move down). useLayoutEffect
+  // closes that gap so the unlock + scrollTo land in the same frame.
+  useLayoutEffect(() => {
     if (!isOpen) return;
 
     savedScrollYRef.current = window.scrollY;
