@@ -107,7 +107,12 @@ export default function GlassModal({
       body.style.right = '';
       body.style.overflow = '';
       body.style.width = '';
-      window.scrollTo(0, savedScrollYRef.current);
+      // behavior:'instant' overrides the global `html { scroll-behavior:
+      // smooth }` from globals.css. Without it, the body unlock makes the
+      // page visually snap to scrollY=0 and then SMOOTH-scroll back to the
+      // saved position over ~300ms — looks like "jump to top, then animate
+      // down". Instant scroll lands in the same paint frame as the unlock.
+      window.scrollTo({ top: savedScrollYRef.current, left: 0, behavior: 'instant' as ScrollBehavior });
     };
   }, [isOpen]);
 
