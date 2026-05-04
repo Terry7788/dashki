@@ -71,9 +71,7 @@ export function QuantityInput({ food, quantity, unit, onChange }: QuantityInputP
   const isServingMode = unit === 'serving';
 
   return (
-    <div className="px-4 pb-3 flex items-center gap-3 flex-wrap" onClick={stop}>
-      <span className="text-xs text-white/50 shrink-0">Amount</span>
-
+    <div className="px-4 py-3 flex items-center gap-3 flex-wrap" onClick={stop}>
       <div className="flex items-center gap-2">
         {isServingMode ? (
           <>
@@ -143,16 +141,16 @@ export function QuantityInput({ food, quantity, unit, onChange }: QuantityInputP
 
       {/* Unit pills (or plain label if only one option) */}
       {showToggle ? (
-        <div className="flex items-center gap-1 p-0.5 rounded-xl bg-white/5 border border-white/10">
+        <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.06] border border-white/10">
           {units.map((opt) => (
             <button
               key={opt.unit}
               type="button"
               onClick={(e) => { stop(e); switchUnit(opt.unit); }}
-              className={`px-2.5 py-1 text-xs rounded-lg transition-colors ${
+              className={`px-3 py-1.5 text-sm rounded-lg transition-all duration-150 ${
                 opt.unit === unit
-                  ? 'bg-indigo-500/20 border border-indigo-400/60 text-white font-medium'
-                  : 'text-white/60 hover:text-white border border-transparent'
+                  ? 'bg-indigo-500/30 border border-indigo-400 text-white font-semibold shadow-sm shadow-indigo-500/20'
+                  : 'text-white/60 hover:text-white hover:bg-white/[0.06] border border-transparent'
               }`}
             >
               {opt.label}
@@ -160,10 +158,10 @@ export function QuantityInput({ food, quantity, unit, onChange }: QuantityInputP
           ))}
         </div>
       ) : (
-        <span className="text-xs text-white/50">{units[0].label}</span>
+        <span className="text-sm text-white/60 px-2">{units[0].label}</span>
       )}
 
-      <span className="text-xs text-indigo-300 ml-auto tabular-nums">
+      <span className="text-sm font-semibold text-indigo-300 ml-auto tabular-nums">
         {kcalPreview != null ? `${kcalPreview} kcal` : '—'}
       </span>
     </div>

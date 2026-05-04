@@ -402,10 +402,10 @@ function AddFoodModal({ isOpen, onClose, mealType, date, onAdded }: AddFoodModal
   }
 
   const tabClass = (t: typeof tab) =>
-    `flex-1 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 flex items-center justify-center gap-1.5 ${
+    `flex-1 py-3 sm:py-3.5 px-2 text-sm sm:text-base font-medium rounded-xl transition-all duration-200 flex items-center justify-center gap-2 ${
       tab === t
-        ? 'bg-white/15 text-white border border-white/20'
-        : 'text-white/50 hover:text-white'
+        ? 'bg-white/[0.12] text-white border border-white/20 shadow-sm'
+        : 'text-white/55 hover:text-white hover:bg-white/[0.04] border border-transparent'
     }`;
 
   // Selection summary for the sticky footer
@@ -473,15 +473,15 @@ function AddFoodModal({ isOpen, onClose, mealType, date, onAdded }: AddFoodModal
     >
       <div className="space-y-4">
         {/* Tabs — shorter labels so they don't crowd on narrow screens */}
-        <div className="flex gap-1 p-1 rounded-2xl bg-white/5 border border-white/10">
+        <div className="flex gap-1.5 p-1.5 rounded-2xl bg-white/[0.04] border border-white/10">
           <button className={tabClass('foods')} onClick={() => setTab('foods')}>
-            <span aria-hidden>🍎</span> Foods
+            <span aria-hidden className="text-base">🍎</span> Foods
           </button>
           <button className={tabClass('meals')} onClick={() => setTab('meals')}>
-            <span aria-hidden>🍽️</span> Meals
+            <span aria-hidden className="text-base">🍽️</span> Meals
           </button>
           <button className={tabClass('quick')} onClick={() => setTab('quick')}>
-            <span aria-hidden>⚡</span> Quick
+            <span aria-hidden className="text-base">⚡</span> Quick
           </button>
         </div>
 
@@ -671,48 +671,64 @@ function EditEntryModal({ isOpen, onClose, entry, onUpdated }: EditEntryModalPro
   return (
     <GlassModal isOpen={isOpen} onClose={onClose} title="Edit Entry" size="sm">
       {entry && (
-        <div className="space-y-4">
-          <p className="font-medium text-white">{entry.food_name_snapshot}</p>
-
-          {isQuickAdd || !food ? (
-            // Quick Add: simple single quantity input (no unit toggle)
-            <GlassInput
-              label="Amount"
-              type="number"
-              inputMode="decimal"
-              value={String(quantity)}
-              onChange={(e) => setQuantity(parseFloat(e.target.value) || 0)}
-              min={0.1}
-              step={0.1}
-            />
-          ) : (
-            // Food-bound: full QuantityInput with unit toggle
-            <div className="rounded-2xl bg-white/[0.04] border border-white/10">
-              <QuantityInput
-                food={food}
-                quantity={quantity}
-                unit={unit}
-                onChange={(next) => { setQuantity(next.quantity); setUnit(next.unit); }}
-              />
-            </div>
-          )}
-
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-white/60 pl-1">Meal</label>
-            <select
-              value={mealType}
-              onChange={(e) => setMealType(e.target.value as MealType)}
-              className="w-full px-4 py-3 backdrop-blur-sm bg-white/10 border border-white/20 rounded-2xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-400/40 focus:border-indigo-400/60 transition-all duration-200"
-            >
-              {MEAL_TYPES.map((m) => (
-                <option key={m} value={m} className="bg-slate-900">{MEAL_LABELS[m]}</option>
-              ))}
-            </select>
+        <div className="space-y-5">
+          {/* Food name as a header, not a body line */}
+          <div className="space-y-1">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">Food</p>
+            <p className="text-base font-semibold text-white break-words leading-snug">{entry.food_name_snapshot}</p>
           </div>
 
-          {error && <p className="text-sm text-red-400">{error}</p>}
+          {/* Amount section */}
+          <div className="flex flex-col gap-2">
+            <label className="text-[10px] font-semibold uppercase tracking-widest text-white/40 pl-1">Amount</label>
+            {isQuickAdd || !food ? (
+              // Quick Add: simple single quantity input (no unit toggle)
+              <input
+                type="number"
+                inputMode="decimal"
+                value={String(quantity)}
+                onChange={(e) => setQuantity(parseFloat(e.target.value) || 0)}
+                min={0.1}
+                step={0.1}
+                className="w-full px-4 py-3 bg-white/[0.06] border border-white/15 rounded-2xl text-white text-base focus:outline-none focus:ring-2 focus:ring-indigo-400/40 focus:border-indigo-400/40 transition-all duration-200"
+              />
+            ) : (
+              // Food-bound: full QuantityInput with unit toggle
+              <div className="rounded-2xl bg-white/[0.04] border border-white/10">
+                <QuantityInput
+                  food={food}
+                  quantity={quantity}
+                  unit={unit}
+                  onChange={(next) => { setQuantity(next.quantity); setUnit(next.unit); }}
+                />
+              </div>
+            )}
+          </div>
 
-          <div className="flex gap-3">
+          {/* Meal section — pill-style segmented control replaces the native select */}
+          <div className="flex flex-col gap-2">
+            <label className="text-[10px] font-semibold uppercase tracking-widest text-white/40 pl-1">Meal</label>
+            <div className="grid grid-cols-4 gap-1.5 p-1.5 rounded-2xl bg-white/[0.04] border border-white/10">
+              {MEAL_TYPES.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setMealType(m)}
+                  className={`py-2 text-xs sm:text-sm font-medium rounded-xl transition-all duration-150 ${
+                    mealType === m
+                      ? 'bg-indigo-500/30 border border-indigo-400 text-white shadow-sm shadow-indigo-500/20'
+                      : 'text-white/60 hover:text-white hover:bg-white/[0.06] border border-transparent'
+                  }`}
+                >
+                  {MEAL_LABELS[m]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {error && <p className="text-sm text-red-400 bg-red-500/10 border border-red-400/20 rounded-xl px-3 py-2">{error}</p>}
+
+          <div className="flex gap-3 pt-1">
             <GlassButton variant="default" className="flex-1" onClick={onClose}>Cancel</GlassButton>
             <GlassButton variant="primary" className="flex-1" onClick={handleSave} disabled={saving || quantity <= 0}>
               {saving ? 'Saving…' : 'Save'}
