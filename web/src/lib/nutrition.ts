@@ -16,17 +16,15 @@ export interface FoodForNutrition {
 
 export function computeRatio(food: FoodForNutrition, quantity: number, unit: Unit): number {
   const { base_unit, base_amount, serving_size_g } = food;
+  // Fallback: when serving_size_g is null, "1 serving" = base_amount of the
+  // base unit. Lets the picker offer the serving toggle for any food.
+  const servingSize = serving_size_g ?? base_amount;
   if (base_unit === 'g' && unit === 'g') return quantity / base_amount;
-  if (base_unit === 'g' && unit === 'serving') {
-    if (serving_size_g == null) throw new Error('No serving_size_g');
-    return (quantity * serving_size_g) / base_amount;
-  }
+  if (base_unit === 'g' && unit === 'serving') return (quantity * servingSize) / base_amount;
   if (base_unit === 'ml' && unit === 'ml') return quantity / base_amount;
+  if (base_unit === 'ml' && unit === 'serving') return (quantity * servingSize) / base_amount;
   if (base_unit === 'serving' && unit === 'serving') return quantity / base_amount;
-  if (base_unit === 'serving' && unit === 'g') {
-    if (serving_size_g == null) throw new Error('No serving_size_g');
-    return (quantity / serving_size_g) / base_amount;
-  }
+  if (base_unit === 'serving' && unit === 'g') return (quantity / servingSize) / base_amount;
   throw new Error(`Unsupported: base=${base_unit} entered=${unit}`);
 }
 
@@ -41,16 +39,18 @@ export function nutritionFor(food: FoodForNutrition, quantity: number, unit: Uni
 export function convertQuantity(food: FoodForNutrition, quantity: number, fromUnit: Unit, toUnit: Unit): number {
   if (fromUnit === toUnit) return quantity;
   const ratio = computeRatio(food, quantity, fromUnit);
+  const servingSize = food.serving_size_g ?? food.base_amount;
   if (toUnit === 'g' && food.base_unit === 'g') return ratio * food.base_amount;
   if (toUnit === 'ml' && food.base_unit === 'ml') return ratio * food.base_amount;
   if (toUnit === 'serving' && food.base_unit === 'g') {
-    if (food.serving_size_g == null) throw new Error('No serving_size_g');
-    return (ratio * food.base_amount) / food.serving_size_g;
+    return (ratio * food.base_amount) / servingSize;
+  }
+  if (toUnit === 'serving' && food.base_unit === 'ml') {
+    return (ratio * food.base_amount) / servingSize;
   }
   if (toUnit === 'serving' && food.base_unit === 'serving') return ratio * food.base_amount;
   if (toUnit === 'g' && food.base_unit === 'serving') {
-    if (food.serving_size_g == null) throw new Error('No serving_size_g');
-    return ratio * food.base_amount * food.serving_size_g;
+    return ratio * food.base_amount * servingSize;
   }
   throw new Error(`Unsupported conversion: ${fromUnit} → ${toUnit} (base=${food.base_unit})`);
 }

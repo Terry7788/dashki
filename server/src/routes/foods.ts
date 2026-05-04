@@ -20,39 +20,40 @@ interface UnitOption {
 }
 
 /**
- * Derive the units the picker can offer for a food. The convention is:
- *   - If both base unit and serving_size_g are present, expose both with the
- *     "serving" option set as default (most natural way to log).
- *   - If only the base unit is present (no serving size), expose that alone.
+ * Derive the units the picker can offer for a food. We always expose both
+ * unit options (base + 'serving') so the user can switch freely — even when
+ * the food has no explicit serving_size_g. Convention when serving_size_g
+ * is null: 1 serving = base_amount (of the base unit). The conversion
+ * helpers in nutrition.ts mirror this fallback so log-time math stays
+ * consistent.
  *
- * IMPORTANT: We use the RAW serving_size_g column value here, NOT the mapped
- * fallback (some g-based foods have serving_size_g === base_amount as a
- * fallback derived in mapFood, which would create a meaningless "serving"
- * toggle for raw ingredients like chicken). Pass the raw row value.
+ * For ml-base foods, the cross-unit option is `serving` measured in ml
+ * (no `g` option — grams ≠ ml without density).
  */
 function deriveUnits(rawBaseUnit: string, baseAmount: number, rawServingSizeG: number | null): UnitOption[] {
   const base = canonicalUnit(rawBaseUnit);
+  const servingSize = rawServingSizeG ?? baseAmount;
+  // Default to the most natural unit for the picker: serving when an
+  // explicit serving_size_g is set (the food is genuinely portioned),
+  // otherwise the food's native unit (raw ingredients land in g).
+  const servingIsDefault = rawServingSizeG != null;
 
   if (base === 'g') {
-    if (rawServingSizeG == null) {
-      return [{ unit: 'g', label: 'g', default: true }];
-    }
     return [
-      { unit: 'g', label: 'g', default: false },
-      { unit: 'serving', label: `1 serving (${rawServingSizeG}g)`, default: true },
+      { unit: 'g', label: 'g', default: !servingIsDefault },
+      { unit: 'serving', label: `1 serving (${servingSize}g)`, default: servingIsDefault },
     ];
   }
   if (base === 'ml') {
-    // serving_size_g is grams-only by name, so ml-base foods always expose only ml.
-    return [{ unit: 'ml', label: 'ml', default: true }];
+    return [
+      { unit: 'ml', label: 'ml', default: !servingIsDefault },
+      { unit: 'serving', label: `1 serving (${servingSize}ml)`, default: servingIsDefault },
+    ];
   }
   // serving base
-  if (rawServingSizeG == null) {
-    return [{ unit: 'serving', label: 'serving', default: true }];
-  }
   return [
     { unit: 'serving', label: 'serving', default: true },
-    { unit: 'g', label: `g (${rawServingSizeG}g per serving)`, default: false },
+    { unit: 'g', label: `g (${servingSize}g per serving)`, default: false },
   ];
 }
 

@@ -36,8 +36,13 @@ export interface NutritionResult {
  * Compute the unit-less ratio: how many "base_amount × base_unit" the
  * user actually ate, given their typed quantity in their chosen unit.
  *
- * Throws on unsupported (base_unit, unit) combos so callers fail loudly
- * rather than silently logging zero calories.
+ * Convention: when serving_size_g is null, "1 serving" defaults to
+ * base_amount-of-the-base-unit. For a food stored as "100g, 200 kcal",
+ * 1 serving = 100g. This lets the picker offer the serving toggle for
+ * any food regardless of whether it has an explicit serving size.
+ *
+ * Throws on unsupported (base_unit, unit) combos (e.g. ml ↔ g —
+ * different physical dimensions, no density data).
  */
 export function computeRatio(
   food: FoodForNutrition,
@@ -45,27 +50,31 @@ export function computeRatio(
   unit: Unit,
 ): number {
   const { base_unit, base_amount, serving_size_g } = food;
+  // Effective grams-per-serving: explicit if set, otherwise the food's
+  // base portion. For ml-base foods this is "ml-per-serving" (1 serving
+  // = base_amount ml), with the same fallback logic.
+  const servingSize = serving_size_g ?? base_amount;
 
   if (base_unit === 'g' && unit === 'g') {
     return quantity / base_amount;
   }
   if (base_unit === 'g' && unit === 'serving') {
-    if (serving_size_g == null) {
-      throw new Error('Cannot log in serving: food has no serving_size_g');
-    }
-    return (quantity * serving_size_g) / base_amount;
+    return (quantity * servingSize) / base_amount;
   }
   if (base_unit === 'ml' && unit === 'ml') {
     return quantity / base_amount;
+  }
+  if (base_unit === 'ml' && unit === 'serving') {
+    // 1 serving = base_amount ml when no explicit size; servingSize is in
+    // ml here (still uses the serving_size_g column as the override since
+    // there's no separate serving_size_ml — the column name is historical).
+    return (quantity * servingSize) / base_amount;
   }
   if (base_unit === 'serving' && unit === 'serving') {
     return quantity / base_amount;
   }
   if (base_unit === 'serving' && unit === 'g') {
-    if (serving_size_g == null) {
-      throw new Error('Cannot log in g: food has no serving_size_g');
-    }
-    return (quantity / serving_size_g) / base_amount;
+    return (quantity / servingSize) / base_amount;
   }
   throw new Error(`Unsupported unit combo: base=${base_unit} entered=${unit}`);
 }
@@ -96,17 +105,21 @@ export function convertQuantity(
   if (fromUnit === toUnit) return quantity;
   // Convert via the food's base.
   const ratio = computeRatio(food, quantity, fromUnit);
+  // Same fallback as computeRatio — 1 serving = base_amount when no explicit
+  // serving_size_g is set.
+  const servingSize = food.serving_size_g ?? food.base_amount;
   // Now find the quantity in toUnit that produces the same ratio.
   if (toUnit === 'g' && food.base_unit === 'g') return ratio * food.base_amount;
   if (toUnit === 'ml' && food.base_unit === 'ml') return ratio * food.base_amount;
   if (toUnit === 'serving' && food.base_unit === 'g') {
-    if (food.serving_size_g == null) throw new Error('No serving_size_g');
-    return (ratio * food.base_amount) / food.serving_size_g;
+    return (ratio * food.base_amount) / servingSize;
+  }
+  if (toUnit === 'serving' && food.base_unit === 'ml') {
+    return (ratio * food.base_amount) / servingSize;
   }
   if (toUnit === 'serving' && food.base_unit === 'serving') return ratio * food.base_amount;
   if (toUnit === 'g' && food.base_unit === 'serving') {
-    if (food.serving_size_g == null) throw new Error('No serving_size_g');
-    return ratio * food.base_amount * food.serving_size_g;
+    return ratio * food.base_amount * servingSize;
   }
   throw new Error(`Unsupported conversion: ${fromUnit} → ${toUnit} (base=${food.base_unit})`);
 }
