@@ -38,8 +38,10 @@ test('g→serving: 2 servings of bread (35g each, base 100g) = ratio 0.7', () =>
   assert.equal(computeRatio(bread, 2, 'serving'), 0.7);
 });
 
-test('g→serving fails when serving_size_g is null', () => {
-  assert.throws(() => computeRatio(chicken, 1, 'serving'), /serving_size_g/);
+test('g→serving falls back to base_amount when serving_size_g is null', () => {
+  // chicken: base_amount=100g, no serving_size_g → 1 serving defaults to 100g
+  // ratio = (1 × 100) / 100 = 1.0
+  assert.equal(computeRatio(chicken, 1, 'serving'), 1.0);
 });
 
 test('ml→ml: 500ml coffee (base 250ml) = ratio 2', () => {
@@ -56,7 +58,15 @@ test('serving→g: 60g of cookiePack (30g/cookie, base 2) = ratio 1.0', () => {
 });
 
 test('unsupported combo throws (ml + g)', () => {
+  // ml ↔ g requires density data we don't have; still unsupported.
   assert.throws(() => computeRatio(coffee, 100, 'g'), /Unsupported/);
+});
+
+test('ml→serving falls back to base_amount (1 serving = 250ml for coffee)', () => {
+  // coffee: base_amount=250ml, no serving_size_g → 1 serving = 250ml
+  // ratio = (1 × 250) / 250 = 1.0
+  assert.equal(computeRatio(coffee, 1, 'serving'), 1.0);
+  assert.equal(computeRatio(coffee, 2, 'serving'), 2.0);
 });
 
 // ─── nutritionFor ─────────────────────────────────────────────────────────────
