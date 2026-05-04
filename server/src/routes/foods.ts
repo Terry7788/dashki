@@ -12,28 +12,79 @@ function toNumber(value: unknown, fallback: number | null = null): number | null
   return Number.isFinite(n) ? n : fallback;
 }
 
+type CanonicalUnit = 'g' | 'ml' | 'serving';
+
+function canonicalUnit(raw: string | null | undefined): CanonicalUnit {
+  if (raw === 'grams' || raw === 'g') return 'g';
+  if (raw === 'ml') return 'ml';
+  return 'serving';
+}
+
+interface UnitOption {
+  unit: CanonicalUnit;
+  label: string;
+  default: boolean;
+}
+
+/**
+ * Derive the units the picker can offer for a food. The convention is:
+ *   - If both base unit and serving_size_g are present, expose both with the
+ *     "serving" option set as default (most natural way to log).
+ *   - If only the base unit is present (no serving size), expose that alone.
+ *
+ * IMPORTANT: We use the RAW serving_size_g column value here, NOT the mapped
+ * fallback (some g-based foods have serving_size_g === base_amount as a
+ * fallback derived in mapFood, which would create a meaningless "serving"
+ * toggle for raw ingredients like chicken). Pass the raw row value.
+ */
+function deriveUnits(rawBaseUnit: string, baseAmount: number, rawServingSizeG: number | null): UnitOption[] {
+  const base = canonicalUnit(rawBaseUnit);
+
+  if (base === 'g') {
+    if (rawServingSizeG == null) {
+      return [{ unit: 'g', label: 'g', default: true }];
+    }
+    return [
+      { unit: 'g', label: 'g', default: false },
+      { unit: 'serving', label: `1 serving (${rawServingSizeG}g)`, default: true },
+    ];
+  }
+  if (base === 'ml') {
+    // serving_size_g is grams-only by name, so ml-base foods always expose only ml.
+    return [{ unit: 'ml', label: 'ml', default: true }];
+  }
+  // serving base
+  if (rawServingSizeG == null) {
+    return [{ unit: 'serving', label: 'serving', default: true }];
+  }
+  return [
+    { unit: 'serving', label: 'serving', default: true },
+    { unit: 'g', label: `g (${rawServingSizeG}g per serving)`, default: false },
+  ];
+}
+
 /**
  * Map a raw DB row into the shape the frontend expects.
- * The DB stores values per serving (based on baseAmount/baseUnit). 
- * We calculate per-100g values only when baseUnit is 'grams'.
+ * The DB stores values per serving (based on baseAmount/baseUnit).
+ * We calculate per-100g values only when baseUnit is 'g'/'grams'.
  */
 function mapFood(row: Record<string, unknown>): Record<string, unknown> {
-  const baseAmount = row.base_amount as number ?? 100;
-  const baseUnit = row.base_unit as string ?? 'grams';
-  const calories = row.calories as number ?? 0;
-  const protein = row.protein as number ?? 0;
-  const carbs = row.carbs as number ?? 0;
-  const fat = row.fat as number ?? 0;
+  const baseAmount = (row.base_amount as number | undefined) ?? 100;
+  const rawBaseUnit = (row.base_unit as string | undefined) ?? 'grams';
+  const baseUnit = canonicalUnit(rawBaseUnit);   // canonical 'g' / 'ml' / 'serving'
+  const calories = (row.calories as number | undefined) ?? 0;
+  const protein = (row.protein as number | undefined) ?? 0;
+  const carbs = (row.carbs as number | undefined) ?? 0;
+  const fat = (row.fat as number | undefined) ?? 0;
+  const rawServingSizeG = (row.serving_size_g as number | null | undefined) ?? null;
 
-  // Only calculate per-100g when baseUnit is 'grams'
-  // For 'servings', 'ml', etc. - keep original values
+  // Per-100g view (legacy field — the frontend still uses these).
   let caloriesPer100 = calories;
   let proteinPer100 = protein;
   let carbsPer100 = carbs;
   let fatPer100 = fat;
-  
-  if (baseUnit === 'grams' && baseAmount !== 100) {
-    // Convert from baseAmount to per-100g
+
+  if (baseUnit === 'g' && baseAmount !== 100) {
     const factor = baseAmount / 100;
     caloriesPer100 = Math.round(calories * factor * 10) / 10;
     proteinPer100 = Math.round(protein * factor * 10) / 10;
@@ -48,13 +99,18 @@ function mapFood(row: Record<string, unknown>): Record<string, unknown> {
     protein_per_100g: proteinPer100,
     carbs_per_100g: carbsPer100,
     fat_per_100g: fatPer100,
-    serving_size_g: row.serving_size_g ?? (baseUnit === 'grams' ? baseAmount : null),
+    // serving_size_g: keep the legacy fallback for old frontend code paths that
+    // still read it, but units[] uses the raw column value.
+    serving_size_g: rawServingSizeG ?? (baseUnit === 'g' ? baseAmount : null),
     calories,
     protein,
     carbs,
     fat,
     baseAmount,
-    baseUnit,
+    baseUnit,                          // canonical now ('g' not 'grams')
+    base_amount: baseAmount,           // snake_case alias for spec consumers
+    base_unit: baseUnit,
+    units: deriveUnits(rawBaseUnit, baseAmount, rawServingSizeG),
     created_at: row.created_at,
   };
 }
