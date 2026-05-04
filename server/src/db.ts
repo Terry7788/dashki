@@ -228,6 +228,45 @@ export function initDb(): Promise<void> {
         }
       });
 
+      // ── Migration: add quantity + unit to JournalEntries (DSHKI-8) ─────────
+      // SQLite ALTER TABLE can't add NOT NULL columns retroactively; we add
+      // them as nullable and enforce via the route code. Backfill from the
+      // legacy `servings` column so existing entries stay readable.
+      db.all(`PRAGMA table_info(JournalEntries)`, [], (pragmaErr, columns: Array<{ name: string }>) => {
+        if (pragmaErr) return;
+        const existingCols = new Set(columns.map((c) => c.name));
+        const migrations: string[] = [];
+
+        if (!existingCols.has('quantity')) {
+          migrations.push('ALTER TABLE JournalEntries ADD COLUMN quantity REAL');
+        }
+        if (!existingCols.has('unit')) {
+          migrations.push('ALTER TABLE JournalEntries ADD COLUMN unit TEXT');
+        }
+
+        for (const sql of migrations) {
+          db.run(sql, [], (err) => {
+            if (err) console.error('[db] migration error:', err.message);
+            else console.log(`[db] ran migration: ${sql}`);
+          });
+        }
+
+        // Backfill: any row where quantity IS NULL gets quantity=servings, unit='serving'.
+        // Idempotent — safe to re-run.
+        db.run(
+          `UPDATE JournalEntries
+           SET quantity = servings, unit = 'serving'
+           WHERE quantity IS NULL OR unit IS NULL`,
+          [],
+          function (this: { changes: number }, err) {
+            if (err) console.error('[db] backfill error:', err.message);
+            else if (this.changes > 0) {
+              console.log(`[db] backfilled ${this.changes} JournalEntries with quantity/unit`);
+            }
+          }
+        );
+      });
+
       // ── Sentinel to confirm serialization completed ────────────────────────
       db.run('SELECT 1', (err) => {
         if (err) reject(err);
