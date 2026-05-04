@@ -252,19 +252,23 @@ export function initDb(): Promise<void> {
         }
 
         // Backfill: any row where quantity IS NULL gets quantity=servings, unit='serving'.
-        // Idempotent — safe to re-run.
-        db.run(
-          `UPDATE JournalEntries
-           SET quantity = servings, unit = 'serving'
-           WHERE quantity IS NULL OR unit IS NULL`,
-          [],
-          function (this: { changes: number }, err) {
-            if (err) console.error('[db] backfill error:', err.message);
-            else if (this.changes > 0) {
-              console.log(`[db] backfilled ${this.changes} JournalEntries with quantity/unit`);
+        // Idempotent — safe to re-run. Skipped once the legacy `servings` column has
+        // been dropped (PR 2 / Task 2.8) — at that point any new rows are written
+        // by routes that always populate quantity/unit, so the backfill is moot.
+        if (existingCols.has('servings')) {
+          db.run(
+            `UPDATE JournalEntries
+             SET quantity = servings, unit = 'serving'
+             WHERE quantity IS NULL OR unit IS NULL`,
+            [],
+            function (this: { changes: number }, err) {
+              if (err) console.error('[db] backfill error:', err.message);
+              else if (this.changes > 0) {
+                console.log(`[db] backfilled ${this.changes} JournalEntries with quantity/unit`);
+              }
             }
-          }
-        );
+          );
+        }
       });
 
       // ── Migration: drop legacy `servings` column from JournalEntries (DSHKI-8 PR 2) ──
