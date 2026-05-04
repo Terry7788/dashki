@@ -53,13 +53,15 @@ export interface SavedMealItem {
   /** New unit-aware fields (PR 3) */
   quantity?: number;
   unit?: Unit;
-  /** Legacy field — still populated server-side until PR 3 ships */
+  /** Legacy field — kept for backward-compat reads from older API responses */
   servings?: number;
   name: string;
   baseAmount: number;
   baseUnit: Unit;
   calories: number;
   protein: number | null;
+  /** Food's serving_size_g — included from PR 3 so the builder can render QuantityInput */
+  serving_size_g?: number | null;
 }
 
 // ─── Current Meal ───────────────────────────────────────────────────────────

@@ -4,8 +4,10 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, Trash2, UtensilsCrossed, Search, ChevronLeft, BookOpen, Pencil, X, ChevronDown } from 'lucide-react';
 import { GlassCard, GlassButton, GlassInput, GlassModal } from '@/components/ui';
 import { getSavedMeals, createSavedMeal, updateSavedMeal, deleteSavedMeal, addJournalEntry } from '@/lib/api';
-import type { SavedMeal, Food, MealType } from '@/lib/types';
+import type { SavedMeal, Food, MealType, Unit } from '@/lib/types';
 import { useSocketEvent } from '@/lib/useSocketEvent';
+import { QuantityInput } from '@/components/QuantityInput';
+import { nutritionFor, formatQuantity } from '@/lib/nutrition';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -27,31 +29,28 @@ function toISODate(d: Date): string {
   return d.toLocaleString('en-CA').split(',')[0];
 }
 
-/**
- * Calculate nutrition for a food + servings.
- * Handles both API field names (calories/protein) and legacy (calories_per_100g/protein_per_100g).
- */
-function calcNutrition(food: Food, servings: number) {
-  const caloriesPerServing =
-    food.calories ??
-    (food.calories_per_100g != null
-      ? food.serving_size_g
-        ? (food.calories_per_100g * food.serving_size_g) / 100
-        : food.calories_per_100g
-      : 0);
-
-  const proteinPerServing =
-    food.protein ??
-    (food.protein_per_100g != null
-      ? food.serving_size_g
-        ? (food.protein_per_100g * food.serving_size_g) / 100
-        : food.protein_per_100g
-      : 0);
-
+/** Build the FoodForNutrition shape from a Food object (mirrors QuantityInput pattern). */
+function foodForCalc(food: Food) {
   return {
-    calories: Math.round(caloriesPerServing * servings),
-    protein: Math.round(proteinPerServing * servings * 10) / 10,
+    base_amount: food.base_amount ?? food.baseAmount ?? 100,
+    base_unit: (food.base_unit ?? food.baseUnit ?? 'serving') as Unit,
+    serving_size_g: food.serving_size_g ?? null,
+    calories: food.calories ?? 0,
+    protein: food.protein ?? null,
   };
+}
+
+/** Compute nutrition for a picked item; returns { calories, protein }. */
+function calcItemNutrition(food: Food, quantity: number, unit: Unit) {
+  try {
+    return nutritionFor(foodForCalc(food), quantity, unit);
+  } catch {
+    // Fallback for foods missing serving_size_g — treat quantity as a multiplier
+    return {
+      calories: Math.round((food.calories ?? 0) * quantity),
+      protein: Math.round(((food.protein as number) ?? 0) * quantity * 10) / 10,
+    };
+  }
 }
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
@@ -70,22 +69,24 @@ function MealSkeleton() {
 
 interface PickedItem {
   food: Food;
-  servings: number;
+  quantity: number;
+  unit: Unit;
 }
 
 interface FoodPickerForMealProps {
   items: PickedItem[];
-  onAdd: (food: Food, servings: number) => void;
+  onAdd: (food: Food, quantity: number, unit: Unit) => void;
   onRemove: (foodId: number) => void;
-  onUpdateServings: (foodId: number, servings: number) => void;
+  onUpdate: (foodId: number, quantity: number, unit: Unit) => void;
 }
 
-function FoodPickerForMeal({ items, onAdd, onRemove, onUpdateServings }: FoodPickerForMealProps) {
+function FoodPickerForMeal({ items, onAdd, onRemove, onUpdate }: FoodPickerForMealProps) {
   const [query, setQuery] = useState('');
   const [foods, setFoods] = useState<Food[]>([]);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<Food | null>(null);
-  const [servings, setServings] = useState('1');
+  const [pickerQty, setPickerQty] = useState(1);
+  const [pickerUnit, setPickerUnit] = useState<Unit>('serving');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -105,12 +106,23 @@ function FoodPickerForMeal({ items, onAdd, onRemove, onUpdateServings }: FoodPic
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [query]);
 
+  function handleSelect(food: Food) {
+    // Initialise picker quantity from the food's default unit
+    const units = food.units ?? [{ unit: 'serving' as Unit, label: 'serving', default: true }];
+    const def = units.find((u) => u.default) ?? units[0];
+    const startQty =
+      def.unit === 'serving' ? 1 : (food.base_amount ?? food.baseAmount ?? 100);
+    setPickerQty(startQty);
+    setPickerUnit(def.unit);
+    setSelected(food);
+  }
+
   function handleConfirm() {
     if (!selected) return;
-    const sv = parseFloat(servings) || 1;
-    onAdd(selected, sv);
+    onAdd(selected, pickerQty, pickerUnit);
     setSelected(null);
-    setServings('1');
+    setPickerQty(1);
+    setPickerUnit('serving');
     setQuery('');
   }
 
@@ -126,14 +138,11 @@ function FoodPickerForMeal({ items, onAdd, onRemove, onUpdateServings }: FoodPic
             <ChevronLeft className="w-4 h-4" /> Back
           </button>
           <p className="font-medium text-white">{selected.name}</p>
-          <GlassInput
-            label="Servings"
-            type="number"
-            inputMode="decimal"
-            value={servings}
-            onChange={(e) => setServings(e.target.value)}
-            min={0.1}
-            step={0.1}
+          <QuantityInput
+            food={selected}
+            quantity={pickerQty}
+            unit={pickerUnit}
+            onChange={({ quantity, unit }) => { setPickerQty(quantity); setPickerUnit(unit); }}
           />
           <GlassButton variant="primary" className="w-full" onClick={handleConfirm}>
             Add to Meal
@@ -161,7 +170,7 @@ function FoodPickerForMeal({ items, onAdd, onRemove, onUpdateServings }: FoodPic
               return (
                 <button
                   key={food.id}
-                  onClick={() => setSelected(food)}
+                  onClick={() => handleSelect(food)}
                   className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-all duration-200 text-left"
                 >
                   <span className="text-sm text-white truncate">{food.name}</span>
@@ -210,8 +219,10 @@ function CreateMealModal({ isOpen, onClose, onCreated, editingMeal }: CreateMeal
               baseUnit: item.baseUnit,
               calories: item.calories,
               protein: item.protein,
+              serving_size_g: item.serving_size_g,
             } as Food,
-            servings: item.quantity ?? item.servings ?? 1,
+            quantity: item.quantity ?? item.servings ?? 1,
+            unit: (item.unit as Unit) ?? 'serving',
           }))
         );
       } else {
@@ -225,22 +236,36 @@ function CreateMealModal({ isOpen, onClose, onCreated, editingMeal }: CreateMeal
     }
   }, [isOpen, editingMeal]);
 
-  function handleAddFood(food: Food, servings: number) {
+  function handleAddFood(food: Food, quantity: number, unit: Unit) {
     setItems((prev) => {
       const exists = prev.find((i) => i.food.id === food.id);
-      if (exists) return prev.map((i) => i.food.id === food.id ? { ...i, servings: i.servings + servings } : i);
-      return [...prev, { food, servings }];
+      if (exists) {
+        // Merge: add quantity if same unit; otherwise replace (mixing units in one item is undefined)
+        return prev.map((i) =>
+          i.food.id === food.id
+            ? i.unit === unit
+              ? { ...i, quantity: i.quantity + quantity }
+              : { ...i, quantity, unit }
+            : i
+        );
+      }
+      return [...prev, { food, quantity, unit }];
     });
   }
   function handleRemove(foodId: number) {
     setItems((prev) => prev.filter((i) => i.food.id !== foodId));
   }
-  function handleUpdateServings(foodId: number, servings: number) {
-    setItems((prev) => prev.map((i) => i.food.id === foodId ? { ...i, servings } : i));
+  function handleUpdate(foodId: number, quantity: number, unit: Unit) {
+    setItems((prev) => prev.map((i) => i.food.id === foodId ? { ...i, quantity, unit } : i));
   }
 
-  const totalCalories = items.reduce((a, { food, servings }) => a + calcNutrition(food, servings).calories, 0);
-  const totalProtein = items.reduce((a, { food, servings }) => a + calcNutrition(food, servings).protein, 0);
+  const totals = items.reduce(
+    (acc, { food, quantity, unit }) => {
+      const { calories, protein } = calcItemNutrition(food, quantity, unit);
+      return { calories: acc.calories + calories, protein: acc.protein + protein };
+    },
+    { calories: 0, protein: 0 }
+  );
 
   async function handleSave() {
     if (!name.trim()) { setNameError('Meal name is required'); return; }
@@ -251,12 +276,13 @@ function CreateMealModal({ isOpen, onClose, onCreated, editingMeal }: CreateMeal
     try {
       const mealData = {
         name: name.trim(),
-        items: items.map(({ food, servings }) => ({
+        items: items.map(({ food, quantity, unit }) => ({
           food_id: food.id,
-          servings,
+          quantity,
+          unit,
         })),
       };
-      
+
       let meal: SavedMeal;
       if (editingMeal) {
         meal = await updateSavedMeal(editingMeal.id, mealData);
@@ -298,12 +324,12 @@ function CreateMealModal({ isOpen, onClose, onCreated, editingMeal }: CreateMeal
           <div className="flex gap-4 px-4 py-3 rounded-2xl bg-white/5 border border-white/10">
             <div className="text-center flex-1">
               <p className="text-xs text-white/40">Calories</p>
-              <p className="font-bold text-white">{Math.round(totalCalories)}</p>
+              <p className="font-bold text-white">{Math.round(totals.calories)}</p>
             </div>
             <div className="w-px bg-white/10" />
             <div className="text-center flex-1">
               <p className="text-xs text-white/40">Protein</p>
-              <p className="font-bold text-white">{Math.round(totalProtein * 10) / 10}g</p>
+              <p className="font-bold text-white">{Math.round(totals.protein * 10) / 10}g</p>
             </div>
           </div>
         )}
@@ -317,8 +343,8 @@ function CreateMealModal({ isOpen, onClose, onCreated, editingMeal }: CreateMeal
               {items.length === 0 ? (
                 <p className="text-white/40 text-sm text-center py-8">No foods added yet</p>
               ) : (
-                items.map(({ food, servings: sv }) => {
-                  const { calories, protein } = calcNutrition(food, sv);
+                items.map(({ food, quantity, unit }) => {
+                  const { calories, protein } = calcItemNutrition(food, quantity, unit);
                   return (
                     <div
                       key={food.id}
@@ -326,18 +352,10 @@ function CreateMealModal({ isOpen, onClose, onCreated, editingMeal }: CreateMeal
                     >
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-white truncate">{food.name}</p>
-                        <p className="text-xs text-white/50">{calories} kcal · {protein}g pro</p>
+                        <p className="text-xs text-white/50">
+                          {formatQuantity(quantity, unit)} · {calories} kcal · {protein}g pro
+                        </p>
                       </div>
-                      <input
-                        type="number"
-                        inputMode="decimal"
-                        value={sv}
-                        min={0.1}
-                        step={0.1}
-                        onChange={(e) => handleUpdateServings(food.id, parseFloat(e.target.value) || 1)}
-                        className="w-16 px-2 py-1.5 text-center text-sm bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
-                      />
-                      <span className="text-xs text-white/40 shrink-0">srv</span>
                       <button
                         onClick={() => handleRemove(food.id)}
                         className="p-1.5 rounded-lg text-white/30 hover:text-red-400 hover:bg-red-500/10 transition-all"
@@ -358,7 +376,7 @@ function CreateMealModal({ isOpen, onClose, onCreated, editingMeal }: CreateMeal
               items={items}
               onAdd={handleAddFood}
               onRemove={handleRemove}
-              onUpdateServings={handleUpdateServings}
+              onUpdate={handleUpdate}
             />
           </div>
         </div>
@@ -418,16 +436,16 @@ function AddToJournalModal({ isOpen, onClose, meal }: AddToJournalModalProps) {
       }
 
       for (const item of fullMeal.items) {
-        // Server computes snapshots when food_id is set; pass quantity in 'serving'
-        // unit (PR 3 will swap this to per-item unit-aware shape).
+        // Log each item in its native unit
         const quantity = item.quantity ?? item.servings ?? 1;
+        const unit = (item.unit as Unit) ?? 'serving';
         await addJournalEntry({
           date: today,
           meal_type: mealType,
           food_id: item.foodId,
           food_name_snapshot: item.name ?? `Food ${item.foodId}`,
           quantity,
-          unit: 'serving',
+          unit,
         });
       }
       setSuccess(true);
@@ -531,15 +549,23 @@ interface MealCardProps {
 
 function MealCard({ meal, onAddToJournal, onDelete, onEdit }: MealCardProps) {
   const itemCount = meal.items?.length ?? 0;
-  
-  // Calculate totals
+
+  // Calculate totals using unit-aware nutritionFor where possible
   const totals = (meal.items || []).reduce(
     (acc, item) => {
-      const qty = item.quantity ?? item.servings ?? 1;
-      return {
-        calories: acc.calories + (item.calories ?? 0) * qty,
-        protein: acc.protein + (item.protein ?? 0) * qty,
-      };
+      const quantity = item.quantity ?? item.servings ?? 1;
+      const unit = (item.unit as Unit) ?? 'serving';
+      const food: Food = {
+        id: item.foodId,
+        name: item.name,
+        baseAmount: item.baseAmount,
+        baseUnit: item.baseUnit,
+        calories: item.calories,
+        protein: item.protein,
+        serving_size_g: item.serving_size_g,
+      } as Food;
+      const { calories, protein } = calcItemNutrition(food, quantity, unit);
+      return { calories: acc.calories + calories, protein: acc.protein + protein };
     },
     { calories: 0, protein: 0 }
   );
@@ -587,12 +613,16 @@ function MealCard({ meal, onAddToJournal, onDelete, onEdit }: MealCardProps) {
         {/* Food items list */}
         <div className="mt-3 space-y-1.5 max-h-24 overflow-y-auto">
           {meal.items && meal.items.length > 0 ? (
-            meal.items.slice(0, 5).map((item, idx) => (
-              <div key={item.foodId || idx} className="flex items-center justify-between text-xs text-white/60 px-2 py-1 rounded-lg bg-white/5">
-                <span className="truncate">{item.name}</span>
-                <span className="shrink-0 ml-2 text-white/40">{item.servings} srv</span>
-              </div>
-            ))
+            meal.items.slice(0, 5).map((item, idx) => {
+              const quantity = item.quantity ?? item.servings ?? 1;
+              const unit = (item.unit as Unit) ?? 'serving';
+              return (
+                <div key={item.foodId || idx} className="flex items-center justify-between text-xs text-white/60 px-2 py-1 rounded-lg bg-white/5">
+                  <span className="truncate">{item.name}</span>
+                  <span className="shrink-0 ml-2 text-white/40">{formatQuantity(quantity, unit)}</span>
+                </div>
+              );
+            })
           ) : (
             <p className="text-xs text-white/30 px-2">No items</p>
           )}
@@ -647,8 +677,10 @@ export default function MealsPage() {
             baseUnit: item.baseUnit,
             calories: item.calories,
             protein: item.protein,
+            serving_size_g: item.serving_size_g,
           } as Food,
-          servings: item.quantity ?? item.servings ?? 1,
+          quantity: item.quantity ?? item.servings ?? 1,
+          unit: (item.unit as Unit) ?? 'serving',
         }))
       );
     } else if (createOpen) {
@@ -660,22 +692,40 @@ export default function MealsPage() {
     setError('');
   }, [createOpen, editingMeal]);
 
-  function handleAddFood(food: Food, servings: number) {
-    setItems((prev) => [...prev, { food, servings }]);
+  function handleAddFood(food: Food, quantity: number, unit: Unit) {
+    setItems((prev) => {
+      const exists = prev.find((i) => i.food.id === food.id);
+      if (exists) {
+        // Merge: add quantity if same unit; otherwise replace (mixing units in one item is undefined)
+        return prev.map((i) =>
+          i.food.id === food.id
+            ? i.unit === unit
+              ? { ...i, quantity: i.quantity + quantity }
+              : { ...i, quantity, unit }
+            : i
+        );
+      }
+      return [...prev, { food, quantity, unit }];
+    });
   }
 
   function handleRemove(foodId: number) {
     setItems((prev) => prev.filter((i) => i.food.id !== foodId));
   }
 
-  function handleUpdateServings(foodId: number, servings: number) {
+  function handleUpdate(foodId: number, quantity: number, unit: Unit) {
     setItems((prev) =>
-      prev.map((i) => (i.food.id === foodId ? { ...i, servings } : i))
+      prev.map((i) => (i.food.id === foodId ? { ...i, quantity, unit } : i))
     );
   }
 
-  const totalCalories = items.reduce((sum, { food, servings }) => sum + (food.calories ?? 0) * servings, 0);
-  const totalProtein = items.reduce((sum, { food, servings }) => sum + (food.protein ?? 0) * servings, 0);
+  const totals = items.reduce(
+    (acc, { food, quantity, unit }) => {
+      const { calories, protein } = calcItemNutrition(food, quantity, unit);
+      return { calories: acc.calories + calories, protein: acc.protein + protein };
+    },
+    { calories: 0, protein: 0 }
+  );
 
   async function handleSave() {
     if (!name.trim()) { setNameError('Meal name is required'); return; }
@@ -686,12 +736,13 @@ export default function MealsPage() {
     try {
       const mealData = {
         name: name.trim(),
-        items: items.map(({ food, servings }) => ({
+        items: items.map(({ food, quantity, unit }) => ({
           food_id: food.id,
-          servings,
+          quantity,
+          unit,
         })),
       };
-      
+
       let meal: SavedMeal;
       if (editingMeal) {
         meal = await updateSavedMeal(editingMeal.id, mealData);
@@ -738,7 +789,7 @@ export default function MealsPage() {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 animate-fade-in">
         {/* No backdrop - app stays visible */}
-        
+
         {/* Modal - responsive: full width mobile, 60% desktop */}
         <div className="relative w-full sm:w-[90%] sm:max-w-[78%] h-[95vh] sm:h-[90vh] bg-[#fffefb] dark:bg-[#1a1a1a]/95 dark:backdrop-blur-xl border border-[#cccbc8]/50 dark:border-white/10 rounded-2xl sm:rounded-3xl flex flex-col sm:flex-row overflow-hidden shadow-sm dark:shadow-2xl">
           {/* Close button */}
@@ -754,7 +805,7 @@ export default function MealsPage() {
             <h2 className="text-xl font-bold text-[#1d1c1c] dark:text-white mb-6">
               {editingMeal ? 'Edit Meal' : 'Create Meal'}
             </h2>
-            
+
             <div className="space-y-4">
               <GlassInput
                 label="Meal Name *"
@@ -776,12 +827,12 @@ export default function MealsPage() {
                 <div className="flex gap-4 px-4 py-3 rounded-2xl bg-[#f5f4f1] dark:bg-white/5 border border-[#cccbc8]/50 dark:border-white/10">
                   <div className="text-center flex-1">
                     <p className="text-xs text-[#313d44]/60 dark:text-white/40">Calories</p>
-                    <p className="font-bold text-[#1d1c1c] dark:text-white">{Math.round(totalCalories)}</p>
+                    <p className="font-bold text-[#1d1c1c] dark:text-white">{Math.round(totals.calories)}</p>
                   </div>
                   <div className="w-px bg-[#cccbc8]/50 dark:bg-white/10" />
                   <div className="text-center flex-1">
                     <p className="text-xs text-[#313d44]/60 dark:text-white/40">Protein</p>
-                    <p className="font-bold text-[#1d1c1c] dark:text-white">{Math.round(totalProtein * 10) / 10}g</p>
+                    <p className="font-bold text-[#1d1c1c] dark:text-white">{Math.round(totals.protein * 10) / 10}g</p>
                   </div>
                 </div>
               )}
@@ -793,8 +844,8 @@ export default function MealsPage() {
                   {items.length === 0 ? (
                     <p className="text-[#313d44]/40 dark:text-white/40 text-sm text-center py-6">No foods added yet</p>
                   ) : (
-                    items.map(({ food, servings: sv }) => {
-                      const { calories, protein } = calcNutrition(food, sv);
+                    items.map(({ food, quantity, unit }) => {
+                      const { calories, protein } = calcItemNutrition(food, quantity, unit);
                       return (
                         <div
                           key={food.id}
@@ -802,17 +853,10 @@ export default function MealsPage() {
                         >
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-[#1d1c1c] dark:text-white truncate">{food.name}</p>
-                            <p className="text-xs text-[#313d44]/50 dark:text-white/50">{calories} kcal · {protein}g</p>
+                            <p className="text-xs text-[#313d44]/50 dark:text-white/50">
+                              {formatQuantity(quantity, unit)} · {calories} kcal · {protein}g
+                            </p>
                           </div>
-                          <input
-                            type="number"
-                            inputMode="decimal"
-                            value={sv}
-                            min={0.1}
-                            step={0.1}
-                            onChange={(e) => handleUpdateServings(food.id, parseFloat(e.target.value) || 1)}
-                            className="w-14 px-1 py-1 text-center text-sm bg-[#e8e7e4] dark:bg-white/10 border border-[#cccbc8] dark:border-white/20 rounded-lg text-[#1d1c1c] dark:text-white"
-                          />
                           <button
                             onClick={() => handleRemove(food.id)}
                             className="p-1 rounded-lg text-[#313d44]/30 hover:text-red-500 dark:text-white/30 dark:hover:text-red-400"
@@ -838,7 +882,7 @@ export default function MealsPage() {
                     items={items}
                     onAdd={handleAddFood}
                     onRemove={handleRemove}
-                    onUpdateServings={handleUpdateServings}
+                    onUpdate={handleUpdate}
                   />
                 </div>
               </div>
@@ -862,7 +906,7 @@ export default function MealsPage() {
                 items={items}
                 onAdd={handleAddFood}
                 onRemove={handleRemove}
-                onUpdateServings={handleUpdateServings}
+                onUpdate={handleUpdate}
               />
             </div>
           </div>

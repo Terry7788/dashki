@@ -7,12 +7,15 @@ const router = Router();
 // ─── GET / — list saved meals ─────────────────────────────────────────────────
 
 router.get('/', (_req: Request, res: Response) => {
-  // First get all meals with counts
+  // First get all meals with counts.
+  // total_calories is an approximation using smi.quantity — it ignores unit
+  // semantics (e.g. 100 g vs 1 serving). Per-item exact totals come from
+  // GET /api/meals/saved/:id which has the full food base_amount/base_unit data.
   db.all(
     `SELECT sm.id, sm.name, sm.created_at,
        COUNT(smi.id) as item_count,
-       COALESCE(SUM(f.calories * smi.servings), 0) as total_calories,
-       COALESCE(SUM(COALESCE(f.protein,0) * smi.servings), 0) as total_protein
+       COALESCE(SUM(f.calories * smi.quantity), 0) as total_calories,
+       COALESCE(SUM(COALESCE(f.protein,0) * smi.quantity), 0) as total_protein
      FROM SavedMeals sm
      LEFT JOIN SavedMealItems smi ON sm.id = smi.meal_id
      LEFT JOIN Foods f ON smi.food_id = f.id
@@ -44,9 +47,9 @@ router.get('/', (_req: Request, res: Response) => {
 
       meals.forEach((meal: MealRow) => {
         db.all(
-          `SELECT smi.id, smi.food_id as foodId, smi.servings,
+          `SELECT smi.id, smi.food_id as foodId, smi.quantity, smi.unit,
              f.name, f.base_amount as baseAmount, f.base_unit as baseUnit,
-             f.calories, f.protein
+             f.calories, f.protein, f.serving_size_g
            FROM SavedMealItems smi
            JOIN Foods f ON smi.food_id = f.id
            WHERE smi.meal_id = ?`,
@@ -84,9 +87,9 @@ router.get('/:id', (req: Request, res: Response) => {
       if (!meal) return res.status(404).json({ error: 'Saved meal not found' });
 
       db.all(
-        `SELECT smi.id, smi.food_id as foodId, smi.servings,
+        `SELECT smi.id, smi.food_id as foodId, smi.quantity, smi.unit,
            f.name, f.base_amount as baseAmount, f.base_unit as baseUnit,
-           f.calories, f.protein
+           f.calories, f.protein, f.serving_size_g
          FROM SavedMealItems smi
          JOIN Foods f ON smi.food_id = f.id
          WHERE smi.meal_id = ?`,
@@ -114,8 +117,8 @@ router.post('/', (req: Request, res: Response) => {
 
   for (const item of items) {
     const foodId = item.foodId ?? item.food_id;
-    if (!foodId || item.servings === undefined) {
-      return res.status(400).json({ error: 'Each item must have foodId and servings' });
+    if (!foodId || item.quantity === undefined) {
+      return res.status(400).json({ error: 'Each item must have foodId and quantity' });
     }
   }
 
@@ -142,9 +145,9 @@ router.post('/', (req: Request, res: Response) => {
                 return res.status(500).json({ error: 'Failed to fetch created meal' });
               }
               db.all(
-                `SELECT smi.id, smi.food_id as foodId, smi.servings,
+                `SELECT smi.id, smi.food_id as foodId, smi.quantity, smi.unit,
                    f.name, f.base_amount as baseAmount, f.base_unit as baseUnit,
-                   f.calories, f.protein
+                   f.calories, f.protein, f.serving_size_g
                  FROM SavedMealItems smi
                  JOIN Foods f ON smi.food_id = f.id
                  WHERE smi.meal_id = ?`,
@@ -165,11 +168,12 @@ router.post('/', (req: Request, res: Response) => {
 
         const item = items[index];
         const foodId = item.foodId ?? item.food_id;
-        const servings = Number(item.servings);
+        const quantity = Number(item.quantity);
+        const unit = item.unit ?? 'serving';
 
         db.run(
-          'INSERT INTO SavedMealItems (meal_id, food_id, servings) VALUES (?, ?, ?)',
-          [mealId, foodId, servings],
+          'INSERT INTO SavedMealItems (meal_id, food_id, quantity, unit) VALUES (?, ?, ?, ?)',
+          [mealId, foodId, quantity, unit],
           (err2) => {
             if (err2) {
               console.error('[error] POST /api/meals/saved item insert', err2);
@@ -232,9 +236,9 @@ router.put('/:id', (req: Request, res: Response) => {
                   }
 
                   db.all(
-                    `SELECT smi.id, smi.food_id as foodId, smi.servings,
+                    `SELECT smi.id, smi.food_id as foodId, smi.quantity, smi.unit,
                        f.name, f.base_amount as baseAmount, f.base_unit as baseUnit,
-                       f.calories, f.protein
+                       f.calories, f.protein, f.serving_size_g
                      FROM SavedMealItems smi
                      JOIN Foods f ON smi.food_id = f.id
                      WHERE smi.meal_id = ?`,
@@ -255,11 +259,12 @@ router.put('/:id', (req: Request, res: Response) => {
 
             const item = items[index];
             const foodId = item.foodId ?? item.food_id;
-            const servings = Number(item.servings);
+            const quantity = Number(item.quantity);
+            const unit = item.unit ?? 'serving';
 
             db.run(
-              'INSERT INTO SavedMealItems (meal_id, food_id, servings) VALUES (?, ?, ?)',
-              [id, foodId, servings],
+              'INSERT INTO SavedMealItems (meal_id, food_id, quantity, unit) VALUES (?, ?, ?, ?)',
+              [id, foodId, quantity, unit],
               (err5) => {
                 if (err5) {
                   console.error('[error] PUT /api/meals/saved/:id insert item', err5);
