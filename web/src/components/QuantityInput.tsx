@@ -39,6 +39,21 @@ export function QuantityInput({ food, quantity, unit, onChange }: QuantityInputP
 
   const switchUnit = (toUnit: Unit) => {
     if (toUnit === unit) return;
+
+    // Switching to g or ml: clear the field so the user types a fresh
+    // weighed amount (the converted-from-servings number is rarely what
+    // they want — they're about to put the food on a scale). 0 is allowed
+    // as a transient empty state; the "Add" button validates non-zero
+    // before committing the entry.
+    if (toUnit === 'g' || toUnit === 'ml') {
+      onChange({ quantity: 0, unit: toUnit });
+      setCustomDraft('');
+      return;
+    }
+
+    // Switching to serving: keep the converted value as a starting point
+    // (a useful round-to-.5 estimate the user can nudge from). 0 still
+    // not allowed for serving — bumped to 0.5 so the field has a value.
     try {
       const foodForCalc = {
         base_amount: food.base_amount ?? food.baseAmount ?? 100,
@@ -48,14 +63,8 @@ export function QuantityInput({ food, quantity, unit, onChange }: QuantityInputP
         protein: food.protein ?? null,
       };
       let converted = convertQuantity(foodForCalc, quantity, unit, toUnit);
-      // Round per the spec: serving → integer-friendly, g/ml → integer
-      if (toUnit === 'serving') {
-        converted = Math.round(converted * 2) / 2; // nearest 0.5
-        if (converted === 0) converted = 0.5;       // never round to zero
-      } else {
-        converted = Math.round(converted);
-        if (converted === 0) converted = 1;
-      }
+      converted = Math.round(converted * 2) / 2; // nearest 0.5
+      if (converted === 0) converted = 0.5;
       onChange({ quantity: converted, unit: toUnit });
       setCustomDraft(String(converted));
     } catch {
