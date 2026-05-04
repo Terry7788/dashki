@@ -153,14 +153,23 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
 
     setSaving(true);
     setServerError('');
+    // Send base_amount/baseUnit on every save so unit toggles in the form
+    // actually persist. Earlier the payload dropped these silently — the
+    // food's stored base_unit never changed even when the user switched
+    // it in the modal. Backend accepts either camelCase or snake_case
+    // and normalises legacy 'grams'/'servings' on read via mapFood, so
+    // sending the form's BaseUnit values is fine on the wire even though
+    // the canonical Unit type is narrower.
     const payload = {
       name: form.name.trim(),
+      baseAmount: Number(form.base_amount) || 100,
+      baseUnit: form.base_unit,
       calories_per_100g: Number(form.calories_per_100g),
       protein_per_100g: Number(form.protein_per_100g) || 0,
       carbs_per_100g: Number(form.carbs_per_100g) || 0,
       fat_per_100g: Number(form.fat_per_100g) || 0,
       serving_size_g: form.serving_size_g ? Number(form.serving_size_g) : undefined,
-    };
+    } as unknown as Omit<Food, 'id' | 'created_at'>;
 
     try {
       let food: Food;
