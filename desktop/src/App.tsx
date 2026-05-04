@@ -56,7 +56,10 @@ export default function App() {
   }, [activeTab]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-black text-white">
+    // h-screen (not min-h-screen) so the layout is pinned to viewport
+    // height — forces scrolling to happen INSIDE <main> rather than at
+    // the window level, keeping TitleBar + TopTabs always visible.
+    <div className="h-screen flex flex-col bg-black text-white">
       <TitleBar onOpenSettings={() => setSettingsOpen(true)} />
       <TopTabs active={activeTab} onChange={setActiveTab} />
       <main
