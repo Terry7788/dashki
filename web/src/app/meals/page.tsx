@@ -211,7 +211,7 @@ function CreateMealModal({ isOpen, onClose, onCreated, editingMeal }: CreateMeal
               calories: item.calories,
               protein: item.protein,
             } as Food,
-            servings: item.servings,
+            servings: item.quantity ?? item.servings ?? 1,
           }))
         );
       } else {
@@ -418,18 +418,16 @@ function AddToJournalModal({ isOpen, onClose, meal }: AddToJournalModalProps) {
       }
 
       for (const item of fullMeal.items) {
-        const res = await fetch(`${BASE_URL}/api/foods/${item.foodId}`);
-        if (!res.ok) continue;
-        const food: Food = await res.json();
-        const { calories, protein } = calcNutrition(food, item.servings);
+        // Server computes snapshots when food_id is set; pass quantity in 'serving'
+        // unit (PR 3 will swap this to per-item unit-aware shape).
+        const quantity = item.quantity ?? item.servings ?? 1;
         await addJournalEntry({
           date: today,
           meal_type: mealType,
-          food_id: food.id,
-          food_name_snapshot: food.name,
-          servings: item.servings,
-          calories_snapshot: calories,
-          protein_snapshot: protein,
+          food_id: item.foodId,
+          food_name_snapshot: item.name ?? `Food ${item.foodId}`,
+          quantity,
+          unit: 'serving',
         });
       }
       setSuccess(true);
@@ -533,10 +531,13 @@ function MealCard({ meal, onAddToJournal, onDelete, onEdit }: MealCardProps) {
   
   // Calculate totals
   const totals = (meal.items || []).reduce(
-    (acc, item) => ({
-      calories: acc.calories + (item.calories ?? 0) * item.servings,
-      protein: acc.protein + (item.protein ?? 0) * item.servings,
-    }),
+    (acc, item) => {
+      const qty = item.quantity ?? item.servings ?? 1;
+      return {
+        calories: acc.calories + (item.calories ?? 0) * qty,
+        protein: acc.protein + (item.protein ?? 0) * qty,
+      };
+    },
     { calories: 0, protein: 0 }
   );
 
@@ -644,7 +645,7 @@ export default function MealsPage() {
             calories: item.calories,
             protein: item.protein,
           } as Food,
-          servings: item.servings,
+          servings: item.quantity ?? item.servings ?? 1,
         }))
       );
     } else if (createOpen) {

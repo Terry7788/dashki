@@ -439,15 +439,14 @@ function AddFoodModal({ isOpen, onClose, mealType, date, onAdded }: AddFoodModal
     try {
       for (const { food, servings } of selectedFoods) {
         if (servings <= 0) continue;
-        const { calories, protein } = calcNutrition(food, servings);
+        // Server computes snapshots when food_id is set; pass quantity in 'serving' unit
         const entry = await addJournalEntry({
           date,
           meal_type: mealType,
           food_id: food.id,
           food_name_snapshot: food.name,
-          servings,
-          calories_snapshot: calories,
-          protein_snapshot: protein,
+          quantity: servings,
+          unit: 'serving',
         });
         onAdded(entry);
       }
@@ -480,19 +479,15 @@ function AddFoodModal({ isOpen, onClose, mealType, date, onAdded }: AddFoodModal
       }
 
       for (const item of fullMeal.items) {
-        // Fetch food details for calorie/protein calculation
-        const res = await fetch(`${BASE_URL}/api/foods/${item.foodId}`);
-        if (!res.ok) continue;
-        const food: Food = await res.json();
-        const { calories, protein } = calcNutrition(food, item.servings);
+        // Server computes snapshots when food_id is set; pass quantity in 'serving' unit
+        const quantity = item.quantity ?? item.servings ?? 1;
         const entry = await addJournalEntry({
           date,
           meal_type: mealType,
-          food_id: food.id,
-          food_name_snapshot: food.name,
-          servings: item.servings,
-          calories_snapshot: calories,
-          protein_snapshot: protein,
+          food_id: item.foodId,
+          food_name_snapshot: item.name ?? `Food ${item.foodId}`,
+          quantity,
+          unit: 'serving',
         });
         onAdded(entry);
       }
@@ -515,7 +510,8 @@ function AddFoodModal({ isOpen, onClose, mealType, date, onAdded }: AddFoodModal
         date,
         meal_type: mealType,
         food_name_snapshot: quickName.trim(),
-        servings: 1,
+        quantity: 1,
+        unit: 'serving',
         calories_snapshot: Math.round(cal),
         protein_snapshot: Math.round(pro * 10) / 10,
       });
@@ -696,10 +692,13 @@ function AddFoodModal({ isOpen, onClose, mealType, date, onAdded }: AddFoodModal
             {savedMeals.filter((m) => !mealQuery || m.name.toLowerCase().includes(mealQuery.toLowerCase())).map((meal) => {
               // Calculate totals from items
               const totals = (meal.items || []).reduce(
-                (acc, item) => ({
-                  calories: acc.calories + (item.calories || 0) * item.servings,
-                  protein: acc.protein + (item.protein || 0) * item.servings,
-                }),
+                (acc, item) => {
+                  const qty = item.quantity ?? item.servings ?? 1;
+                  return {
+                    calories: acc.calories + (item.calories || 0) * qty,
+                    protein: acc.protein + (item.protein || 0) * qty,
+                  };
+                },
                 { calories: 0, protein: 0 }
               );
               return (
@@ -757,9 +756,11 @@ function EditEntryModal({ isOpen, onClose, entry, onUpdated }: EditEntryModalPro
     try {
       const sv = parseFloat(servings) || 1;
       // Recalculate snapshots proportionally
-      const ratio = sv / entry.servings;
+      const originalQty = entry.quantity ?? entry.servings ?? 1;
+      const ratio = sv / originalQty;
       const updated = await updateJournalEntry(entry.id, {
-        servings: sv,
+        quantity: sv,
+        unit: 'serving',
         meal_type: mealType,
         calories_snapshot: Math.round(entry.calories_snapshot * ratio),
         protein_snapshot: Math.round(entry.protein_snapshot * ratio * 10) / 10,
@@ -1399,7 +1400,8 @@ export default function JournalPage() {
         meal_type: target,
         food_id: entry.food_id ?? undefined,
         food_name_snapshot: entry.food_name_snapshot,
-        servings: entry.servings,
+        quantity: entry.quantity ?? entry.servings ?? 1,
+        unit: 'serving',
         calories_snapshot: entry.calories_snapshot,
         protein_snapshot: entry.protein_snapshot,
       });

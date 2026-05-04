@@ -651,17 +651,16 @@ export default function FoodsPage() {
 
   function handleAddToJournal(food: Food, mealType: MealType, servings: number) {
     const today = new Date().toLocaleString('en-CA').split(',')[0]; // YYYY-MM-DD in local time
-    const calories = (food.calories_per_100g ?? food.calories ?? 0) * servings;
-    const protein = (food.protein_per_100g ?? food.protein ?? 0) * servings;
-    
+    // Server computes calorie/protein snapshots when food_id is set; pass quantity
+    // in 'serving' unit (this page's UI still uses the legacy serving-multiplier
+    // pattern — full QuantityInput swap is not in scope here).
     addJournalEntry({
       date: today,
       meal_type: mealType,
       food_id: food.id,
       food_name_snapshot: food.name,
-      servings,
-      calories_snapshot: Math.round(calories),
-      protein_snapshot: Math.round(protein * 10) / 10,
+      quantity: servings,
+      unit: 'serving',
     }).catch((e: unknown) => console.error('Failed to add to journal:', e));
   }
 
