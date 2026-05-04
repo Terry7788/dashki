@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { db } from '../db';
 import { getIo } from '../socket';
 import { syncCalorieHabit, todayLocalIso } from '../dashko-sync';
-import { nutritionFor } from '../nutrition';
+import { nutritionFor, canonicalUnit } from '../nutrition';
 
 const router = Router();
 
@@ -224,7 +224,7 @@ router.post('/', (req: Request, res: Response) => {
       try {
         const food = {
           base_amount: foodRow.base_amount,
-          base_unit: (foodRow.base_unit === 'grams' ? 'g' : foodRow.base_unit) as 'g'|'ml'|'serving',
+          base_unit: canonicalUnit(foodRow.base_unit),
           serving_size_g: foodRow.serving_size_g,
           calories: foodRow.calories,
           protein: foodRow.protein,
@@ -347,7 +347,7 @@ router.put('/:id', (req: Request, res: Response) => {
             try {
               const food = {
                 base_amount: foodRow.base_amount,
-                base_unit: (foodRow.base_unit === 'grams' ? 'g' : foodRow.base_unit) as 'g'|'ml'|'serving',
+                base_unit: canonicalUnit(foodRow.base_unit),
                 serving_size_g: foodRow.serving_size_g,
                 calories: foodRow.calories,
                 protein: foodRow.protein,

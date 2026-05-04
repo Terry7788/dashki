@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../db';
 import { getIo } from '../socket';
-import { nutritionFor } from '../nutrition';
+import { nutritionFor, canonicalUnit, type Unit as CanonicalUnit } from '../nutrition';
 
 const router = Router();
 
@@ -11,14 +11,6 @@ function toNumber(value: unknown, fallback: number | null = null): number | null
   if (value === undefined || value === null || value === '') return fallback;
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
-}
-
-type CanonicalUnit = 'g' | 'ml' | 'serving';
-
-function canonicalUnit(raw: string | null | undefined): CanonicalUnit {
-  if (raw === 'grams' || raw === 'g') return 'g';
-  if (raw === 'ml') return 'ml';
-  return 'serving';
 }
 
 interface UnitOption {

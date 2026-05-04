@@ -6,6 +6,19 @@
 
 export type Unit = 'g' | 'ml' | 'serving';
 
+/**
+ * Normalise the legacy DB strings ('grams' / 'servings' / 'ml') into the
+ * canonical Unit vocabulary used everywhere in code. Anything unrecognised
+ * falls back to 'serving' (the most permissive case — won't blow up the
+ * route handler, but logs a warning would be a future hardening). Centralised
+ * here so route handlers don't have to remember every legacy spelling.
+ */
+export function canonicalUnit(raw: string | null | undefined): Unit {
+  if (raw === 'g' || raw === 'grams') return 'g';
+  if (raw === 'ml') return 'ml';
+  return 'serving'; // 'serving', 'servings', undefined, anything else
+}
+
 export interface FoodForNutrition {
   base_amount: number;        // e.g. 100
   base_unit: 'g' | 'ml' | 'serving';
