@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronLeft, ChevronRight, Plus, Minus, Trash2, Pencil, Loader2, Clock, Search, Copy, MoreHorizontal, Move } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Loader2, Clock, Search, Copy, MoreHorizontal, Move } from 'lucide-react';
 import { GlassCard, GlassButton, GlassInput, GlassModal } from '@/components/ui';
 import {
   getJournalEntries,
@@ -13,8 +13,10 @@ import {
   getGoals,
   updateGoals,
 } from '@/lib/api';
-import type { JournalEntry, MealType, Food, SavedMeal } from '@/lib/types';
+import type { JournalEntry, MealType, Food, SavedMeal, Unit } from '@/lib/types';
 import { useSocketEvent } from '@/lib/useSocketEvent';
+import { QuantityInput } from '@/components/QuantityInput';
+import { nutritionFor } from '@/lib/nutrition';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -44,53 +46,6 @@ function formatDateLabel(d: Date): string {
   if (key === today) return 'Today';
   if (key === yesterday) return 'Yesterday';
   return d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
-}
-
-/**
- * Calculate nutrition for a food + servings.
- *
- * The API returns food objects with:
- *   - calories  (kcal per base_amount of base_unit)
- *   - protein   (g per base_amount)
- *   - base_amount (e.g. 100)
- *   - base_unit  (e.g. "grams")
- *
- * 1 serving = 1 × base_amount units.
- * So for `servings` servings we just multiply directly.
- */
-function calcNutrition(food: Food, servings: number) {
-  // Prefer the direct API field names (calories / protein).
-  // Fall back to the legacy per-100g fields if those aren't present.
-  const caloriesPerServing =
-    food.calories ??
-    (food.calories_per_100g != null
-      ? food.serving_size_g
-        ? (food.calories_per_100g * food.serving_size_g) / 100
-        : food.calories_per_100g
-      : 0);
-
-  const proteinPerServing =
-    food.protein ??
-    (food.protein_per_100g != null
-      ? food.serving_size_g
-        ? (food.protein_per_100g * food.serving_size_g) / 100
-        : food.protein_per_100g
-      : 0);
-
-  return {
-    calories: Math.round(caloriesPerServing * servings),
-    protein: Math.round(proteinPerServing * servings * 10) / 10,
-  };
-}
-
-/** Get the display calories value from a food, regardless of field name */
-function foodCalories(food: Food): number {
-  return food.calories ?? food.calories_per_100g ?? 0;
-}
-
-/** Get the display protein value from a food, regardless of field name */
-function foodProtein(food: Food): number {
-  return food.protein ?? food.protein_per_100g ?? 0;
 }
 
 // ─── Progress Ring ────────────────────────────────────────────────────────────
@@ -132,7 +87,8 @@ function JournalSkeleton() {
 
 interface SelectedFood {
   food: Food;
-  servings: number;
+  quantity: number;
+  unit: Unit;
 }
 
 interface FoodPickerProps {
@@ -188,14 +144,20 @@ function FoodPicker({ selectedFoods, setSelectedFoods }: FoodPickerProps) {
     if (existing) {
       setSelectedFoods(selectedFoods.filter((sf) => sf.food.id !== food.id));
     } else {
-      setSelectedFoods([...selectedFoods, { food, servings: 1 }]);
+      // Pick the food's default unit + sensible starting quantity
+      const units = food.units ?? [{ unit: 'serving' as Unit, label: 'serving', default: true }];
+      const def = units.find((u) => u.default) ?? units[0];
+      const startQty =
+        def.unit === 'serving' ? 1 :
+        (food.base_amount ?? food.baseAmount ?? 100);
+      setSelectedFoods([...selectedFoods, { food, quantity: startQty, unit: def.unit }]);
     }
   }
 
-  function setServingsForFood(foodId: number, next: number) {
-    const clamped = Math.max(0, Math.round(next * 10) / 10); // 1 decimal precision
+  function setQuantityForFood(foodId: number, next: { quantity: number; unit: Unit }) {
+    const clamped = { quantity: Math.max(0, next.quantity), unit: next.unit };
     setSelectedFoods(selectedFoods.map((sf) =>
-      sf.food.id === foodId ? { ...sf, servings: clamped } : sf
+      sf.food.id === foodId ? { ...sf, ...clamped } : sf
     ));
   }
 
@@ -281,18 +243,17 @@ function FoodPicker({ selectedFoods, setSelectedFoods }: FoodPickerProps) {
                     </span>
                   </div>
                   <div className="flex flex-col items-end shrink-0 text-xs text-white/50 leading-snug tabular-nums">
-                    <span>{foodCalories(food)} kcal</span>
-                    <span>{foodProtein(food)}g pro</span>
+                    <span>{food.calories ?? food.calories_per_100g ?? 0} kcal</span>
+                    <span>{food.protein ?? food.protein_per_100g ?? 0}g pro</span>
                   </div>
                 </button>
 
-                {/* Servings stepper for selected items — much friendlier on
-                    mobile than typing decimals into a small input box. */}
                 {isSelected && (
-                  <ServingsStepper
+                  <QuantityInput
                     food={food}
-                    servings={selected.servings}
-                    onChange={(next) => setServingsForFood(food.id, next)}
+                    quantity={selected.quantity}
+                    unit={selected.unit}
+                    onChange={(next) => setQuantityForFood(food.id, next)}
                   />
                 )}
               </div>
@@ -300,92 +261,6 @@ function FoodPicker({ selectedFoods, setSelectedFoods }: FoodPickerProps) {
           );
         })}
       </div>
-    </div>
-  );
-}
-
-// ─── Servings Stepper ─────────────────────────────────────────────────────────
-
-interface ServingsStepperProps {
-  food: Food;
-  servings: number;
-  onChange: (next: number) => void;
-}
-
-function ServingsStepper({ food, servings, onChange }: ServingsStepperProps) {
-  // Step is 1 for whole-serving items, 0.5 for finer increments.
-  // Tapping the value enters a custom input mode for unusual amounts.
-  const [editingCustom, setEditingCustom] = useState(false);
-  const [customDraft, setCustomDraft] = useState(String(servings));
-
-  function commitCustom() {
-    const n = parseFloat(customDraft);
-    if (Number.isFinite(n) && n >= 0) onChange(n);
-    setEditingCustom(false);
-  }
-
-  // Stop the step buttons from triggering the parent button's onClick (toggle).
-  function stop(e: React.MouseEvent) {
-    e.stopPropagation();
-  }
-
-  return (
-    <div
-      className="px-4 pb-3 flex items-center gap-3"
-      onClick={stop}
-    >
-      <span className="text-xs text-white/50 shrink-0">Servings</span>
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={(e) => { stop(e); onChange(Math.max(0, servings - 0.5)); }}
-          aria-label="Decrease servings"
-          disabled={servings <= 0}
-          className="w-9 h-9 flex items-center justify-center rounded-xl bg-white/10 hover:bg-white/15 active:bg-white/20 text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-        >
-          <Minus className="w-4 h-4" />
-        </button>
-
-        {editingCustom ? (
-          <input
-            type="number"
-            inputMode="decimal"
-            min={0}
-            step={0.1}
-            autoFocus
-            value={customDraft}
-            onChange={(e) => setCustomDraft(e.target.value)}
-            onBlur={commitCustom}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') commitCustom();
-              if (e.key === 'Escape') { setCustomDraft(String(servings)); setEditingCustom(false); }
-            }}
-            onClick={stop}
-            className="w-14 px-2 py-1 text-sm bg-white/10 border border-indigo-400/60 rounded-lg text-white text-center focus:outline-none focus:ring-2 focus:ring-indigo-400/40 tabular-nums"
-          />
-        ) : (
-          <button
-            type="button"
-            onClick={(e) => { stop(e); setCustomDraft(String(servings)); setEditingCustom(true); }}
-            className="min-w-[3.5rem] px-2 py-1 text-sm font-semibold text-white tabular-nums hover:bg-white/10 rounded-lg transition-colors"
-            title="Tap to type a custom amount"
-          >
-            {servings === 0 ? '—' : Number.isInteger(servings) ? servings : servings.toFixed(1)}
-          </button>
-        )}
-
-        <button
-          type="button"
-          onClick={(e) => { stop(e); onChange(servings + 0.5); }}
-          aria-label="Increase servings"
-          className="w-9 h-9 flex items-center justify-center rounded-xl bg-white/10 hover:bg-white/15 active:bg-white/20 text-white transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-        </button>
-      </div>
-      <span className="text-xs text-indigo-300 ml-auto tabular-nums">
-        {Math.round(calcNutrition(food, servings).calories)} kcal
-      </span>
     </div>
   );
 }
@@ -437,16 +312,15 @@ function AddFoodModal({ isOpen, onClose, mealType, date, onAdded }: AddFoodModal
     setSaving(true);
     setError('');
     try {
-      for (const { food, servings } of selectedFoods) {
-        if (servings <= 0) continue;
-        // Server computes snapshots when food_id is set; pass quantity in 'serving' unit
+      for (const { food, quantity, unit } of selectedFoods) {
+        if (quantity <= 0) continue;
         const entry = await addJournalEntry({
           date,
           meal_type: mealType,
           food_id: food.id,
           food_name_snapshot: food.name,
-          quantity: servings,
-          unit: 'serving',
+          quantity,
+          unit,
         });
         onAdded(entry);
       }
@@ -535,14 +409,26 @@ function AddFoodModal({ isOpen, onClose, mealType, date, onAdded }: AddFoodModal
     }`;
 
   // Selection summary for the sticky footer
-  const totalCalories = selectedFoods.reduce(
-    (sum, sf) => sum + calcNutrition(sf.food, sf.servings).calories,
-    0
+  const footerTotals = selectedFoods.reduce(
+    (acc, sf) => {
+      try {
+        const foodForCalc = {
+          base_amount: sf.food.base_amount ?? sf.food.baseAmount ?? 100,
+          base_unit: (sf.food.base_unit ?? sf.food.baseUnit ?? 'serving') as Unit,
+          serving_size_g: sf.food.serving_size_g ?? null,
+          calories: sf.food.calories ?? 0,
+          protein: sf.food.protein ?? null,
+        };
+        const r = nutritionFor(foodForCalc, sf.quantity, sf.unit);
+        return { calories: acc.calories + r.calories, protein: acc.protein + r.protein };
+      } catch {
+        return acc;
+      }
+    },
+    { calories: 0, protein: 0 }
   );
-  const totalProtein = selectedFoods.reduce(
-    (sum, sf) => sum + calcNutrition(sf.food, sf.servings).protein,
-    0
-  );
+  const totalCalories = footerTotals.calories;
+  const totalProtein = footerTotals.protein;
 
   // Sticky bottom bar — only meaningful for the foods tab. Meals add inline
   // on tap; quick-add has its own button. So footer is null for those tabs
