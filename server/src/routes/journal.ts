@@ -217,10 +217,11 @@ router.post('/', (req: Request, res: Response) => {
      FROM Foods WHERE id = ?`,
     [foodIdVal],
     (err, foodRow: any) => {
-      if (err || !foodRow) {
+      if (err) {
         console.error('[error] POST /api/journal food lookup', err);
-        return res.status(500).json({ error: 'Failed to look up food for nutrition computation' });
+        return res.status(500).json({ error: 'Failed to look up food' });
       }
+      if (!foodRow) return res.status(404).json({ error: 'Food not found' });
       try {
         const food = {
           base_amount: foodRow.base_amount,
@@ -261,11 +262,11 @@ router.put('/:id', (req: Request, res: Response) => {
     `${SELECT_ENTRY_SQL} WHERE id = ?`,
     [id],
     (fetchErr, existing: any) => {
-      if (fetchErr) return res.status(500).json({ error: 'Failed to fetch entry' });
+      if (fetchErr) {
+        console.error('[error] PUT /api/journal/:id fetch', fetchErr);
+        return res.status(500).json({ error: 'Failed to fetch entry' });
+      }
       if (!existing) return res.status(404).json({ error: 'Journal entry not found' });
-
-      const fields: string[] = [];
-      const params: unknown[] = [];
 
       // Resolve new quantity/unit if either is being changed.
       const validUnits = ['g', 'ml', 'serving'] as const;
@@ -292,7 +293,13 @@ router.put('/:id', (req: Request, res: Response) => {
       const quantityOrUnitChanged = newQuantity !== undefined || newUnit !== undefined;
       const isQuickAdd = existing.food_id == null;
 
+      // fields/params are scoped INSIDE finishUpdate now so a hypothetical
+      // re-invocation (retry, future refactor) can't double-append clauses
+      // from a prior call's leftover state.
       const finishUpdate = (calForCol: number | null, proForCol: number | null) => {
+        const fields: string[] = [];
+        const params: unknown[] = [];
+
         if (newQuantity !== undefined || servings !== undefined) {
           fields.push('quantity = ?'); params.push(finalQuantity);
         }
@@ -325,7 +332,10 @@ router.put('/:id', (req: Request, res: Response) => {
               `${SELECT_ENTRY_SQL} WHERE id = ?`,
               [id],
               (err2, entry) => {
-                if (err2) return res.status(500).json({ error: 'Failed to fetch updated entry' });
+                if (err2) {
+                  console.error('[error] PUT /api/journal/:id post-update fetch', err2);
+                  return res.status(500).json({ error: 'Failed to fetch updated entry' });
+                }
                 try { getIo().emit('journal-entry-updated', entry); } catch (_) {}
                 res.json(entry);
               }
@@ -341,9 +351,11 @@ router.put('/:id', (req: Request, res: Response) => {
            FROM Foods WHERE id = ?`,
           [existing.food_id],
           (foodErr, foodRow: any) => {
-            if (foodErr || !foodRow) {
-              return res.status(500).json({ error: 'Failed to look up food for nutrition recompute' });
+            if (foodErr) {
+              console.error('[error] PUT /api/journal/:id food lookup', foodErr);
+              return res.status(500).json({ error: 'Failed to look up food' });
             }
+            if (!foodRow) return res.status(404).json({ error: 'Food not found' });
             try {
               const food = {
                 base_amount: foodRow.base_amount,
