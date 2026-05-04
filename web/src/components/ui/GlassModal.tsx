@@ -68,16 +68,22 @@ export default function GlassModal({
   // restore it after the body-scroll-lock is lifted.
   const savedScrollYRef = useRef(0);
 
+  // ── Body scroll lock — iOS-friendly version ──────────────────────────
+  // `overflow: hidden` alone doesn't stop iOS Safari from scrolling the
+  // page behind the modal. The reliable fix is to pin the body in place
+  // with position:fixed and offset by the current scroll position so the
+  // viewport visually stays put. On unmount we undo all three styles
+  // and restore scroll. Works on iOS Safari, desktop, and Android.
+  //
+  // IMPORTANT: this effect MUST depend only on `isOpen`, not on the
+  // keydown handler (which is recreated every parent render because the
+  // parent passes onClose inline). Otherwise every parent re-render
+  // (e.g. `setEntries` after adding a food) tears down and rebuilds the
+  // scroll lock — the cleanup's `window.scrollTo` races with the body
+  // unlock and the page snaps back to 0.
   useEffect(() => {
     if (!isOpen) return;
-    document.addEventListener('keydown', handleKeyDown);
 
-    // ── Body scroll lock — iOS-friendly version ─────────────────────────
-    // `overflow: hidden` alone doesn't stop iOS Safari from scrolling the
-    // page behind the modal. The reliable fix is to pin the body in place
-    // with position:fixed and offset by the current scroll position so the
-    // viewport visually stays put. On unmount we undo all three styles
-    // and restore scroll. Works on iOS Safari, desktop, and Android.
     savedScrollYRef.current = window.scrollY;
     const body = document.body;
     body.style.position = 'fixed';
@@ -88,7 +94,6 @@ export default function GlassModal({
     body.style.width = '100%';
 
     return () => {
-      document.removeEventListener('keydown', handleKeyDown);
       body.style.position = '';
       body.style.top = '';
       body.style.left = '';
@@ -97,6 +102,16 @@ export default function GlassModal({
       body.style.width = '';
       window.scrollTo(0, savedScrollYRef.current);
     };
+  }, [isOpen]);
+
+  // Keydown listener split into its own effect so re-binding it (when
+  // the parent's onClose changes identity) doesn't disturb the scroll
+  // lock above. Adding/removing a document listener is cheap and has no
+  // visual side effects.
+  useEffect(() => {
+    if (!isOpen) return;
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, handleKeyDown]);
 
   if (!isOpen) return null;
