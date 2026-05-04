@@ -204,24 +204,35 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-gray-500 dark:text-white/60 pl-1">Unit</label>
-            <select
-              value={form.base_unit}
-              onChange={(e) => {
-                const newUnit = e.target.value as BaseUnit;
-                // Auto-adjust base amount when switching units
-                if (newUnit === 'servings') {
-                  set('base_amount', '1');
-                } else if (newUnit === 'grams' || newUnit === 'ml') {
-                  set('base_amount', '100');
-                }
-                set('base_unit', newUnit);
-              }}
-              className="w-full h-[46px] px-3 sm:px-4 bg-black/[0.04] border border-black/[0.10] text-gray-900 dark:bg-white/10 dark:border-white/20 dark:text-white rounded-xl sm:rounded-2xl text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-[#2E8B57]/40 focus:border-[#2E8B57]/60 transition-all duration-200"
-            >
-              <option value="grams">Grams</option>
-              <option value="ml">ml</option>
-              <option value="servings">Servings</option>
-            </select>
+            {/* 3-pill segmented control replaces the native <select> — its
+                native dropdown panel rendered options with white-on-white
+                text in some browsers regardless of how the closed state was
+                styled. Pills match the foods-page green accent. */}
+            <div className="grid grid-cols-3 gap-1 p-1 h-[46px] rounded-xl sm:rounded-2xl bg-black/[0.04] border border-black/[0.10] dark:bg-white/[0.06] dark:border-white/20">
+              {(['grams', 'ml', 'servings'] as BaseUnit[]).map((u) => {
+                const label = u === 'grams' ? 'Grams' : u === 'ml' ? 'ml' : 'Servings';
+                const isSelected = form.base_unit === u;
+                return (
+                  <button
+                    key={u}
+                    type="button"
+                    onClick={() => {
+                      // Auto-adjust base amount when switching units
+                      if (u === 'servings') set('base_amount', '1');
+                      else if (u === 'grams' || u === 'ml') set('base_amount', '100');
+                      set('base_unit', u);
+                    }}
+                    className={`text-xs sm:text-sm font-medium rounded-lg sm:rounded-xl transition-all duration-150 ${
+                      isSelected
+                        ? 'bg-[#2E8B57]/30 border border-[#2E8B57] text-white shadow-sm shadow-[#2E8B57]/20'
+                        : 'text-gray-600 dark:text-white/60 hover:text-gray-900 dark:hover:text-white hover:bg-black/[0.04] dark:hover:bg-white/[0.04] border border-transparent'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 
