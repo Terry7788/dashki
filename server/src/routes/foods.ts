@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../db';
 import { getIo } from '../socket';
+import { nutritionFor } from '../nutrition';
 
 const router = Router();
 
@@ -330,21 +331,61 @@ router.put('/:id', (req: Request, res: Response) => {
           }
           const mapped = mapFood(food!);
 
-          // Sync all journal entries that reference this food with updated snapshots
-          db.run(
-            `UPDATE JournalEntries
-             SET calories_snapshot = CAST(ROUND(? * servings) AS REAL),
-                 protein_snapshot  = ROUND(? * servings, 1),
-                 food_name_snapshot = ?
-             WHERE food_id = ?`,
-            [mapped.calories, mapped.protein ?? 0, mapped.name, id],
-            (journalErr) => {
-              if (journalErr) {
-                console.error('[error] PUT /api/foods/:id journal sync', journalErr);
+          // Sync all journal entries that reference this food. Each entry may
+          // now be in a different unit (g, ml, serving), so we recompute per
+          // row via nutritionFor rather than the old broadcast `calories *
+          // servings` formula.
+          db.all(
+            `SELECT id, quantity, unit FROM JournalEntries WHERE food_id = ?`,
+            [id],
+            (selectErr, rows: Array<{ id: number; quantity: number; unit: string }>) => {
+              if (selectErr) {
+                console.error('[error] PUT /api/foods/:id journal select', selectErr);
               }
-              try { getIo().emit('food-updated', mapped); } catch (_) {}
-              try { getIo().emit('journal-entry-updated', {}); } catch (_) {}
-              res.json(mapped);
+
+              const foodForCalc = {
+                base_amount: mapped.base_amount as number,
+                base_unit: mapped.baseUnit as 'g'|'ml'|'serving',
+                serving_size_g: (mapped.serving_size_g as number | null),
+                calories: mapped.calories as number,
+                protein: mapped.protein as number | null,
+              };
+
+              let remaining = (rows || []).length;
+              if (remaining === 0) {
+                try { getIo().emit('food-updated', mapped); } catch (_) {}
+                return res.json(mapped);
+              }
+
+              for (const row of rows || []) {
+                try {
+                  const u = (row.unit ?? 'serving') as 'g'|'ml'|'serving';
+                  const { calories, protein } = nutritionFor(foodForCalc, row.quantity ?? 1, u);
+                  db.run(
+                    `UPDATE JournalEntries
+                     SET calories_snapshot = ?, protein_snapshot = ?, food_name_snapshot = ?
+                     WHERE id = ?`,
+                    [calories, protein, mapped.name, row.id],
+                    (updErr) => {
+                      if (updErr) console.error('[error] journal resync row', row.id, updErr);
+                      if (--remaining === 0) {
+                        try { getIo().emit('food-updated', mapped); } catch (_) {}
+                        try { getIo().emit('journal-entry-updated', {}); } catch (_) {}
+                        res.json(mapped);
+                      }
+                    }
+                  );
+                } catch (e) {
+                  // Unsupported unit combo for this row — skip the resync (snapshot stays stale,
+                  // user will see old kcal until they re-enter). Log loudly.
+                  console.error('[error] journal resync skipped row', row.id, e);
+                  if (--remaining === 0) {
+                    try { getIo().emit('food-updated', mapped); } catch (_) {}
+                    try { getIo().emit('journal-entry-updated', {}); } catch (_) {}
+                    res.json(mapped);
+                  }
+                }
+              }
             }
           );
         }
