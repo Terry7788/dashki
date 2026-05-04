@@ -1272,8 +1272,12 @@ export default function JournalPage() {
 
   const dateStr = toISODate(currentDate);
 
-  const fetchEntries = useCallback(() => {
-    setLoading(true);
+  // `silent`: skip the loading skeleton so socket-driven refetches don't
+  // tear down the meal sections (which scroll-snaps the page back to top
+  // after a delete/edit). Only initial load + date change should show the
+  // skeleton — every other refresh updates entries in place.
+  const fetchEntries = useCallback((silent = false) => {
+    if (!silent) setLoading(true);
     setError('');
     getJournalEntries({ date: dateStr })
       .then(setEntries)
@@ -1285,9 +1289,10 @@ export default function JournalPage() {
     fetchEntries();
   }, [fetchEntries]);
 
-  useSocketEvent('journal-entry-created', fetchEntries);
-  useSocketEvent('journal-entry-updated', fetchEntries);
-  useSocketEvent('journal-entry-deleted', fetchEntries);
+  const silentRefetch = useCallback(() => fetchEntries(true), [fetchEntries]);
+  useSocketEvent('journal-entry-created', silentRefetch);
+  useSocketEvent('journal-entry-updated', silentRefetch);
+  useSocketEvent('journal-entry-deleted', silentRefetch);
 
   useEffect(() => {
     if (showDateInput) dateInputRef.current?.showPicker?.();
