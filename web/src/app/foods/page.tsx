@@ -580,23 +580,57 @@ interface FoodRowProps {
 }
 
 function FoodRow({ food, onEdit, onDelete, onAddToJournal }: FoodRowProps) {
-  const calories = food.calories ?? food.calories_per_100g ?? 0;
-  const protein = food.protein ?? food.protein_per_100g ?? 0;
-  const carbs = food.carbs_per_100g ?? 0;
-  const fat = food.fat_per_100g ?? 0;
+  const rawCalories = food.calories ?? food.calories_per_100g ?? 0;
+  const rawProtein = food.protein ?? food.protein_per_100g ?? 0;
+  const rawCarbs = food.carbs_per_100g ?? 0;
+  const rawFat = food.fat_per_100g ?? 0;
 
-  // Render the per-base label honestly: for a 1-serving-base food the
-  // values are per serving (NOT per 100g, even though the legacy field
-  // names suggest otherwise). The "serving Xg" suffix is redundant when
-  // the base IS already a serving — only show it for grams/ml bases
-  // where the gram-weight of a portion is useful extra info.
   const baseAmount = food.baseAmount ?? food.base_amount ?? 100;
-  const baseUnit = food.baseUnit ?? food.base_unit ?? 'g';
-  const perBase =
-    baseUnit === 'serving' ? (baseAmount === 1 ? 'per 1 serving' : `per ${baseAmount} servings`)
-    : baseUnit === 'ml' ? `per ${baseAmount}ml`
-    : `per ${baseAmount}g`;
-  const showServingSuffix = baseUnit !== 'serving' && food.serving_size_g != null;
+  // Cast through string so we can defensively handle legacy DB values
+  // ('grams' / 'servings') alongside the canonical 'g' / 'serving' / 'ml'.
+  const baseUnit = (food.baseUnit ?? food.base_unit ?? 'g') as string;
+  const servingG = food.serving_size_g ?? null;
+
+  // Display logic: prefer per-serving for any food that has a serving size
+  // defined (Terry's preference — "if there's a serving, show me the
+  // serving info, not the per-100g info"). For grams-base foods we derive
+  // per-serving values from the stored per-100g raw values. For ml-base
+  // foods we can't cross dimensions, so we display per the food's base.
+  let perBase: string;
+  let calories: number;
+  let protein: number;
+  let carbs: number;
+  let fat: number;
+
+  if (baseUnit === 'serving') {
+    // Already per serving — show as-is, no conversion
+    perBase = baseAmount === 1 ? 'per 1 serving' : `per ${baseAmount} servings`;
+    calories = rawCalories;
+    protein = rawProtein;
+    carbs = rawCarbs;
+    fat = rawFat;
+  } else if ((baseUnit === 'g' || baseUnit === 'grams') && servingG != null && servingG > 0) {
+    // Grams base + serving size set → show per-serving (derived)
+    const factor = servingG / baseAmount;
+    perBase = `per 1 serving (${servingG}g)`;
+    calories = Math.round(rawCalories * factor);
+    protein = Math.round(rawProtein * factor * 10) / 10;
+    carbs = Math.round(rawCarbs * factor * 10) / 10;
+    fat = Math.round(rawFat * factor * 10) / 10;
+  } else if (baseUnit === 'ml') {
+    perBase = `per ${baseAmount}ml`;
+    calories = rawCalories;
+    protein = rawProtein;
+    carbs = rawCarbs;
+    fat = rawFat;
+  } else {
+    // grams base, no serving size → show per the base
+    perBase = `per ${baseAmount}g`;
+    calories = rawCalories;
+    protein = rawProtein;
+    carbs = rawCarbs;
+    fat = rawFat;
+  }
 
   return (
     <div className="flex flex-row items-center gap-3 sm:gap-4 px-3 sm:px-5 py-3 sm:py-4 rounded-2xl sm:rounded-3xl bg-white/[0.06] border border-white/10 hover:bg-white/[0.09] transition-all duration-200 group">
@@ -604,9 +638,6 @@ function FoodRow({ food, onEdit, onDelete, onAddToJournal }: FoodRowProps) {
         <p className="font-medium text-white truncate">{food.name}</p>
         <p className="text-xs text-white/50 mt-0.5">
           {perBase} · {calories} kcal · {protein}g protein
-          {showServingSuffix && (
-            <span> · serving {food.serving_size_g}g</span>
-          )}
         </p>
       </div>
 
