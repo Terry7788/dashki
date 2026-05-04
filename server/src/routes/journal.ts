@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { db } from '../db';
 import { getIo } from '../socket';
 import { syncCalorieHabit, todayLocalIso } from '../dashko-sync';
-import { nutritionFor, computeRatio } from '../nutrition';
+import { nutritionFor } from '../nutrition';
 
 const router = Router();
 
@@ -20,7 +20,7 @@ function todayStr(): string {
 
 const SELECT_ENTRY_SQL = `
   SELECT id, date, meal_type, logged_at, food_id, food_name_snapshot,
-         servings, quantity, unit,
+         quantity, unit,
          calories_snapshot, protein_snapshot, created_at
   FROM JournalEntries
 `;
@@ -168,15 +168,15 @@ router.post('/', (req: Request, res: Response) => {
   // Compute snapshots:
   //   - food_id absent (Quick Add): trust client-supplied snapshots
   //   - food_id present: look up the food, compute via nutritionFor
-  const finishInsert = (caloriesNum: number, proteinNum: number | null, servingsForCompat: number) => {
+  const finishInsert = (caloriesNum: number, proteinNum: number | null) => {
     db.run(
       `INSERT INTO JournalEntries
          (date, meal_type, logged_at, food_id, food_name_snapshot,
-          servings, quantity, unit,
+          quantity, unit,
           calories_snapshot, protein_snapshot)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [date, meal_type, loggedAt, foodIdVal, food_name_snapshot,
-       servingsForCompat, quantity, unit,
+       quantity, unit,
        caloriesNum, proteinNum],
       function (this: { lastID: number }, err) {
         if (err) {
@@ -207,7 +207,7 @@ router.post('/', (req: Request, res: Response) => {
     // Quick Add path
     const cal = toNumber(clientCalories, 0)!;
     const pro = toNumber(clientProtein, null);
-    finishInsert(cal, pro, quantity /* legacy compat: servings = quantity */);
+    finishInsert(cal, pro);
     return;
   }
 
@@ -232,8 +232,7 @@ router.post('/', (req: Request, res: Response) => {
         const { calories, protein } = nutritionFor(food, quantity!, unit);
         // Legacy `servings` column is computed as the unit-less ratio so an
         // unmigrated frontend reading the row still gets a sensible value.
-        const ratio = computeRatio(food, quantity!, unit);
-        finishInsert(calories, protein, ratio);
+        finishInsert(calories, protein);
       } catch (e: any) {
         return res.status(400).json({ error: e?.message || 'Invalid quantity/unit' });
       }
@@ -293,10 +292,9 @@ router.put('/:id', (req: Request, res: Response) => {
       const quantityOrUnitChanged = newQuantity !== undefined || newUnit !== undefined;
       const isQuickAdd = existing.food_id == null;
 
-      const finishUpdate = (calForCol: number | null, proForCol: number | null, servingsForCol: number) => {
+      const finishUpdate = (calForCol: number | null, proForCol: number | null) => {
         if (newQuantity !== undefined || servings !== undefined) {
           fields.push('quantity = ?'); params.push(finalQuantity);
-          fields.push('servings = ?'); params.push(servingsForCol);
         }
         if (newUnit !== undefined) {
           fields.push('unit = ?'); params.push(finalUnit);
@@ -355,8 +353,7 @@ router.put('/:id', (req: Request, res: Response) => {
                 protein: foodRow.protein,
               };
               const { calories, protein } = nutritionFor(food, finalQuantity, finalUnit);
-              const ratio = computeRatio(food, finalQuantity, finalUnit);
-              finishUpdate(calories, protein, ratio);
+              finishUpdate(calories, protein);
             } catch (e: any) {
               return res.status(400).json({ error: e?.message || 'Invalid quantity/unit' });
             }
@@ -366,7 +363,7 @@ router.put('/:id', (req: Request, res: Response) => {
         // Quick Add or unrelated PUT — accept client-supplied snapshots.
         const cal = calories_snapshot !== undefined ? toNumber(calories_snapshot, 0)! : null;
         const pro = protein_snapshot !== undefined ? toNumber(protein_snapshot, null) : null;
-        finishUpdate(cal, pro, finalQuantity); // legacy `servings` = quantity for QuickAdd
+        finishUpdate(cal, pro);
       }
     }
   );

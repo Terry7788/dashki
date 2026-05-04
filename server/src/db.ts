@@ -267,6 +267,21 @@ export function initDb(): Promise<void> {
         );
       });
 
+      // ── Migration: drop legacy `servings` column from JournalEntries (DSHKI-8 PR 2) ──
+      // SQLite ALTER TABLE DROP COLUMN was added in 3.35 (2021). Use a guarded
+      // try/catch via PRAGMA so this is safe on older SQLite builds (logs a
+      // warning but continues — the unused column is harmless).
+      db.all(`PRAGMA table_info(JournalEntries)`, [], (pragmaErr, columns: Array<{ name: string }>) => {
+        if (pragmaErr) return;
+        const existingCols = new Set(columns.map((c) => c.name));
+        if (existingCols.has('servings')) {
+          db.run('ALTER TABLE JournalEntries DROP COLUMN servings', [], (err) => {
+            if (err) console.warn('[db] could not drop legacy JournalEntries.servings:', err.message);
+            else console.log('[db] ran migration: DROP COLUMN JournalEntries.servings');
+          });
+        }
+      });
+
       // ── Sentinel to confirm serialization completed ────────────────────────
       db.run('SELECT 1', (err) => {
         if (err) reject(err);
