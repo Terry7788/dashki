@@ -16,7 +16,7 @@ import {
 import type { JournalEntry, MealType, Food, SavedMeal, Unit } from '@/lib/types';
 import { useSocketEvent } from '@/lib/useSocketEvent';
 import { QuantityInput } from '@/components/QuantityInput';
-import { nutritionFor } from '@/lib/nutrition';
+import { nutritionFor, formatQuantity } from '@/lib/nutrition';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -1040,7 +1040,7 @@ function EntryRow({
       >
         <p className="text-sm font-medium text-white truncate">{entry.food_name_snapshot}</p>
         <p className="text-xs text-white/50">
-          {entry.servings} serving{entry.servings !== 1 ? 's' : ''} · {entry.calories_snapshot} kcal · {entry.protein_snapshot}g protein
+          {formatQuantity(entry.quantity ?? entry.servings ?? 1, (entry.unit as Unit) ?? 'serving')} · {entry.calories_snapshot} kcal · {entry.protein_snapshot}g protein
         </p>
       </button>
 
