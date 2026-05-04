@@ -33,29 +33,6 @@ function formatBaseLabel(unit: BaseUnit, amount: string | number): string {
   return `${n}g`;
 }
 
-/** Conversion factor for nutrient values when the user changes the base
- *  (unit and/or amount). New nutrient = old nutrient × factor. Returns null
- *  when the conversion is not derivable (different physical dimensions, or
- *  serving_size_g is required but missing). */
-function nutrientConversionFactor(
-  oldUnit: BaseUnit, oldAmount: number,
-  newUnit: BaseUnit, newAmount: number,
-  servingG: number | null,
-): number | null {
-  if (oldAmount <= 0 || newAmount <= 0) return null;
-  if (oldUnit === newUnit) return newAmount / oldAmount;
-  // grams ↔ servings: requires serving_size_g (grams per 1 serving)
-  if (oldUnit === 'grams' && newUnit === 'servings' && servingG && servingG > 0) {
-    // old: per oldAmount g → new: per (newAmount × servingG) g
-    return (newAmount * servingG) / oldAmount;
-  }
-  if (oldUnit === 'servings' && newUnit === 'grams' && servingG && servingG > 0) {
-    // old: per (oldAmount × servingG) g → new: per newAmount g
-    return newAmount / (oldAmount * servingG);
-  }
-  // ml ↔ grams or ml ↔ servings: no derivable factor without density data
-  return null;
-}
 
 const defaultForm = (): FoodFormData => ({
   name: '',
@@ -268,42 +245,13 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
                 onChange={(e) => {
                   const newUnit = e.target.value as BaseUnit;
                   if (newUnit === form.base_unit) return;
-
-                  const oldUnit = form.base_unit;
-                  const oldAmount = parseFloat(form.base_amount) || 0;
-                  const newAmount =
-                    newUnit === 'servings' ? 1
-                    : newUnit === 'grams' || newUnit === 'ml' ? 100
-                    : oldAmount;
-                  const servingG = parseFloat(form.serving_size_g) || 0;
-
-                  const factor = nutrientConversionFactor(
-                    oldUnit, oldAmount, newUnit, newAmount,
-                    servingG > 0 ? servingG : null,
-                  );
-
-                  setForm((prev) => {
-                    const next: FoodFormData = {
-                      ...prev,
-                      base_unit: newUnit,
-                      base_amount: String(newAmount),
-                    };
-                    // Preserve nutrient correctness when we can derive a factor
-                    // (grams ↔ servings via serving_size_g, or same-unit amount
-                    // change). Skip when no factor — user will need to retype.
-                    if (factor !== null && factor !== 1) {
-                      const convert = (v: string) => {
-                        const n = parseFloat(v);
-                        if (!Number.isFinite(n)) return v;
-                        return String(Math.round(n * factor * 10) / 10);
-                      };
-                      next.calories_per_100g = convert(prev.calories_per_100g);
-                      next.protein_per_100g = convert(prev.protein_per_100g);
-                      next.carbs_per_100g = convert(prev.carbs_per_100g);
-                      next.fat_per_100g = convert(prev.fat_per_100g);
-                    }
-                    return next;
-                  });
+                  // Adjust base_amount to a sensible default for the new unit,
+                  // but leave the nutrient values alone — auto-converting them
+                  // mid-edit overwrites what the user is actively typing. The
+                  // dynamic field labels make it clear what each value means.
+                  if (newUnit === 'servings') set('base_amount', '1');
+                  else if (newUnit === 'grams' || newUnit === 'ml') set('base_amount', '100');
+                  set('base_unit', newUnit);
                 }}
                 className="w-full h-[46px] pl-3 sm:pl-4 pr-10 bg-black/[0.04] border border-black/[0.10] text-gray-900 dark:bg-white/10 dark:border-white/20 dark:text-white rounded-xl sm:rounded-2xl text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-[#2E8B57]/40 focus:border-[#2E8B57]/60 transition-all duration-200 appearance-none [color-scheme:dark] cursor-pointer"
               >
