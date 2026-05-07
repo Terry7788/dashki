@@ -49,17 +49,30 @@ function formatDateFull(iso: string): string {
   });
 }
 
+function addDaysISO(iso: string, days: number): string {
+  const d = new Date(iso + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return d.toLocaleString('en-CA').split(',')[0];
+}
+
+const KCAL_PER_KG_FAT = 7700;
+
 type Range = '30' | '90' | 'all';
 
 // ─── Custom Tooltip ───────────────────────────────────────────────────────────
 
 function CustomTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
+  // Prefer the actual weight series; fall back to the projected series.
+  const actual = payload.find((p: any) => p.dataKey === 'weight' && p.value != null);
+  const projected = payload.find((p: any) => p.dataKey === 'projected' && p.value != null);
+  const point = actual ?? projected;
+  if (!point) return null;
   return (
     <div className="backdrop-blur-xl bg-black/70 border border-white/15 rounded-2xl px-4 py-3 shadow-xl">
       <p className="text-white/60 text-xs mb-1">{label}</p>
-      <p className="text-indigo-300 font-semibold text-sm">
-        {payload[0].value} kg
+      <p className={`font-semibold text-sm ${actual ? 'text-indigo-300' : 'text-white/60 italic'}`}>
+        {point.value} kg{actual ? '' : ' (projected)'}
       </p>
     </div>
   );
@@ -159,7 +172,11 @@ export default function WeightPage() {
     };
   }, [entries]);
 
-  // ── Chart data filtered by range ──
+  // ── Chart data filtered by range, with optional projected trajectory ──
+  // Each row carries both `weight` (actual) and `projected`. Recharts breaks
+  // a line where the value is null, so the actual series ends after the last
+  // entry and the projected series begins at the same point (the "bridge"
+  // row carries both values so the two lines visually connect).
   const chartData = useMemo(() => {
     const today = new Date();
     const cutoff =
@@ -171,11 +188,46 @@ export default function WeightPage() {
       ? entries.filter((e) => new Date(e.date + 'T00:00:00') >= cutoff)
       : entries;
 
-    return filtered.map((e) => ({
+    type Row = { date: string; weight: number | null; projected: number | null };
+    const rows: Row[] = filtered.map((e) => ({
       date: formatDateShort(e.date),
       weight: e.weight_kg,
+      projected: null,
     }));
-  }, [entries, range]);
+
+    const canProject =
+      rows.length > 0 &&
+      journey !== null &&
+      journey.avg_deficit_per_day !== null &&
+      journey.avg_deficit_per_day > 0;
+
+    if (!canProject) return rows;
+
+    const lastEntry = filtered[filtered.length - 1];
+    const lastWeight = lastEntry.weight_kg;
+    const kgPerDay = (journey!.avg_deficit_per_day as number) / KCAL_PER_KG_FAT;
+
+    let horizonDays: number;
+    if (range === '30') horizonDays = 30;
+    else if (range === '90') horizonDays = 90;
+    else horizonDays = journey!.days_to_goal ?? 0;
+
+    if (horizonDays <= 0) return rows;
+
+    // Bridge: last actual row also carries the starting projected value so the
+    // two lines meet without a visual gap.
+    rows[rows.length - 1].projected = lastWeight;
+
+    const futureIso = addDaysISO(lastEntry.date, horizonDays);
+    const futureWeight = lastWeight - kgPerDay * horizonDays;
+    rows.push({
+      date: formatDateShort(futureIso),
+      weight: null,
+      projected: parseFloat(futureWeight.toFixed(1)),
+    });
+
+    return rows;
+  }, [entries, range, journey]);
 
   // ── Recent 10 entries (newest first) ──
   const recentEntries = useMemo(
@@ -218,8 +270,13 @@ export default function WeightPage() {
   // always visible on the chart, even when the user is far from it.
   const yDomain = useMemo((): [number | string, number | string] => {
     if (!chartData.length) return ['auto', 'auto'];
-    const values = chartData.map((d) => d.weight);
+    const values: number[] = [];
+    for (const d of chartData) {
+      if (d.weight !== null) values.push(d.weight);
+      if (d.projected !== null) values.push(d.projected);
+    }
     if (goalWeight !== null) values.push(goalWeight);
+    if (!values.length) return ['auto', 'auto'];
     const min = Math.min(...values);
     const max = Math.max(...values);
     const pad = Math.max((max - min) * 0.2, 1);
@@ -360,6 +417,21 @@ export default function WeightPage() {
                 strokeWidth={2.5}
                 dot={{ fill: '#818cf8', r: 4, strokeWidth: 0 }}
                 activeDot={{ r: 6, fill: '#818cf8', stroke: 'rgba(129,140,248,0.3)', strokeWidth: 4 }}
+                isAnimationActive={false}
+              />
+              {/* Projected trajectory — dashed continuation of the line at the
+                  user's current calorie deficit. Hidden when no projection is
+                  available (no journey, no TDEE, or in surplus). */}
+              <Line
+                type="linear"
+                dataKey="projected"
+                stroke="#818cf8"
+                strokeOpacity={0.6}
+                strokeWidth={2}
+                strokeDasharray="5 4"
+                dot={false}
+                activeDot={{ r: 5, fill: '#818cf8', fillOpacity: 0.6, stroke: 'rgba(129,140,248,0.2)', strokeWidth: 4 }}
+                isAnimationActive={false}
               />
             </LineChart>
           </ResponsiveContainer>
