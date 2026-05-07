@@ -13,8 +13,9 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { GlassCard, GlassButton, GlassInput } from '@/components/ui';
-import { getWeightEntries, addWeightEntry, getGoals } from '@/lib/api';
-import type { WeightEntry } from '@/lib/types';
+import { getWeightEntries, addWeightEntry, getGoals, getWeightJourney } from '@/lib/api';
+import type { WeightEntry, WeightJourney } from '@/lib/types';
+import { JourneyCard } from '@/components/JourneyCard';
 import { useSocketEvent } from '@/lib/useSocketEvent';
 import { Scale, Trash2, Target } from 'lucide-react';
 
@@ -90,6 +91,8 @@ export default function WeightPage() {
   // null when the user hasn't set one yet.
   const [goalWeight, setGoalWeight] = useState<number | null>(null);
 
+  const [journey, setJourney] = useState<WeightJourney | null>(null);
+
   const loadEntries = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -112,14 +115,33 @@ export default function WeightPage() {
     }
   }, []);
 
+  const loadJourney = useCallback(async () => {
+    try {
+      const j = await getWeightJourney();
+      setJourney(j);
+    } catch (_) {
+      // silent — card just won't render until next refresh
+    }
+  }, []);
+
   useEffect(() => {
     loadEntries();
     loadGoals();
-  }, [loadEntries, loadGoals]);
+    loadJourney();
+  }, [loadEntries, loadGoals, loadJourney]);
 
-  useSocketEvent('weight-updated', loadEntries);
-  useSocketEvent('weight-deleted', loadEntries);
-  useSocketEvent('goals-updated', loadGoals);
+  useSocketEvent('weight-updated', () => {
+    loadEntries();
+    loadJourney();
+  });
+  useSocketEvent('weight-deleted', () => {
+    loadEntries();
+    loadJourney();
+  });
+  useSocketEvent('goals-updated', () => {
+    loadGoals();
+    loadJourney();
+  });
 
   // ── Derived stats ──
   const stats = useMemo(() => {
@@ -244,6 +266,9 @@ export default function WeightPage() {
           </div>
         </GlassCard>
       )}
+
+      {/* ── Journey ── */}
+      <JourneyCard journey={journey} />
 
       {/* ── Chart ── */}
       <GlassCard>

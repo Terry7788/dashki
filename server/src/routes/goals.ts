@@ -12,6 +12,8 @@ export interface Goals {
   fat: number | null;
   steps: number | null;
   weight_kg: number | null;
+  weight_journey_start_date: string | null;
+  tdee_calories: number | null;
   updated_at: string;
 }
 
@@ -23,13 +25,17 @@ const DEFAULT_GOALS = {
   fat: null,
   steps: 10000,
   weight_kg: null,
+  weight_journey_start_date: null,
+  tdee_calories: null,
 };
 
 // ─── GET / — fetch current goals ─────────────────────────────────────────────
 
 router.get('/', (_req: Request, res: Response) => {
   db.get(
-    `SELECT id, calories, protein, carbs, fat, steps, weight_kg, updated_at FROM Goals WHERE id = 1`,
+    `SELECT id, calories, protein, carbs, fat, steps, weight_kg,
+            weight_journey_start_date, tdee_calories, updated_at
+     FROM Goals WHERE id = 1`,
     [],
     (err, row: Goals | undefined) => {
       if (err) {
@@ -37,12 +43,10 @@ router.get('/', (_req: Request, res: Response) => {
         return res.status(500).json({ error: 'Failed to fetch goals' });
       }
 
-      // If no goals exist, return defaults
       if (!row) {
         return res.json({ ...DEFAULT_GOALS, id: 1, updated_at: new Date().toISOString() });
       }
 
-      // Merge with defaults for any null values
       const goals = {
         id: row.id,
         calories: row.calories ?? DEFAULT_GOALS.calories,
@@ -51,6 +55,8 @@ router.get('/', (_req: Request, res: Response) => {
         fat: row.fat ?? DEFAULT_GOALS.fat,
         steps: row.steps ?? DEFAULT_GOALS.steps,
         weight_kg: row.weight_kg ?? DEFAULT_GOALS.weight_kg,
+        weight_journey_start_date: row.weight_journey_start_date ?? null,
+        tdee_calories: row.tdee_calories ?? null,
         updated_at: row.updated_at,
       };
 
@@ -62,11 +68,12 @@ router.get('/', (_req: Request, res: Response) => {
 // ─── PUT / — update goals ───────────────────────────────────────────────────
 
 router.put('/', (req: Request, res: Response) => {
-  const { calories, protein, carbs, fat, steps, weight_kg } = req.body || {};
+  const { calories, protein, carbs, fat, steps, weight_kg, weight_journey_start_date, tdee_calories } =
+    req.body || {};
 
   // Validate inputs - all fields are optional but must be valid numbers if provided
   const updates: string[] = [];
-  const params: (number | null)[] = [];
+  const params: (number | string | null)[] = [];
 
   if (calories !== undefined) {
     const val = calories === null ? null : Number(calories);
@@ -122,6 +129,31 @@ router.put('/', (req: Request, res: Response) => {
     params.push(val);
   }
 
+  if (weight_journey_start_date !== undefined) {
+    const val = weight_journey_start_date === null ? null : String(weight_journey_start_date).trim();
+    if (val !== null) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(val)) {
+        return res.status(400).json({ error: 'Invalid weight_journey_start_date — must be YYYY-MM-DD' });
+      }
+      // Round-trip through Date to reject impossible dates like 2026-13-45.
+      const d = new Date(val + 'T00:00:00Z');
+      if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== val) {
+        return res.status(400).json({ error: 'Invalid weight_journey_start_date — must be YYYY-MM-DD' });
+      }
+    }
+    updates.push('weight_journey_start_date = ?');
+    params.push(val);
+  }
+
+  if (tdee_calories !== undefined) {
+    const val = tdee_calories === null ? null : Number(tdee_calories);
+    if (val !== null && (!Number.isFinite(val) || val <= 0)) {
+      return res.status(400).json({ error: 'Invalid tdee_calories value' });
+    }
+    updates.push('tdee_calories = ?');
+    params.push(val);
+  }
+
   // Always update the timestamp
   updates.push('updated_at = CURRENT_TIMESTAMP');
 
@@ -135,7 +167,9 @@ router.put('/', (req: Request, res: Response) => {
 
     // Fetch the updated goals
     db.get(
-      `SELECT id, calories, protein, carbs, fat, steps, weight_kg, updated_at FROM Goals WHERE id = 1`,
+      `SELECT id, calories, protein, carbs, fat, steps, weight_kg,
+              weight_journey_start_date, tdee_calories, updated_at
+       FROM Goals WHERE id = 1`,
       [],
       (err2, row: Goals | undefined) => {
         if (err2) {
@@ -151,6 +185,8 @@ router.put('/', (req: Request, res: Response) => {
           fat: row!.fat ?? DEFAULT_GOALS.fat,
           steps: row!.steps ?? DEFAULT_GOALS.steps,
           weight_kg: row!.weight_kg ?? DEFAULT_GOALS.weight_kg,
+          weight_journey_start_date: row!.weight_journey_start_date ?? null,
+          tdee_calories: row!.tdee_calories ?? null,
           updated_at: row!.updated_at,
         };
 

@@ -1,7 +1,12 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../db';
 import { getIo } from '../socket';
-import { syncWeightGoal } from '../dashko-sync';
+import { syncWeightGoal, todayLocalIso } from '../dashko-sync';
+import {
+  computeJourney,
+  type WeightSample,
+  type DailyCalories,
+} from '../journey';
 
 const router = Router();
 
@@ -58,6 +63,61 @@ router.get('/latest', (_req: Request, res: Response) => {
       }
       if (!row) return res.status(404).json({ error: 'No weight entries found' });
       res.json(row);
+    }
+  );
+});
+
+// ─── GET /journey — computed weight journey state ────────────────────────────
+
+router.get('/journey', (_req: Request, res: Response) => {
+  const today = todayLocalIso();
+
+  db.get(
+    `SELECT weight_kg AS goal_weight_kg, weight_journey_start_date AS start_date,
+            tdee_calories
+     FROM Goals WHERE id = 1`,
+    [],
+    (gErr, goalsRow: { goal_weight_kg: number | null; start_date: string | null; tdee_calories: number | null } | undefined) => {
+      if (gErr) {
+        console.error('[error] GET /api/weight/journey (goals)', gErr);
+        return res.status(500).json({ error: 'Failed to load goals' });
+      }
+
+      db.all(
+        `SELECT date, weight_kg FROM WeightEntries ORDER BY date ASC`,
+        [],
+        (wErr, weightRows: WeightSample[] | undefined) => {
+          if (wErr) {
+            console.error('[error] GET /api/weight/journey (weight)', wErr);
+            return res.status(500).json({ error: 'Failed to load weight entries' });
+          }
+
+          // Daily calorie totals — one row per date that has at least one entry.
+          db.all(
+            `SELECT date, SUM(calories_snapshot) AS calories
+             FROM JournalEntries
+             GROUP BY date`,
+            [],
+            (jErr, calRows: DailyCalories[] | undefined) => {
+              if (jErr) {
+                console.error('[error] GET /api/weight/journey (journal)', jErr);
+                return res.status(500).json({ error: 'Failed to load journal entries' });
+              }
+
+              const journey = computeJourney({
+                today,
+                start_date: goalsRow?.start_date ?? null,
+                goal_weight_kg: goalsRow?.goal_weight_kg ?? null,
+                tdee_calories: goalsRow?.tdee_calories ?? null,
+                weight_entries: weightRows ?? [],
+                daily_calories: calRows ?? [],
+              });
+
+              res.json(journey);
+            }
+          );
+        }
+      );
     }
   );
 });
