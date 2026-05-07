@@ -128,7 +128,28 @@ export interface Goals {
   fat: number | null;
   steps: number;
   weight_kg: number | null;
+  weight_journey_start_date: string | null;
+  tdee_calories: number | null;
   updated_at: string;
+}
+
+export type OnTrackStatus = 'on_track' | 'ahead' | 'behind' | 'off_track';
+
+export interface WeightJourney {
+  start_date: string | null;
+  days_since_start: number | null;
+  starting_weight_kg: number | null;
+  current_weight_kg: number | null;
+  goal_weight_kg: number | null;
+  lost_kg: number | null;
+  tdee_calories: number | null;
+  avg_actual_calories: number | null;
+  avg_deficit_per_day: number | null;
+  on_track: OnTrackStatus | null;
+  predicted_weight_today_kg: number | null;
+  actual_vs_predicted_kg: number | null;
+  projected_goal_date: string | null;
+  days_to_goal: number | null;
 }
 
 export interface DailySummary {

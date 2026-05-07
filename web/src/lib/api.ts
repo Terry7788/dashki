@@ -9,6 +9,7 @@ import type {
   DailySummary,
   MealType,
   Goals,
+  WeightJourney,
 } from './types';
 
 // ─── Base Configuration ───────────────────────────────────────────────────────
@@ -221,6 +222,10 @@ export function getLatestWeight(): Promise<WeightEntry | null> {
   return request<WeightEntry>('/api/weight/latest').catch(() => null);
 }
 
+export function getWeightJourney(): Promise<WeightJourney> {
+  return request<WeightJourney>('/api/weight/journey');
+}
+
 export function deleteWeightEntry(id: number): Promise<void> {
   return request<void>(`/api/weight/${id}`, { method: 'DELETE' });
 }
@@ -298,6 +303,8 @@ export function updateGoals(data: {
   fat?: number | null;
   steps?: number | null;
   weight_kg?: number | null;
+  weight_journey_start_date?: string | null;
+  tdee_calories?: number | null;
 }): Promise<Goals> {
   return request<Goals>('/api/goals', {
     method: 'PUT',

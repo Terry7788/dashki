@@ -96,7 +96,7 @@ export default function DashboardPage() {
   const [summary, setSummary] = useState<DailySummary | null>(null);
   const [steps, setSteps] = useState<StepEntry | null>(null);
   const [latestWeight, setLatestWeight] = useState<WeightEntry | null>(null);
-  const [goals, setGoals] = useState<Goals>({ id: 0, calories: 2000, protein: 150, carbs: null, fat: null, steps: 10000, weight_kg: null, updated_at: '' });
+  const [goals, setGoals] = useState<Goals>({ id: 0, calories: 2000, protein: 150, carbs: null, fat: null, steps: 10000, weight_kg: null, weight_journey_start_date: null, tdee_calories: null, updated_at: '' });
 
   // Display name (read-only on dashboard; edited in /settings)
   const [displayName, setDisplayName] = useState<string | null>(null);
