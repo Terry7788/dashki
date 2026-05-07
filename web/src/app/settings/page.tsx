@@ -125,6 +125,8 @@ function GoalsSection() {
   const [proteinDraft, setProteinDraft] = useState('');
   const [stepDraft, setStepDraft] = useState('');
   const [weightDraft, setWeightDraft] = useState('');
+  const [startDateDraft, setStartDateDraft] = useState('');
+  const [tdeeDraft, setTdeeDraft] = useState('');
   const [saving, setSaving] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -138,6 +140,8 @@ function GoalsSection() {
       setProteinDraft(String(g.protein ?? ''));
       setStepDraft(String(g.steps ?? ''));
       setWeightDraft(g.weight_kg !== null ? String(g.weight_kg) : '');
+      setStartDateDraft(g.weight_journey_start_date ?? '');
+      setTdeeDraft(g.tdee_calories !== null ? String(g.tdee_calories) : '');
     } catch (e: any) {
       setError(e?.message || 'Failed to load goals');
     } finally {
@@ -165,16 +169,29 @@ function GoalsSection() {
     : parseField(weightDraft);
   const draftWeightValid = weightDraft.trim() === '' || draftWeight !== null;
 
+  // Start date is optional — empty means "no journey", otherwise must look like ISO YYYY-MM-DD.
+  const draftStartDate = startDateDraft.trim() === '' ? null : startDateDraft.trim();
+  const startDateValid =
+    draftStartDate === null || /^\d{4}-\d{2}-\d{2}$/.test(draftStartDate);
+
+  // TDEE is optional — empty means "not set", otherwise must be a positive number.
+  const draftTdee = tdeeDraft.trim() === '' ? null : parseField(tdeeDraft);
+  const tdeeValid = tdeeDraft.trim() === '' || draftTdee !== null;
+
   const savedCalories = savedGoals?.calories ?? null;
   const savedProtein = savedGoals?.protein ?? null;
   const savedSteps = savedGoals?.steps ?? null;
   const savedWeight = savedGoals?.weight_kg ?? null;
+  const savedStartDate = savedGoals?.weight_journey_start_date ?? null;
+  const savedTdee = savedGoals?.tdee_calories ?? null;
 
   const isDirty =
     draftCalories !== savedCalories ||
     draftProtein !== savedProtein ||
     draftSteps !== savedSteps ||
-    draftWeight !== savedWeight;
+    draftWeight !== savedWeight ||
+    draftStartDate !== savedStartDate ||
+    draftTdee !== savedTdee;
 
   // For the steps goal, must be a positive integer (matches backend validation).
   const stepsValid = draftSteps === null || Number.isInteger(draftSteps);
@@ -184,7 +201,9 @@ function GoalsSection() {
     draftProtein !== null &&
     draftSteps !== null &&
     stepsValid &&
-    draftWeightValid;
+    draftWeightValid &&
+    startDateValid &&
+    tdeeValid;
 
   async function handleSave() {
     setError(null);
@@ -198,14 +217,17 @@ function GoalsSection() {
         calories: draftCalories,
         protein: draftProtein,
         steps: draftSteps,
-        // Send null to clear, number to set
         weight_kg: draftWeight,
+        weight_journey_start_date: draftStartDate,
+        tdee_calories: draftTdee,
       });
       setSavedGoals(updated);
       setCalorieDraft(String(updated.calories ?? ''));
       setProteinDraft(String(updated.protein ?? ''));
       setStepDraft(String(updated.steps ?? ''));
       setWeightDraft(updated.weight_kg !== null ? String(updated.weight_kg) : '');
+      setStartDateDraft(updated.weight_journey_start_date ?? '');
+      setTdeeDraft(updated.tdee_calories !== null ? String(updated.tdee_calories) : '');
       setSavedFlash(true);
       setTimeout(() => setSavedFlash(false), 1500);
     } catch (e: any) {
@@ -216,6 +238,8 @@ function GoalsSection() {
         setProteinDraft(String(savedGoals.protein ?? ''));
         setStepDraft(String(savedGoals.steps ?? ''));
         setWeightDraft(savedGoals.weight_kg !== null ? String(savedGoals.weight_kg) : '');
+        setStartDateDraft(savedGoals.weight_journey_start_date ?? '');
+        setTdeeDraft(savedGoals.tdee_calories !== null ? String(savedGoals.tdee_calories) : '');
       }
     } finally {
       setSaving(false);
@@ -273,10 +297,32 @@ function GoalsSection() {
               disabled={loading || saving}
             />
           </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <GlassInput
+              label="Journey start date"
+              type="date"
+              value={startDateDraft}
+              onChange={(e) => setStartDateDraft(e.target.value)}
+              placeholder="optional"
+              disabled={loading || saving}
+            />
+            <GlassInput
+              label="Maintenance calories (TDEE)"
+              type="number"
+              inputMode="decimal"
+              value={tdeeDraft}
+              onChange={(e) => setTdeeDraft(e.target.value)}
+              min={0}
+              step={50}
+              placeholder="optional"
+              disabled={loading || saving}
+            />
+          </div>
           <p className="text-xs text-white/40">
             Goals are saved to your Dashki database — they persist across all your
-            devices and don&rsquo;t reset. Weight is optional; when set, it appears
-            as a red line on the weight chart.
+            devices. Weight and journey fields are optional; setting a start date
+            + TDEE unlocks the journey card on the Weight page with a projected
+            goal date.
           </p>
 
           {error && (
