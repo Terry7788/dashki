@@ -131,8 +131,15 @@ router.put('/', (req: Request, res: Response) => {
 
   if (weight_journey_start_date !== undefined) {
     const val = weight_journey_start_date === null ? null : String(weight_journey_start_date).trim();
-    if (val !== null && !/^\d{4}-\d{2}-\d{2}$/.test(val)) {
-      return res.status(400).json({ error: 'Invalid weight_journey_start_date — must be YYYY-MM-DD' });
+    if (val !== null) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(val)) {
+        return res.status(400).json({ error: 'Invalid weight_journey_start_date — must be YYYY-MM-DD' });
+      }
+      // Round-trip through Date to reject impossible dates like 2026-13-45.
+      const d = new Date(val + 'T00:00:00Z');
+      if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== val) {
+        return res.status(400).json({ error: 'Invalid weight_journey_start_date — must be YYYY-MM-DD' });
+      }
     }
     updates.push('weight_journey_start_date = ?');
     params.push(val);
