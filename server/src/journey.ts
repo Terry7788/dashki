@@ -98,7 +98,7 @@ export function findCurrentWeight(entries: WeightSample[]): number | null {
   if (!entries.length) return null;
   let latest = entries[0];
   for (const e of entries) {
-    if (e.date > latest.date) latest = e;
+    if (e.date >= latest.date) latest = e;
   }
   return latest.weight_kg;
 }
@@ -172,7 +172,7 @@ export function computeJourney(input: JourneyInput): WeightJourney {
       empty.predicted_weight_today_kg = round(predicted, 2);
       const delta = current_weight_kg - predicted;
       empty.actual_vs_predicted_kg = round(delta, 2);
-      empty.on_track = classifyOnTrack(delta);
+      empty.on_track = classifyOnTrack(empty.actual_vs_predicted_kg);
     }
 
     if (

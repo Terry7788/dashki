@@ -8,6 +8,7 @@ import {
   computeJourney,
   classifyOnTrack,
   findStartingWeight,
+  findCurrentWeight,
   daysBetween,
   addDays,
 } from './journey';
@@ -52,6 +53,27 @@ test('findStartingWeight — null when nothing within window', () => {
     { date: '2026-04-10', weight_kg: 90 },
   ]);
   assert.equal(v, null);
+});
+
+test('findCurrentWeight — null on empty list', () => {
+  assert.equal(findCurrentWeight([]), null);
+});
+
+test('findCurrentWeight — picks latest by date', () => {
+  const v = findCurrentWeight([
+    { date: '2026-04-01', weight_kg: 92 },
+    { date: '2026-05-07', weight_kg: 89 },
+    { date: '2026-04-15', weight_kg: 90 },
+  ]);
+  assert.equal(v, 89);
+});
+
+test('findCurrentWeight — last entry wins on tied date', () => {
+  const v = findCurrentWeight([
+    { date: '2026-05-07', weight_kg: 90 },  // earlier in input
+    { date: '2026-05-07', weight_kg: 88 },  // later in input — should win
+  ]);
+  assert.equal(v, 88);
 });
 
 test('classifyOnTrack — within band is on_track', () => {
@@ -187,4 +209,29 @@ test('computeJourney — no goal date when already at/below goal', () => {
   });
   assert.equal(result.projected_goal_date, null);
   assert.equal(result.days_to_goal, null);
+});
+
+test('computeJourney — uses rounded delta for classification (boundary stays consistent)', () => {
+  // Construct inputs so the raw delta is just past the on-track band but rounds to 0.30.
+  // raw delta target = 0.3001, rounds to 0.30 → should be 'on_track'.
+  // Mechanism: set predicted = 90.0 exactly, current = 90.3001.
+  // predicted = starting - (deficit * days) / 7700
+  // Pick deficit=770, days=10 so the term = 1.0 → predicted = 91 - 1 = 90.0.
+  // Then current 90.3001 minus predicted 90.0 = 0.3001.
+  const result = computeJourney({
+    today: '2026-05-11',          // 10 days after 2026-05-01
+    start_date: '2026-05-01',
+    goal_weight_kg: 80,
+    tdee_calories: 2770,           // gives deficit 770 vs intake 2000
+    weight_entries: [
+      { date: '2026-05-01', weight_kg: 91 },
+      { date: '2026-05-11', weight_kg: 90.3001 },
+    ],
+    daily_calories: [{ date: '2026-05-05', calories: 2000 }],
+  });
+  // Sanity:
+  assert.equal(result.predicted_weight_today_kg, 90);
+  assert.equal(result.actual_vs_predicted_kg, 0.3);
+  // The fix: classifier sees the rounded 0.3, not raw 0.3001 → 'on_track'.
+  assert.equal(result.on_track, 'on_track');
 });
