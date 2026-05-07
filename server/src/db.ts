@@ -167,6 +167,27 @@ export function initDb(): Promise<void> {
       // Insert default goals row (singleton)
       db.run(`INSERT OR IGNORE INTO Goals (id) VALUES (1)`);
 
+      // ── Migration: add weight_journey_start_date + tdee_calories to Goals (DSHKI-24) ──
+      db.all(`PRAGMA table_info(Goals)`, [], (pragmaErr, columns: Array<{ name: string }>) => {
+        if (pragmaErr) return;
+        const existingCols = new Set(columns.map((c) => c.name));
+        const migrations: string[] = [];
+
+        if (!existingCols.has('weight_journey_start_date')) {
+          migrations.push('ALTER TABLE Goals ADD COLUMN weight_journey_start_date TEXT');
+        }
+        if (!existingCols.has('tdee_calories')) {
+          migrations.push('ALTER TABLE Goals ADD COLUMN tdee_calories REAL');
+        }
+
+        for (const sql of migrations) {
+          db.run(sql, [], (err) => {
+            if (err) console.error('[db] migration error:', err.message);
+            else console.log(`[db] ran migration: ${sql}`);
+          });
+        }
+      });
+
       // ── User Preferences ───────────────────────────────────────────────────
       db.run(`
         CREATE TABLE IF NOT EXISTS UserPreferences (
