@@ -65,6 +65,11 @@ export function JourneyCard({ journey }: { journey: WeightJourney | null }) {
     );
   }
 
+  // Goal weight is the anchor for everything below — without it, we can't
+  // show "lost X% to goal" or project an ETA. Match the chart's behaviour
+  // of hiding when the goal is missing.
+  if (journey.goal_weight_kg === null) return null;
+
   // Start date is in the future.
   if ((journey.days_since_start ?? 0) < 0) {
     const daysAway = Math.abs(journey.days_since_start ?? 0);
@@ -198,14 +203,21 @@ export function JourneyCard({ journey }: { journey: WeightJourney | null }) {
                 </div>
               )}
               {!goalReached && (
-                <div className="flex justify-between pt-2 border-t border-white/10 text-white/60">
-                  <span>Projected goal date</span>
-                  <span className="text-white">
-                    {journey.projected_goal_date !== null && journey.days_to_goal !== null
-                      ? `~${formatDateLong(journey.projected_goal_date)} (${journey.days_to_goal} days)`
-                      : '—'}
-                  </span>
-                </div>
+                <>
+                  <div className="flex justify-between pt-2 border-t border-white/10 text-white/60">
+                    <span>Projected goal date</span>
+                    <span className="text-white">
+                      {journey.projected_goal_date !== null && journey.days_to_goal !== null
+                        ? `~${formatDateLong(journey.projected_goal_date)} (${journey.days_to_goal} days)`
+                        : '—'}
+                    </span>
+                  </div>
+                  {(journey.avg_deficit_per_day ?? 0) <= 0 && (
+                    <p className="text-xs text-amber-300/80 italic">
+                      You&rsquo;re not in a deficit yet — eat below maintenance to start losing weight.
+                    </p>
+                  )}
+                </>
               )}
             </div>
           )}
