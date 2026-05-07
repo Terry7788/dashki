@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../db';
 import { getIo } from '../socket';
-import { syncWeightGoal } from '../dashko-sync';
+import { syncWeightGoal, todayLocalIso } from '../dashko-sync';
 import {
   computeJourney,
   type WeightSample,
@@ -9,10 +9,6 @@ import {
 } from '../journey';
 
 const router = Router();
-
-function todayLocalIso(): string {
-  return new Date().toLocaleString('en-CA').split(',')[0];
-}
 
 // ─── GET / — list weight entries ──────────────────────────────────────────────
 
@@ -100,8 +96,7 @@ router.get('/journey', (_req: Request, res: Response) => {
           db.all(
             `SELECT date, SUM(calories_snapshot) AS calories
              FROM JournalEntries
-             GROUP BY date
-             HAVING calories > 0`,
+             GROUP BY date`,
             [],
             (jErr, calRows: DailyCalories[] | undefined) => {
               if (jErr) {
