@@ -73,6 +73,10 @@ export type ItemDecision = 'logged' | 'quick-add' | 'save-and-log' | 'save-only'
 export interface ItemState {
   parsed: ParsedItem;
   matched: Food | null;
+  // Candidate Foods from a low-confidence LLM match. Null when not
+  // applicable (high-confidence match or no plausible match). Set when the
+  // bot is awaiting the user's pick from a match-candidates card.
+  candidates: Food[] | null;
   estimate: EstimateResponse | null;
   decision: ItemDecision | null;
 }
