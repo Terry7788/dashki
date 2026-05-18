@@ -18,6 +18,7 @@ import calendarRouter from './routes/calendar';
 import goalsRouter from './routes/goals';
 import preferencesRouter from './routes/preferences';
 import migrationRouter from './routes/migration';
+import botRouter from './routes/bot';
 
 // ─── App Setup ────────────────────────────────────────────────────────────────
 
@@ -122,6 +123,7 @@ app.use('/api/calendar', calendarRouter);
 app.use('/api/goals', goalsRouter);
 app.use('/api/preferences', preferencesRouter);
 app.use('/api/migration', migrationRouter);
+app.use('/api/bot', botRouter);
 
 // ─── Voice Parsing ────────────────────────────────────────────────────────────
 
