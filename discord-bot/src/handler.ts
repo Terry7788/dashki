@@ -17,6 +17,7 @@ import {
   buildBatchMessage,
   buildEditModal,
   buildPerItemMessage,
+  buildSaveModal,
   disabledFrom,
   LOG_ACTION_TO_MEAL,
   MODAL_FIELDS,
@@ -109,8 +110,9 @@ async function handleLogMessage(msg: Message, api: DashkiClient): Promise<void> 
   const matchedCount = items.filter((i) => i.matched).length;
   const unknownCount = items.length - matchedCount;
   await msg.reply(
-    `Parsed ${items.length} item${items.length === 1 ? '' : 's'} for **${session.mealType}** on ${session.date}: ` +
-      `${matchedCount} matched, ${unknownCount} need confirmation.`
+    `Parsed ${items.length} item${items.length === 1 ? '' : 's'} for ${session.date} — ` +
+      `${matchedCount} matched, ${unknownCount} need${unknownCount === 1 ? 's' : ''} confirmation. ` +
+      `You'll pick the meal at the end.`
   );
 
   await advanceSession(msg, api, session);
@@ -217,19 +219,36 @@ async function handleButton(
     return;
   }
 
-  item.decision = parsed.action === 'qa' ? 'quick-add' : 'save-and-log';
+  if (parsed.action === 'sd') {
+    // Save-to-DB now goes through a modal so the user can set serving size
+    // before we create the Foods row.
+    const modal = buildSaveModal(session, parsed.itemIndex);
+    await interaction.showModal(modal);
+    return;
+  }
+
+  // Only 'qa' (quick-add) lands here — sd and ed both short-circuit above.
+  item.decision = 'quick-add';
   session.pendingIndex = nextPending(session.items);
 
-  // Disable this card's buttons so the user can't click again.
   await interaction.update({
-    content: parsed.action === 'qa' ? '✅ Quick-add staged.' : '💾 Save + log staged.',
+    content: '✅ Quick-add staged.',
     components: disabledFrom(
       interaction.message.components as unknown as ActionRowBuilder<ButtonBuilder>[]
     ),
   });
 
-  // Move forward in the flow. interaction.followUp sends a new message in the
-  // same channel as the interaction — no channel-type narrowing required.
+  await advanceFlow(interaction, api, session);
+}
+
+// Send the next per-item card or the batch card. Shared between button
+// handler (qa quick-add) and modal-submit handler (sdm save), since the
+// post-decision flow is identical.
+async function advanceFlow(
+  interaction: ButtonInteraction | ModalSubmitInteraction,
+  api: DashkiClient,
+  session: Session
+): Promise<void> {
   if (session.pendingIndex === -1) {
     const payload = buildBatchMessage(session);
     const sent = await interaction.followUp(payload);
@@ -342,7 +361,7 @@ async function handleModalSubmit(
   api: DashkiClient
 ): Promise<void> {
   const parsed = parseCustomId(interaction.customId);
-  if (!parsed || parsed.action !== 'edm' || parsed.itemIndex === null) {
+  if (!parsed || parsed.itemIndex === null) {
     await interaction.reply({ content: 'Bad modal.', ephemeral: true });
     return;
   }
@@ -357,6 +376,25 @@ async function handleModalSubmit(
     await interaction.reply({ content: 'Unknown item.', ephemeral: true });
     return;
   }
+
+  if (parsed.action === 'edm') {
+    await handleEditModalSubmit(interaction, api, session, parsed.itemIndex);
+    return;
+  }
+  if (parsed.action === 'sdm') {
+    await handleSaveModalSubmit(interaction, api, session, parsed.itemIndex);
+    return;
+  }
+  await interaction.reply({ content: 'Unknown modal action.', ephemeral: true });
+}
+
+async function handleEditModalSubmit(
+  interaction: ModalSubmitInteraction,
+  api: DashkiClient,
+  session: Session,
+  itemIndex: number
+): Promise<void> {
+  const item = session.items[itemIndex];
 
   const name = interaction.fields.getTextInputValue(MODAL_FIELDS.name).trim();
   const quantityStr = interaction.fields.getTextInputValue(MODAL_FIELDS.quantity).trim();
@@ -392,8 +430,60 @@ async function handleModalSubmit(
     return;
   }
 
-  const refreshed = buildPerItemMessage(session, parsed.itemIndex);
+  const refreshed = buildPerItemMessage(session, itemIndex);
   await interaction.editReply(refreshed);
+}
+
+async function handleSaveModalSubmit(
+  interaction: ModalSubmitInteraction,
+  api: DashkiClient,
+  session: Session,
+  itemIndex: number
+): Promise<void> {
+  const item = session.items[itemIndex];
+  if (!item.estimate) {
+    await interaction.reply({ content: 'No estimate to save.', ephemeral: true });
+    return;
+  }
+
+  const sizeStr = interaction.fields.getTextInputValue(MODAL_FIELDS.servingSize).trim();
+  let servingSizeG: number | null = null;
+  if (sizeStr) {
+    const n = Number(sizeStr);
+    if (!Number.isFinite(n) || n <= 0) {
+      await interaction.reply({
+        content: 'Serving size must be a positive number, or leave blank to skip.',
+        ephemeral: true,
+      });
+      return;
+    }
+    servingSizeG = Math.round(n);
+  }
+
+  item.estimate.perBase.serving_size_g = servingSizeG;
+  item.decision = 'save-and-log';
+  session.pendingIndex = nextPending(session.items);
+
+  const unitSuffix = item.estimate.perBase.base_unit === 'ml' ? 'ml' : 'g';
+  const stagedMsg = servingSizeG != null
+    ? `💾 Save + log staged (1 serving = ${servingSizeG}${unitSuffix}).`
+    : '💾 Save + log staged (no serving size set).';
+
+  // isFromMessage() narrows to ModalMessageModalSubmitInteraction which has
+  // the .update() method. Our modal is always opened from a button on a
+  // message so this branch is always taken in practice.
+  if (interaction.isFromMessage()) {
+    await interaction.update({
+      content: stagedMsg,
+      components: disabledFrom(
+        interaction.message.components as unknown as ActionRowBuilder<ButtonBuilder>[]
+      ),
+    });
+  } else {
+    await interaction.reply({ content: stagedMsg, ephemeral: true });
+  }
+
+  await advanceFlow(interaction, api, session);
 }
 
 function normaliseUnit(raw: string): Unit | null {

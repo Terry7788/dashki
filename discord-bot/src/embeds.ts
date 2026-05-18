@@ -11,15 +11,16 @@ import type { Session, ItemState } from './types';
 
 // CustomId format: <sessionId>:<action>[:<itemIndex>]
 //   <sid>:qa:<i>   — quick-add for item i
-//   <sid>:sd:<i>   — save-to-db + log for item i
+//   <sid>:sd:<i>   — open save-to-DB modal for item i
+//   <sid>:sdm:<i>  — save-modal submit for item i
 //   <sid>:ed:<i>   — open edit modal for item i
-//   <sid>:edm:<i>  — modal submit for item i (returned by Discord on submit)
+//   <sid>:edm:<i>  — edit-modal submit for item i
 //   <sid>:cx       — cancel (whole session)
 //   <sid>:lb       — log all to breakfast
 //   <sid>:ll       — log all to lunch
 //   <sid>:ld       — log all to dinner
 //   <sid>:ls       — log all to snack
-export type ActionCode = 'qa' | 'sd' | 'ed' | 'edm' | 'cx' | 'lb' | 'll' | 'ld' | 'ls';
+export type ActionCode = 'qa' | 'sd' | 'sdm' | 'ed' | 'edm' | 'cx' | 'lb' | 'll' | 'ld' | 'ls';
 
 import type { MealType } from './types';
 
@@ -33,6 +34,7 @@ export const LOG_ACTION_TO_MEAL: Record<'lb' | 'll' | 'ld' | 'ls', MealType> = {
 export const CID = {
   quickAdd: (sid: string, i: number) => `${sid}:qa:${i}`,
   saveAndLog: (sid: string, i: number) => `${sid}:sd:${i}`,
+  saveModal: (sid: string, i: number) => `${sid}:sdm:${i}`,
   edit: (sid: string, i: number) => `${sid}:ed:${i}`,
   editModal: (sid: string, i: number) => `${sid}:edm:${i}`,
   cancel: (sid: string) => `${sid}:cx`,
@@ -42,7 +44,7 @@ export const CID = {
   logSnack: (sid: string) => `${sid}:ls`,
 };
 
-const ALL_ACTIONS: readonly ActionCode[] = ['qa', 'sd', 'ed', 'edm', 'cx', 'lb', 'll', 'ld', 'ls'] as const;
+const ALL_ACTIONS: readonly ActionCode[] = ['qa', 'sd', 'sdm', 'ed', 'edm', 'cx', 'lb', 'll', 'ld', 'ls'] as const;
 
 export function parseCustomId(customId: string): {
   sessionId: string;
@@ -115,6 +117,7 @@ export const MODAL_FIELDS = {
   name: 'name',
   quantity: 'quantity',
   unit: 'unit',
+  servingSize: 'servingSize',
 } as const;
 
 export function buildEditModal(session: Session, itemIndex: number): ModalBuilder {
@@ -151,6 +154,42 @@ export function buildEditModal(session: Session, itemIndex: number): ModalBuilde
       new ActionRowBuilder<TextInputBuilder>().addComponents(nameInput),
       new ActionRowBuilder<TextInputBuilder>().addComponents(quantityInput),
       new ActionRowBuilder<TextInputBuilder>().addComponents(unitInput)
+    );
+}
+
+export function buildSaveModal(session: Session, itemIndex: number): ModalBuilder {
+  const item = session.items[itemIndex];
+  if (!item.estimate) {
+    throw new Error('buildSaveModal called for an item without an estimate');
+  }
+
+  // Label hint matches the food's native unit. ml-base foods store the
+  // ml-per-serving value in the serving_size_g column too (legacy schema
+  // quirk in foods.ts deriveUnits — same column, different unit meaning).
+  const baseUnit = item.estimate.perBase.base_unit;
+  const labelSuffix = baseUnit === 'ml' ? '(ml per serving)' : '(g per serving)';
+
+  const prefill = item.estimate.perBase.serving_size_g != null
+    ? String(item.estimate.perBase.serving_size_g)
+    : '';
+
+  const servingInput = new TextInputBuilder()
+    .setCustomId(MODAL_FIELDS.servingSize)
+    .setLabel(`Serving size ${labelSuffix}`)
+    .setStyle(TextInputStyle.Short)
+    .setValue(prefill)
+    .setPlaceholder('Optional — leave blank to skip')
+    .setMaxLength(10)
+    .setRequired(false);
+
+  // Truncate the food name in the title since Discord caps modal titles at 45 chars.
+  const titleName = item.parsed.name.length > 25 ? item.parsed.name.slice(0, 22) + '…' : item.parsed.name;
+
+  return new ModalBuilder()
+    .setCustomId(CID.saveModal(session.id, itemIndex))
+    .setTitle(`Save "${titleName}" to DB`)
+    .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(servingInput)
     );
 }
 
