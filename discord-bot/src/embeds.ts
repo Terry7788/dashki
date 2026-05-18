@@ -9,21 +9,24 @@ import {
 } from 'discord.js';
 import type { Session, ItemState } from './types';
 
-// CustomId format: <sessionId>:<action>[:<itemIndex>]
-//   <sid>:qa:<i>   — quick-add for item i
-//   <sid>:sd:<i>   — open save+log modal for item i
-//   <sid>:sdm:<i>  — save+log modal submit for item i
-//   <sid>:sv:<i>   — open save-only modal for item i
-//   <sid>:svm:<i>  — save-only modal submit for item i
-//   <sid>:ed:<i>   — open edit (name/qty/unit/cal/P) modal for item i
-//   <sid>:edm:<i>  — edit-modal submit for item i
-//   <sid>:cx       — cancel (whole session)
-//   <sid>:lb       — log all to breakfast
-//   <sid>:ll       — log all to lunch
-//   <sid>:ld       — log all to dinner
-//   <sid>:ls       — log all to snack
+// CustomId format: <sessionId>:<action>[:<itemIndex>[:<extra>]]
+//   <sid>:qa:<i>          — quick-add for item i
+//   <sid>:sd:<i>          — open save+log modal for item i
+//   <sid>:sdm:<i>         — save+log modal submit for item i
+//   <sid>:sv:<i>          — open save-only modal for item i
+//   <sid>:svm:<i>         — save-only modal submit for item i
+//   <sid>:ed:<i>          — open edit (name/qty/unit/cal/P) modal for item i
+//   <sid>:edm:<i>         — edit-modal submit for item i
+//   <sid>:mp:<i>:<candIx> — pick match candidate at index candIx for item i
+//   <sid>:mn:<i>          — none of the candidates — fall back to estimate
+//   <sid>:cx              — cancel (whole session)
+//   <sid>:lb              — log all to breakfast
+//   <sid>:ll              — log all to lunch
+//   <sid>:ld              — log all to dinner
+//   <sid>:ls              — log all to snack
 export type ActionCode =
-  | 'qa' | 'sd' | 'sdm' | 'sv' | 'svm' | 'ed' | 'edm' | 'cx'
+  | 'qa' | 'sd' | 'sdm' | 'sv' | 'svm' | 'ed' | 'edm'
+  | 'mp' | 'mn' | 'cx'
   | 'lb' | 'll' | 'ld' | 'ls';
 
 import type { MealType } from './types';
@@ -43,6 +46,8 @@ export const CID = {
   saveOnlyModal: (sid: string, i: number) => `${sid}:svm:${i}`,
   edit: (sid: string, i: number) => `${sid}:ed:${i}`,
   editModal: (sid: string, i: number) => `${sid}:edm:${i}`,
+  matchPick: (sid: string, i: number, candIx: number) => `${sid}:mp:${i}:${candIx}`,
+  matchNone: (sid: string, i: number) => `${sid}:mn:${i}`,
   cancel: (sid: string) => `${sid}:cx`,
   logBreakfast: (sid: string) => `${sid}:lb`,
   logLunch: (sid: string) => `${sid}:ll`,
@@ -51,7 +56,8 @@ export const CID = {
 };
 
 const ALL_ACTIONS: readonly ActionCode[] = [
-  'qa', 'sd', 'sdm', 'sv', 'svm', 'ed', 'edm', 'cx',
+  'qa', 'sd', 'sdm', 'sv', 'svm', 'ed', 'edm',
+  'mp', 'mn', 'cx',
   'lb', 'll', 'ld', 'ls',
 ] as const;
 
@@ -59,16 +65,22 @@ export function parseCustomId(customId: string): {
   sessionId: string;
   action: ActionCode;
   itemIndex: number | null;
+  // 4th segment — currently only used by match-pick (candidate index).
+  extra: number | null;
 } | null {
   const parts = customId.split(':');
-  if (parts.length < 2 || parts.length > 3) return null;
-  const [sessionId, action, idxStr] = parts;
+  if (parts.length < 2 || parts.length > 4) return null;
+  const [sessionId, action, idxStr, extraStr] = parts;
   if (!ALL_ACTIONS.includes(action as ActionCode)) return null;
   const itemIndex = idxStr !== undefined ? Number(idxStr) : null;
   if (idxStr !== undefined && (!Number.isInteger(itemIndex) || (itemIndex as number) < 0)) {
     return null;
   }
-  return { sessionId, action: action as ActionCode, itemIndex };
+  const extra = extraStr !== undefined ? Number(extraStr) : null;
+  if (extraStr !== undefined && (!Number.isInteger(extra) || (extra as number) < 0)) {
+    return null;
+  }
+  return { sessionId, action: action as ActionCode, itemIndex, extra };
 }
 
 function fmtQty(q: number): string {
@@ -137,6 +149,54 @@ export const MODAL_FIELDS = {
   carbs: 'carbs',
   fat: 'fat',
 } as const;
+
+// Shown when the LLM matcher returns a low-confidence result for a parsed
+// item — typically multiple plausible foods in the DB. Up to 5 candidates as
+// buttons on row 1; "Estimate instead" + "Cancel" on row 2.
+export function buildMatchPickMessage(session: Session, itemIndex: number) {
+  const item = session.items[itemIndex];
+  if (!item.candidates || item.candidates.length === 0) {
+    throw new Error('buildMatchPickMessage called for an item with no candidates');
+  }
+
+  const lines = item.candidates
+    .slice(0, 5)
+    .map((c, i) => `**${i + 1}.** ${c.name}`);
+
+  const embed = new EmbedBuilder()
+    .setTitle(`Pick a match: "${item.parsed.name}"`)
+    .setDescription(
+      `Possible matches in your food database:\n${lines.join('\n')}\n\n` +
+        `If none of these are right, hit "Estimate instead" and the bot will fall back to an LLM estimate.`
+    )
+    .setColor(0x60a5fa);
+
+  const candRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    ...item.candidates.slice(0, 5).map((c, i) =>
+      new ButtonBuilder()
+        .setCustomId(CID.matchPick(session.id, itemIndex, i))
+        .setLabel(`${i + 1}. ${truncate(c.name, 75)}`)
+        .setStyle(ButtonStyle.Primary)
+    )
+  );
+
+  const fallbackRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(CID.matchNone(session.id, itemIndex))
+      .setLabel('Estimate instead')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(CID.cancel(session.id))
+      .setLabel('Cancel')
+      .setStyle(ButtonStyle.Danger)
+  );
+
+  return { embeds: [embed], components: [candRow, fallbackRow] };
+}
+
+function truncate(s: string, n: number): string {
+  return s.length <= n ? s : s.slice(0, n - 1) + '…';
+}
 
 // Combined edit modal — five fields, the Discord per-modal max. Carbs/fat
 // aren't editable here (they're not persisted on quick-add journal entries

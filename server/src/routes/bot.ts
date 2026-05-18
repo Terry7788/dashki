@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import OpenAI from 'openai';
+import { db } from '../db';
 import { logger } from '../logger';
 
 const router = Router();
@@ -337,5 +338,130 @@ function round1(v: unknown): number | null {
   if (!Number.isFinite(n) || n < 0) return null;
   return Math.round(n * 10) / 10;
 }
+
+// ─── POST /match-food ────────────────────────────────────────────────────────
+//
+// LLM-driven fuzzy matcher. Bot calls this with a parsed food name; we feed
+// the whole Foods table's names to the model and ask which is the best fit.
+// Handles word-order swaps, plurality, brand/generic variants — cases the
+// SQL LIKE matcher misses.
+//
+// Output shape lets the bot decide how to react:
+//   confidence: 'high'  -> log directly against this food (no user prompt)
+//   confidence: 'low'   -> show alternatives as buttons, let user pick
+//   confidence: 'none'  -> fall back to the estimate-nutrition path
+
+interface FoodRow {
+  id: number;
+  name: string;
+  base_amount: number;
+  base_unit: string;
+  calories: number;
+  protein: number | null;
+  carbs: number | null;
+  fat: number | null;
+  serving_size_g: number | null;
+}
+
+router.post('/match-food', async (req: Request, res: Response) => {
+  if (!openai) {
+    return res.status(500).json({ error: 'OpenAI API key not configured' });
+  }
+
+  const { name } = req.body || {};
+  const query = typeof name === 'string' ? name.trim() : '';
+  if (!query) {
+    return res.status(400).json({ error: 'Missing or invalid name' });
+  }
+
+  let foods: FoodRow[];
+  try {
+    foods = await new Promise<FoodRow[]>((resolve, reject) => {
+      db.all(
+        `SELECT id, name, base_amount, base_unit, calories, protein, carbs, fat, serving_size_g FROM Foods`,
+        [],
+        (err, rows) => (err ? reject(err) : resolve((rows || []) as FoodRow[]))
+      );
+    });
+  } catch (err) {
+    logger.error('[bot/match-food] db error', err);
+    return res.status(500).json({ error: 'Failed to load foods' });
+  }
+
+  if (foods.length === 0) {
+    return res.json({ match: null, alternatives: [], confidence: 'none' });
+  }
+
+  // Send the model an enumerated list of food IDs + names. Returning IDs
+  // sidesteps any LLM creativity with the names themselves.
+  const foodIndex = foods.map((f) => `${f.id}|${f.name}`).join('\n');
+
+  const prompt = `A user typed a food name. Match it to a food in their database.
+
+User's food: "${query}"
+
+Available foods (id|name, one per line):
+${foodIndex}
+
+Pick the single best match. Consider:
+- Word-order swaps (e.g. "Brioche Gourmet Bun" == "Gourmet Brioche Bun")
+- Plurality ("Burger Bun" == "Burger Buns")
+- Brand vs generic variants
+- Common synonyms
+
+Return ONLY this JSON shape (no markdown, no commentary):
+{
+  "matchId": <id of best match, or null if no plausible match>,
+  "confidence": "high" | "low" | "none",
+  "alternatives": [<id>, <id>, ...]   // 0-4 other plausible IDs, ranked best first; only if confidence is "low"
+}
+
+Use "high" only if the match is essentially certain (same food, just spelled/ordered differently). Use "low" if there are 2+ plausible candidates or you're not sure. Use "none" if nothing in the list is a reasonable match — don't force a match.
+
+Return JSON only.`;
+
+  let raw: string;
+  try {
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: 'You match food names against a database. Output JSON only.' },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0.1,
+      max_tokens: 400,
+      response_format: { type: 'json_object' },
+    });
+    raw = completion.choices[0]?.message?.content?.trim() || '{}';
+  } catch (err) {
+    logger.error('[bot/match-food] openai error', err);
+    return res.status(500).json({ error: 'LLM call failed', details: (err as Error).message });
+  }
+
+  let parsed: { matchId?: unknown; confidence?: unknown; alternatives?: unknown };
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    logger.error('[bot/match-food] non-JSON response:', raw);
+    return res.status(502).json({ error: 'Model returned invalid JSON' });
+  }
+
+  const byId = new Map(foods.map((f) => [f.id, f]));
+  const matchId = Number(parsed.matchId);
+  const match = Number.isInteger(matchId) ? byId.get(matchId) ?? null : null;
+
+  const confidence: 'high' | 'low' | 'none' =
+    parsed.confidence === 'high' || parsed.confidence === 'low' || parsed.confidence === 'none'
+      ? parsed.confidence
+      : match ? 'low' : 'none';
+
+  const altIds = Array.isArray(parsed.alternatives) ? parsed.alternatives : [];
+  const alternatives = altIds
+    .map((id) => byId.get(Number(id)))
+    .filter((f): f is FoodRow => !!f && (!match || f.id !== match.id))
+    .slice(0, 4);
+
+  res.json({ match: match ?? null, alternatives, confidence });
+});
 
 export default router;

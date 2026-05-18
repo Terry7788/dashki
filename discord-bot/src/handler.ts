@@ -12,11 +12,11 @@ import type {
   Unit,
 } from './types';
 import { isAllowedChannel } from './guards';
-import { findInDb } from './foodMatcher';
 import { defaultMealType, todayLocalIso } from './mealType';
 import {
   buildBatchMessage,
   buildEditModal,
+  buildMatchPickMessage,
   buildPerItemMessage,
   buildSaveModal,
   disabledFrom,
@@ -84,14 +84,28 @@ async function handleLogMessage(msg: Message, api: DashkiClient): Promise<void> 
     return;
   }
 
-  // Resolve matches in parallel.
+  // Resolve matches in parallel via the LLM matcher.
+  //   confidence 'high'  -> auto-match, decision='logged'
+  //   confidence 'low'   -> capture candidates, decision stays null until
+  //                         user picks one from the match-candidates card
+  //   confidence 'none'  -> unmatched, fall through to the estimate flow
   const items: ItemState[] = await Promise.all(
     parsed.items.map(async (p): Promise<ItemState> => {
       try {
-        const match = await findInDb(p.name, (q) => api.searchFoods(q));
-        return { parsed: p, matched: match, estimate: null, decision: match ? 'logged' : null };
+        const result = await api.matchFood(p.name);
+        if (result.confidence === 'high' && result.match) {
+          return { parsed: p, matched: result.match, candidates: null, estimate: null, decision: 'logged' };
+        }
+        if (result.confidence === 'low' && (result.match || result.alternatives.length > 0)) {
+          // Surface top match first, then alternatives.
+          const candidates = [result.match, ...result.alternatives].filter(
+            (f): f is NonNullable<typeof f> => f != null
+          );
+          return { parsed: p, matched: null, candidates, estimate: null, decision: null };
+        }
+        return { parsed: p, matched: null, candidates: null, estimate: null, decision: null };
       } catch {
-        return { parsed: p, matched: null, estimate: null, decision: null };
+        return { parsed: p, matched: null, candidates: null, estimate: null, decision: null };
       }
     })
   );
@@ -111,11 +125,15 @@ async function handleLogMessage(msg: Message, api: DashkiClient): Promise<void> 
 
   // Quick intake summary so the user knows what we picked up.
   const matchedCount = items.filter((i) => i.matched).length;
-  const unknownCount = items.length - matchedCount;
+  const candidateCount = items.filter((i) => i.candidates).length;
+  const unknownCount = items.length - matchedCount - candidateCount;
+  const bits: string[] = [];
+  if (matchedCount > 0) bits.push(`${matchedCount} matched`);
+  if (candidateCount > 0) bits.push(`${candidateCount} need a pick`);
+  if (unknownCount > 0) bits.push(`${unknownCount} need confirmation`);
   await msg.reply(
     `Parsed ${items.length} item${items.length === 1 ? '' : 's'} for ${session.date} — ` +
-      `${matchedCount} matched, ${unknownCount} need${unknownCount === 1 ? 's' : ''} confirmation. ` +
-      `You'll pick the meal at the end.`
+      `${bits.join(', ')}. You'll pick the meal at the end.`
   );
 
   await advanceSession(msg, api, session);
@@ -136,6 +154,17 @@ async function advanceSession(
   }
 
   const item = session.items[i];
+
+  // Branch by what kind of pending action the item needs.
+  if (item.candidates && item.candidates.length > 0) {
+    // Low-confidence match → let user pick from the candidates.
+    const payload = buildMatchPickMessage(session, i);
+    const sent = await msg.reply(payload);
+    session.perItemMessageIds.push(sent.id);
+    return;
+  }
+
+  // No DB match — estimate macros and show the confirmation card.
   try {
     item.estimate = await api.estimateNutrition(item.parsed.name, item.parsed.quantity, item.parsed.unit);
   } catch (err) {
@@ -238,6 +267,49 @@ async function handleButton(
     return;
   }
 
+  if (parsed.action === 'mp') {
+    // User picked a candidate from the match-pick card.
+    if (parsed.extra === null || !item.candidates || !item.candidates[parsed.extra]) {
+      await interaction.reply({ content: 'Bad candidate index.', ephemeral: true });
+      return;
+    }
+    const picked = item.candidates[parsed.extra];
+    item.matched = picked;
+    item.candidates = null;
+    item.decision = 'logged';
+    session.pendingIndex = nextPending(session.items);
+
+    await interaction.update({
+      content: `✅ Matched: **${picked.name}**.`,
+      embeds: [],
+      components: disabledFrom(
+        interaction.message.components as unknown as ActionRowBuilder<ButtonBuilder>[]
+      ),
+    });
+
+    await advanceFlow(interaction, api, session);
+    return;
+  }
+
+  if (parsed.action === 'mn') {
+    // None of the candidates fit — fall back to the estimate flow.
+    item.candidates = null;
+    // Decision stays null so advanceFlow estimates and sends the per-item
+    // confirmation card. pendingIndex doesn't change — this item is still
+    // the next pending one, now in the "needs estimate" state.
+
+    await interaction.update({
+      content: `🔍 Estimating "${item.parsed.name}" instead…`,
+      embeds: [],
+      components: disabledFrom(
+        interaction.message.components as unknown as ActionRowBuilder<ButtonBuilder>[]
+      ),
+    });
+
+    await advanceFlow(interaction, api, session);
+    return;
+  }
+
   // Only 'qa' (quick-add) lands here — sd and ed both short-circuit above.
   item.decision = 'quick-add';
   session.pendingIndex = nextPending(session.items);
@@ -268,6 +340,16 @@ async function advanceFlow(
   }
 
   const nextItem = session.items[session.pendingIndex];
+
+  // Match-pick card path — item has low-confidence candidates.
+  if (nextItem.candidates && nextItem.candidates.length > 0) {
+    const payload = buildMatchPickMessage(session, session.pendingIndex);
+    const sent = await interaction.followUp(payload);
+    session.perItemMessageIds.push(sent.id);
+    return;
+  }
+
+  // Estimate path — no DB candidates, need an LLM macro guess.
   try {
     nextItem.estimate = await api.estimateNutrition(
       nextItem.parsed.name,

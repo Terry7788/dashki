@@ -46,6 +46,14 @@ export class DashkiClient {
     return this.request<ParseFoodsResponse>('POST', '/api/bot/parse-foods', { text });
   }
 
+  matchFood(name: string): Promise<{
+    match: Food | null;
+    alternatives: Food[];
+    confidence: 'high' | 'low' | 'none';
+  }> {
+    return this.request('POST', '/api/bot/match-food', { name });
+  }
+
   estimateNutrition(name: string, quantity: number, unit: Unit): Promise<EstimateResponse> {
     return this.request<EstimateResponse>('POST', '/api/bot/estimate-nutrition', {
       name,
