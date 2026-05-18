@@ -62,7 +62,13 @@ export interface JournalEntry {
 //   'logged'        — server resolves nutrition via food_id (matched item)
 //   'quick-add'     — log directly with client-supplied snapshots (unknown food)
 //   'save-and-log'  — create the food in DB first, then log with food_id
-export type ItemDecision = 'logged' | 'quick-add' | 'save-and-log' | 'cancelled';
+// Decision the user made for a per-item card.
+//   'logged'        — server resolves nutrition via food_id (matched item)
+//   'quick-add'     — log directly with client-supplied snapshots (unknown food)
+//   'save-and-log'  — create the food in DB first, then log with food_id
+//   'save-only'     — create the food in DB but don't log it to the journal
+//   'cancelled'     — user cancelled / estimate failed
+export type ItemDecision = 'logged' | 'quick-add' | 'save-and-log' | 'save-only' | 'cancelled';
 
 export interface ItemState {
   parsed: ParsedItem;

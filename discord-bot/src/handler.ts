@@ -220,9 +220,17 @@ async function handleButton(
   }
 
   if (parsed.action === 'sd') {
-    // Save-to-DB now goes through a modal so the user can set serving size
-    // before we create the Foods row.
-    const modal = buildSaveModal(session, parsed.itemIndex);
+    // Save+Log via modal so the user can set serving size before we create
+    // the Foods row, then we log the journal entry too.
+    const modal = buildSaveModal(session, parsed.itemIndex, 'save-and-log');
+    await interaction.showModal(modal);
+    return;
+  }
+
+  if (parsed.action === 'sv') {
+    // Save-only — same modal, but on submit we create the Foods row and
+    // skip the journal write.
+    const modal = buildSaveModal(session, parsed.itemIndex, 'save-only');
     await interaction.showModal(modal);
     return;
   }
@@ -293,6 +301,7 @@ async function commitBatch(
   let kcal = 0;
   let protein = 0;
   let logged = 0;
+  let savedOnly = 0;
 
   for (const item of session.items) {
     if (!item.decision || item.decision === 'cancelled') continue;
@@ -325,6 +334,13 @@ async function commitBatch(
         kcal += entry.calories_snapshot ?? 0;
         protein += entry.protein_snapshot ?? 0;
         logged++;
+      } else if (item.decision === 'save-only' && item.estimate) {
+        // Create the Foods row but skip the journal write.
+        await api.createFood({
+          ...item.estimate.perBase,
+          name: item.parsed.name,
+        });
+        savedOnly++;
       } else if (item.decision === 'quick-add' && item.estimate) {
         const entry = await api.logQuickAdd({
           date: session.date,
@@ -346,9 +362,23 @@ async function commitBatch(
 
   endSession(session.id);
 
+  const parts: string[] = ['✅'];
+  if (logged > 0) {
+    parts.push(
+      `Logged ${logged} item${logged === 1 ? '' : 's'} to **${session.mealType}** on ${session.date} ` +
+      `(**${Math.round(kcal)} kcal**, **${protein.toFixed(1)} g protein**).`
+    );
+  }
+  if (savedOnly > 0) {
+    parts.push(`Saved ${savedOnly} new food${savedOnly === 1 ? '' : 's'} to your DB.`);
+  }
+  if (logged === 0 && savedOnly === 0) {
+    parts.push('Nothing to commit.');
+  }
+
   const errBlock = errors.length ? `\n\nErrors:\n${errors.join('\n')}` : '';
   await interaction.editReply({
-    content: `✅ Logged ${logged} item${logged === 1 ? '' : 's'} to **${session.mealType}** on ${session.date}.\nTotal: **${Math.round(kcal)} kcal**, **${protein.toFixed(1)} g protein**.${errBlock}`,
+    content: parts.join(' ') + errBlock,
     embeds: [],
     components: disabledFrom(
       interaction.message.components as unknown as ActionRowBuilder<ButtonBuilder>[]
@@ -382,10 +412,37 @@ async function handleModalSubmit(
     return;
   }
   if (parsed.action === 'sdm') {
-    await handleSaveModalSubmit(interaction, api, session, parsed.itemIndex);
+    await handleSaveModalSubmit(interaction, api, session, parsed.itemIndex, 'save-and-log');
+    return;
+  }
+  if (parsed.action === 'svm') {
+    await handleSaveModalSubmit(interaction, api, session, parsed.itemIndex, 'save-only');
     return;
   }
   await interaction.reply({ content: 'Unknown modal action.', ephemeral: true });
+}
+
+
+// How many "base_amount × base_unit" the user is eating with this item.
+// Mirrors server/src/nutrition.ts conventions: when units differ, fall back
+// to ratio = quantity / base_amount (the server recomputes anyway when
+// food_id is present; perBase is only used for the new-Food row).
+function computeRatio(
+  item: { parsed: { quantity: number; unit: string } },
+  perBase: { base_amount: number; base_unit: string; serving_size_g: number | null }
+): number {
+  const { quantity, unit } = item.parsed;
+  if (unit === perBase.base_unit) {
+    return quantity / perBase.base_amount;
+  }
+  if (unit === 'g' && perBase.base_unit === 'serving' && perBase.serving_size_g) {
+    return quantity / perBase.serving_size_g;
+  }
+  if (unit === 'serving' && perBase.base_unit === 'g') {
+    const serving = perBase.serving_size_g ?? perBase.base_amount;
+    return (quantity * serving) / perBase.base_amount;
+  }
+  return quantity / perBase.base_amount;
 }
 
 async function handleEditModalSubmit(
@@ -399,6 +456,8 @@ async function handleEditModalSubmit(
   const name = interaction.fields.getTextInputValue(MODAL_FIELDS.name).trim();
   const quantityStr = interaction.fields.getTextInputValue(MODAL_FIELDS.quantity).trim();
   const unitStr = interaction.fields.getTextInputValue(MODAL_FIELDS.unit).trim().toLowerCase();
+  const calStr = interaction.fields.getTextInputValue(MODAL_FIELDS.calories).trim();
+  const proStr = interaction.fields.getTextInputValue(MODAL_FIELDS.protein).trim();
 
   if (!name) {
     await interaction.reply({ content: 'Name cannot be empty.', ephemeral: true });
@@ -415,30 +474,107 @@ async function handleEditModalSubmit(
     return;
   }
 
-  // Apply edits to the session item, then re-estimate. deferUpdate buys us
-  // time on the 3s interaction deadline while the LLM call is in flight.
+  // Both cal/P blank => re-estimate via the LLM (user is asking us to redo
+  // the guess with the new name/qty/unit). Either filled => use those values
+  // as overrides and skip the LLM call.
+  const reEstimate = !calStr && !proStr;
+  let calOverride: number | null = null;
+  let proOverride: number | null = null;
+  if (!reEstimate) {
+    if (calStr) {
+      const c = Number(calStr);
+      if (!Number.isFinite(c) || c < 0) {
+        await interaction.reply({ content: 'Calories must be a non-negative number.', ephemeral: true });
+        return;
+      }
+      calOverride = Math.round(c);
+    }
+    if (proStr) {
+      const p = Number(proStr);
+      if (!Number.isFinite(p) || p < 0) {
+        await interaction.reply({ content: 'Protein must be a non-negative number.', ephemeral: true });
+        return;
+      }
+      proOverride = Math.round(p * 10) / 10;
+    }
+  }
+
   item.parsed = { name, quantity, unit };
   await interaction.deferUpdate();
 
-  try {
-    item.estimate = await api.estimateNutrition(name, quantity, unit);
-  } catch (err) {
-    await interaction.followUp({
-      content: `⚠️ Re-estimate failed: ${formatError(err)}. Card unchanged.`,
-      ephemeral: true,
-    });
-    return;
+  if (reEstimate) {
+    try {
+      item.estimate = await api.estimateNutrition(name, quantity, unit);
+    } catch (err) {
+      await interaction.followUp({
+        content: `⚠️ Re-estimate failed: ${formatError(err)}. Card unchanged.`,
+        ephemeral: true,
+      });
+      return;
+    }
+  } else {
+    if (!item.estimate) {
+      // No prior estimate to override against — fetch one first, then apply.
+      try {
+        item.estimate = await api.estimateNutrition(name, quantity, unit);
+      } catch (err) {
+        await interaction.followUp({
+          content: `⚠️ Estimate failed: ${formatError(err)}. Card unchanged.`,
+          ephemeral: true,
+        });
+        return;
+      }
+    }
+    applyMacroOverrides(item, calOverride, proOverride);
   }
 
   const refreshed = buildPerItemMessage(session, itemIndex);
   await interaction.editReply(refreshed);
 }
 
+// Apply user-supplied calories/protein to the item's estimate. Carbs/fat
+// scale proportionally to the calorie change so the per-base macros that
+// land in the Foods row stay internally consistent.
+function applyMacroOverrides(
+  item: ItemState,
+  calOverride: number | null,
+  proOverride: number | null
+): void {
+  if (!item.estimate) return;
+  const e = item.estimate;
+
+  const newCal = calOverride ?? e.calories;
+  const newPro = proOverride ?? e.protein;
+
+  // Scale carbs/fat by the calorie ratio (better than leaving them frozen
+  // when the user has clearly changed the food's nutrient density).
+  const calRatio = e.calories > 0 ? newCal / e.calories : 1;
+  const newCarb = Math.round(e.carbs * calRatio * 10) / 10;
+  const newFat = Math.round(e.fat * calRatio * 10) / 10;
+
+  // Back-scale perBase: ratio = "base units the user is eating".
+  const baseRatio = computeRatio(item, e.perBase);
+  const safeRatio = baseRatio > 0 ? baseRatio : 1;
+
+  e.calories = newCal;
+  e.protein = newPro;
+  e.carbs = newCarb;
+  e.fat = newFat;
+  e.perBase = {
+    ...e.perBase,
+    calories: Math.round(newCal / safeRatio),
+    protein: Math.round((newPro / safeRatio) * 10) / 10,
+    carbs: Math.round((newCarb / safeRatio) * 10) / 10,
+    fat: Math.round((newFat / safeRatio) * 10) / 10,
+  };
+}
+
 async function handleSaveModalSubmit(
   interaction: ModalSubmitInteraction,
   api: DashkiClient,
   session: Session,
-  itemIndex: number
+  itemIndex: number,
+  mode: 'save-and-log' | 'save-only'
 ): Promise<void> {
   const item = session.items[itemIndex];
   if (!item.estimate) {
@@ -461,13 +597,14 @@ async function handleSaveModalSubmit(
   }
 
   item.estimate.perBase.serving_size_g = servingSizeG;
-  item.decision = 'save-and-log';
+  item.decision = mode;
   session.pendingIndex = nextPending(session.items);
 
   const unitSuffix = item.estimate.perBase.base_unit === 'ml' ? 'ml' : 'g';
+  const verb = mode === 'save-only' ? 'Save (DB only)' : 'Save + log';
   const stagedMsg = servingSizeG != null
-    ? `💾 Save + log staged (1 serving = ${servingSizeG}${unitSuffix}).`
-    : '💾 Save + log staged (no serving size set).';
+    ? `💾 ${verb} staged (1 serving = ${servingSizeG}${unitSuffix}).`
+    : `💾 ${verb} staged (no serving size set).`;
 
   // isFromMessage() narrows to ModalMessageModalSubmitInteraction which has
   // the .update() method. Our modal is always opened from a button on a

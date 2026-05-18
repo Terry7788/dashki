@@ -11,16 +11,20 @@ import type { Session, ItemState } from './types';
 
 // CustomId format: <sessionId>:<action>[:<itemIndex>]
 //   <sid>:qa:<i>   — quick-add for item i
-//   <sid>:sd:<i>   — open save-to-DB modal for item i
-//   <sid>:sdm:<i>  — save-modal submit for item i
-//   <sid>:ed:<i>   — open edit modal for item i
+//   <sid>:sd:<i>   — open save+log modal for item i
+//   <sid>:sdm:<i>  — save+log modal submit for item i
+//   <sid>:sv:<i>   — open save-only modal for item i
+//   <sid>:svm:<i>  — save-only modal submit for item i
+//   <sid>:ed:<i>   — open edit (name/qty/unit/cal/P) modal for item i
 //   <sid>:edm:<i>  — edit-modal submit for item i
 //   <sid>:cx       — cancel (whole session)
 //   <sid>:lb       — log all to breakfast
 //   <sid>:ll       — log all to lunch
 //   <sid>:ld       — log all to dinner
 //   <sid>:ls       — log all to snack
-export type ActionCode = 'qa' | 'sd' | 'sdm' | 'ed' | 'edm' | 'cx' | 'lb' | 'll' | 'ld' | 'ls';
+export type ActionCode =
+  | 'qa' | 'sd' | 'sdm' | 'sv' | 'svm' | 'ed' | 'edm' | 'cx'
+  | 'lb' | 'll' | 'ld' | 'ls';
 
 import type { MealType } from './types';
 
@@ -34,7 +38,9 @@ export const LOG_ACTION_TO_MEAL: Record<'lb' | 'll' | 'ld' | 'ls', MealType> = {
 export const CID = {
   quickAdd: (sid: string, i: number) => `${sid}:qa:${i}`,
   saveAndLog: (sid: string, i: number) => `${sid}:sd:${i}`,
-  saveModal: (sid: string, i: number) => `${sid}:sdm:${i}`,
+  saveAndLogModal: (sid: string, i: number) => `${sid}:sdm:${i}`,
+  saveOnly: (sid: string, i: number) => `${sid}:sv:${i}`,
+  saveOnlyModal: (sid: string, i: number) => `${sid}:svm:${i}`,
   edit: (sid: string, i: number) => `${sid}:ed:${i}`,
   editModal: (sid: string, i: number) => `${sid}:edm:${i}`,
   cancel: (sid: string) => `${sid}:cx`,
@@ -44,7 +50,10 @@ export const CID = {
   logSnack: (sid: string) => `${sid}:ls`,
 };
 
-const ALL_ACTIONS: readonly ActionCode[] = ['qa', 'sd', 'sdm', 'ed', 'edm', 'cx', 'lb', 'll', 'ld', 'ls'] as const;
+const ALL_ACTIONS: readonly ActionCode[] = [
+  'qa', 'sd', 'sdm', 'sv', 'svm', 'ed', 'edm', 'cx',
+  'lb', 'll', 'ld', 'ls',
+] as const;
 
 export function parseCustomId(customId: string): {
   sessionId: string;
@@ -89,14 +98,19 @@ export function buildPerItemMessage(session: Session, itemIndex: number) {
     })
     .setColor(0xfacc15);
 
+  // Discord allows max 5 buttons per row, so this fits.
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(CID.quickAdd(session.id, itemIndex))
-      .setLabel('Confirm (quick-add)')
+      .setLabel('Quick Add')
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId(CID.saveAndLog(session.id, itemIndex))
-      .setLabel('Confirm + Save to DB')
+      .setLabel('Save + Log')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(CID.saveOnly(session.id, itemIndex))
+      .setLabel('Save')
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
       .setCustomId(CID.edit(session.id, itemIndex))
@@ -105,7 +119,7 @@ export function buildPerItemMessage(session: Session, itemIndex: number) {
     new ButtonBuilder()
       .setCustomId(CID.cancel(session.id))
       .setLabel('Cancel')
-      .setStyle(ButtonStyle.Secondary)
+      .setStyle(ButtonStyle.Danger)
   );
 
   return { embeds: [embed], components: [row] };
@@ -118,8 +132,15 @@ export const MODAL_FIELDS = {
   quantity: 'quantity',
   unit: 'unit',
   servingSize: 'servingSize',
+  calories: 'calories',
+  protein: 'protein',
+  carbs: 'carbs',
+  fat: 'fat',
 } as const;
 
+// Combined edit modal — five fields, the Discord per-modal max. Carbs/fat
+// aren't editable here (they're not persisted on quick-add journal entries
+// anyway; for save-to-DB the Foods page can fine-tune them post-save).
 export function buildEditModal(session: Session, itemIndex: number): ModalBuilder {
   const item = session.items[itemIndex];
 
@@ -147,17 +168,41 @@ export function buildEditModal(session: Session, itemIndex: number): ModalBuilde
     .setMaxLength(10)
     .setRequired(true);
 
+  const caloriesInput = new TextInputBuilder()
+    .setCustomId(MODAL_FIELDS.calories)
+    .setLabel('Calories (kcal) — blank to re-estimate')
+    .setStyle(TextInputStyle.Short)
+    .setValue(item.estimate ? String(item.estimate.calories) : '')
+    .setMaxLength(10)
+    .setRequired(false);
+
+  const proteinInput = new TextInputBuilder()
+    .setCustomId(MODAL_FIELDS.protein)
+    .setLabel('Protein (g) — blank to re-estimate')
+    .setStyle(TextInputStyle.Short)
+    .setValue(item.estimate ? item.estimate.protein.toFixed(1) : '')
+    .setMaxLength(10)
+    .setRequired(false);
+
   return new ModalBuilder()
     .setCustomId(CID.editModal(session.id, itemIndex))
     .setTitle(`Edit item ${itemIndex + 1}`)
     .addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(nameInput),
       new ActionRowBuilder<TextInputBuilder>().addComponents(quantityInput),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(unitInput)
+      new ActionRowBuilder<TextInputBuilder>().addComponents(unitInput),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(caloriesInput),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(proteinInput)
     );
 }
 
-export function buildSaveModal(session: Session, itemIndex: number): ModalBuilder {
+export type SaveMode = 'save-and-log' | 'save-only';
+
+export function buildSaveModal(
+  session: Session,
+  itemIndex: number,
+  mode: SaveMode = 'save-and-log'
+): ModalBuilder {
   const item = session.items[itemIndex];
   if (!item.estimate) {
     throw new Error('buildSaveModal called for an item without an estimate');
@@ -184,10 +229,14 @@ export function buildSaveModal(session: Session, itemIndex: number): ModalBuilde
 
   // Truncate the food name in the title since Discord caps modal titles at 45 chars.
   const titleName = item.parsed.name.length > 25 ? item.parsed.name.slice(0, 22) + '…' : item.parsed.name;
+  const customId = mode === 'save-only'
+    ? CID.saveOnlyModal(session.id, itemIndex)
+    : CID.saveAndLogModal(session.id, itemIndex);
+  const titlePrefix = mode === 'save-only' ? 'Save to DB' : 'Save + Log';
 
   return new ModalBuilder()
-    .setCustomId(CID.saveModal(session.id, itemIndex))
-    .setTitle(`Save "${titleName}" to DB`)
+    .setCustomId(customId)
+    .setTitle(`${titlePrefix}: ${titleName}`)
     .addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(servingInput)
     );
@@ -278,6 +327,16 @@ function itemSummary(item: ItemState): ItemSummary {
       line: `**${item.parsed.name}** — ${qtyStr} · ${e.calories} kcal · ${e.protein.toFixed(1)}g P · _new DB entry_`,
       kcal: e.calories,
       protein: e.protein,
+    };
+  }
+
+  if (item.decision === 'save-only' && item.estimate) {
+    // Save-only items don't contribute to the meal totals (they're not logged
+    // to the journal). Show as a DB-only entry.
+    return {
+      line: `**${item.parsed.name}** — _save to DB only (not logged)_`,
+      kcal: 0,
+      protein: 0,
     };
   }
 
