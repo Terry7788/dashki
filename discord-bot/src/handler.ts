@@ -3,12 +3,11 @@ import {
   type Client,
   type Message,
   type ButtonInteraction,
-  type Interaction,
+  type ModalSubmitInteraction,
 } from 'discord.js';
 import { DashkiClient, DashkiApiError } from './api';
 import type {
   ItemState,
-  MealType,
   Session,
   Unit,
 } from './types';
@@ -16,8 +15,10 @@ import { findInDb } from './foodMatcher';
 import { defaultMealType, todayLocalIso } from './mealType';
 import {
   buildBatchMessage,
+  buildEditModal,
   buildPerItemMessage,
   disabledFrom,
+  MODAL_FIELDS,
   parseCustomId,
 } from './embeds';
 import {
@@ -50,12 +51,17 @@ export function registerHandlers(opts: {
   });
 
   client.on(Events.InteractionCreate, async (interaction) => {
-    if (!interaction.isButton()) return;
     if (interaction.user.id !== allowedUserId) {
-      await interaction.reply({ content: 'Not for you.', ephemeral: true });
+      if (interaction.isRepliable()) {
+        await interaction.reply({ content: 'Not for you.', ephemeral: true });
+      }
       return;
     }
-    await handleButton(interaction, api);
+    if (interaction.isButton()) {
+      await handleButton(interaction, api);
+    } else if (interaction.isModalSubmit()) {
+      await handleModalSubmit(interaction, api);
+    }
   });
 }
 
@@ -190,7 +196,7 @@ async function handleButton(
     return;
   }
 
-  // Per-item decision
+  // Per-item decision or edit
   if (parsed.itemIndex === null) {
     await interaction.reply({ content: 'Missing item index.', ephemeral: true });
     return;
@@ -198,6 +204,14 @@ async function handleButton(
   const item = session.items[parsed.itemIndex];
   if (!item) {
     await interaction.reply({ content: 'Unknown item.', ephemeral: true });
+    return;
+  }
+
+  if (parsed.action === 'ed') {
+    // Open the edit modal. showModal MUST be the first response to the
+    // interaction — don't call deferUpdate/reply before it.
+    const modal = buildEditModal(session, parsed.itemIndex);
+    await interaction.showModal(modal);
     return;
   }
 
@@ -319,6 +333,72 @@ async function commitBatch(
       interaction.message.components as unknown as ActionRowBuilder<ButtonBuilder>[]
     ),
   });
+}
+
+async function handleModalSubmit(
+  interaction: ModalSubmitInteraction,
+  api: DashkiClient
+): Promise<void> {
+  const parsed = parseCustomId(interaction.customId);
+  if (!parsed || parsed.action !== 'edm' || parsed.itemIndex === null) {
+    await interaction.reply({ content: 'Bad modal.', ephemeral: true });
+    return;
+  }
+
+  const session = getSession(parsed.sessionId);
+  if (!session) {
+    await interaction.reply({ content: 'Session expired. Send the message again.', ephemeral: true });
+    return;
+  }
+  const item = session.items[parsed.itemIndex];
+  if (!item) {
+    await interaction.reply({ content: 'Unknown item.', ephemeral: true });
+    return;
+  }
+
+  const name = interaction.fields.getTextInputValue(MODAL_FIELDS.name).trim();
+  const quantityStr = interaction.fields.getTextInputValue(MODAL_FIELDS.quantity).trim();
+  const unitStr = interaction.fields.getTextInputValue(MODAL_FIELDS.unit).trim().toLowerCase();
+
+  if (!name) {
+    await interaction.reply({ content: 'Name cannot be empty.', ephemeral: true });
+    return;
+  }
+  const quantity = Number(quantityStr);
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    await interaction.reply({ content: 'Quantity must be a positive number.', ephemeral: true });
+    return;
+  }
+  const unit = normaliseUnit(unitStr);
+  if (!unit) {
+    await interaction.reply({ content: 'Unit must be one of: g, ml, serving.', ephemeral: true });
+    return;
+  }
+
+  // Apply edits to the session item, then re-estimate. deferUpdate buys us
+  // time on the 3s interaction deadline while the LLM call is in flight.
+  item.parsed = { name, quantity, unit };
+  await interaction.deferUpdate();
+
+  try {
+    item.estimate = await api.estimateNutrition(name, quantity, unit);
+  } catch (err) {
+    await interaction.followUp({
+      content: `⚠️ Re-estimate failed: ${formatError(err)}. Card unchanged.`,
+      ephemeral: true,
+    });
+    return;
+  }
+
+  const refreshed = buildPerItemMessage(session, parsed.itemIndex);
+  await interaction.editReply(refreshed);
+}
+
+function normaliseUnit(raw: string): Unit | null {
+  if (raw === 'g' || raw === 'grams' || raw === 'gram') return 'g';
+  if (raw === 'ml' || raw === 'millilitre' || raw === 'milliliter') return 'ml';
+  if (raw === 'serving' || raw === 'servings') return 'serving';
+  return null;
 }
 
 function nextPending(items: ItemState[]): number {

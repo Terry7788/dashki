@@ -3,35 +3,46 @@ import {
   ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
 } from 'discord.js';
 import type { Session, ItemState } from './types';
 
 // CustomId format: <sessionId>:<action>[:<itemIndex>]
-//   <sid>:qa:<i>  — quick-add for item i
-//   <sid>:sd:<i>  — save-to-db + log for item i
-//   <sid>:cx      — cancel (whole session)
-//   <sid>:la      — log all (final batch confirm)
+//   <sid>:qa:<i>   — quick-add for item i
+//   <sid>:sd:<i>   — save-to-db + log for item i
+//   <sid>:ed:<i>   — open edit modal for item i
+//   <sid>:edm:<i>  — modal submit for item i (returned by Discord on submit)
+//   <sid>:cx       — cancel (whole session)
+//   <sid>:la       — log all (final batch confirm)
+export type ActionCode = 'qa' | 'sd' | 'ed' | 'edm' | 'cx' | 'la';
+
 export const CID = {
   quickAdd: (sid: string, i: number) => `${sid}:qa:${i}`,
   saveAndLog: (sid: string, i: number) => `${sid}:sd:${i}`,
+  edit: (sid: string, i: number) => `${sid}:ed:${i}`,
+  editModal: (sid: string, i: number) => `${sid}:edm:${i}`,
   cancel: (sid: string) => `${sid}:cx`,
   logAll: (sid: string) => `${sid}:la`,
 };
 
+const ALL_ACTIONS: readonly ActionCode[] = ['qa', 'sd', 'ed', 'edm', 'cx', 'la'] as const;
+
 export function parseCustomId(customId: string): {
   sessionId: string;
-  action: 'qa' | 'sd' | 'cx' | 'la';
+  action: ActionCode;
   itemIndex: number | null;
 } | null {
   const parts = customId.split(':');
   if (parts.length < 2 || parts.length > 3) return null;
   const [sessionId, action, idxStr] = parts;
-  if (!['qa', 'sd', 'cx', 'la'].includes(action)) return null;
+  if (!ALL_ACTIONS.includes(action as ActionCode)) return null;
   const itemIndex = idxStr !== undefined ? Number(idxStr) : null;
   if (idxStr !== undefined && (!Number.isInteger(itemIndex) || (itemIndex as number) < 0)) {
     return null;
   }
-  return { sessionId, action: action as 'qa' | 'sd' | 'cx' | 'la', itemIndex };
+  return { sessionId, action: action as ActionCode, itemIndex };
 }
 
 function fmtQty(q: number): string {
@@ -71,12 +82,61 @@ export function buildPerItemMessage(session: Session, itemIndex: number) {
       .setLabel('Confirm + Save to DB')
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
+      .setCustomId(CID.edit(session.id, itemIndex))
+      .setLabel('Edit')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
       .setCustomId(CID.cancel(session.id))
       .setLabel('Cancel')
       .setStyle(ButtonStyle.Secondary)
   );
 
   return { embeds: [embed], components: [row] };
+}
+
+// Modal field IDs. Used both to populate prefilled values and to read back
+// submitted values on ModalSubmit.
+export const MODAL_FIELDS = {
+  name: 'name',
+  quantity: 'quantity',
+  unit: 'unit',
+} as const;
+
+export function buildEditModal(session: Session, itemIndex: number): ModalBuilder {
+  const item = session.items[itemIndex];
+
+  const nameInput = new TextInputBuilder()
+    .setCustomId(MODAL_FIELDS.name)
+    .setLabel('Food name')
+    .setStyle(TextInputStyle.Short)
+    .setValue(item.parsed.name)
+    .setMaxLength(100)
+    .setRequired(true);
+
+  const quantityInput = new TextInputBuilder()
+    .setCustomId(MODAL_FIELDS.quantity)
+    .setLabel('Quantity (number)')
+    .setStyle(TextInputStyle.Short)
+    .setValue(fmtQty(item.parsed.quantity))
+    .setMaxLength(10)
+    .setRequired(true);
+
+  const unitInput = new TextInputBuilder()
+    .setCustomId(MODAL_FIELDS.unit)
+    .setLabel('Unit (g / ml / serving)')
+    .setStyle(TextInputStyle.Short)
+    .setValue(item.parsed.unit)
+    .setMaxLength(10)
+    .setRequired(true);
+
+  return new ModalBuilder()
+    .setCustomId(CID.editModal(session.id, itemIndex))
+    .setTitle(`Edit item ${itemIndex + 1}`)
+    .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(nameInput),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(quantityInput),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(unitInput)
+    );
 }
 
 export function buildBatchMessage(session: Session) {
