@@ -18,6 +18,7 @@ import {
   buildEditModal,
   buildPerItemMessage,
   disabledFrom,
+  LOG_ACTION_TO_MEAL,
   MODAL_FIELDS,
   parseCustomId,
 } from './embeds';
@@ -191,7 +192,8 @@ async function handleButton(
     return;
   }
 
-  if (parsed.action === 'la') {
+  if (parsed.action === 'lb' || parsed.action === 'll' || parsed.action === 'ld' || parsed.action === 'ls') {
+    session.mealType = LOG_ACTION_TO_MEAL[parsed.action];
     await commitBatch(interaction, api, session);
     return;
   }

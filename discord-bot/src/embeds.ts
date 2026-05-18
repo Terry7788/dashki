@@ -15,8 +15,20 @@ import type { Session, ItemState } from './types';
 //   <sid>:ed:<i>   — open edit modal for item i
 //   <sid>:edm:<i>  — modal submit for item i (returned by Discord on submit)
 //   <sid>:cx       — cancel (whole session)
-//   <sid>:la       — log all (final batch confirm)
-export type ActionCode = 'qa' | 'sd' | 'ed' | 'edm' | 'cx' | 'la';
+//   <sid>:lb       — log all to breakfast
+//   <sid>:ll       — log all to lunch
+//   <sid>:ld       — log all to dinner
+//   <sid>:ls       — log all to snack
+export type ActionCode = 'qa' | 'sd' | 'ed' | 'edm' | 'cx' | 'lb' | 'll' | 'ld' | 'ls';
+
+import type { MealType } from './types';
+
+export const LOG_ACTION_TO_MEAL: Record<'lb' | 'll' | 'ld' | 'ls', MealType> = {
+  lb: 'breakfast',
+  ll: 'lunch',
+  ld: 'dinner',
+  ls: 'snack',
+};
 
 export const CID = {
   quickAdd: (sid: string, i: number) => `${sid}:qa:${i}`,
@@ -24,10 +36,13 @@ export const CID = {
   edit: (sid: string, i: number) => `${sid}:ed:${i}`,
   editModal: (sid: string, i: number) => `${sid}:edm:${i}`,
   cancel: (sid: string) => `${sid}:cx`,
-  logAll: (sid: string) => `${sid}:la`,
+  logBreakfast: (sid: string) => `${sid}:lb`,
+  logLunch: (sid: string) => `${sid}:ll`,
+  logDinner: (sid: string) => `${sid}:ld`,
+  logSnack: (sid: string) => `${sid}:ls`,
 };
 
-const ALL_ACTIONS: readonly ActionCode[] = ['qa', 'sd', 'ed', 'edm', 'cx', 'la'] as const;
+const ALL_ACTIONS: readonly ActionCode[] = ['qa', 'sd', 'ed', 'edm', 'cx', 'lb', 'll', 'ld', 'ls'] as const;
 
 export function parseCustomId(customId: string): {
   sessionId: string;
@@ -153,7 +168,7 @@ export function buildBatchMessage(session: Session) {
   }
 
   const embed = new EmbedBuilder()
-    .setTitle(`Ready to log — ${session.mealType}`)
+    .setTitle('Ready to log — pick a meal')
     .setDescription(lines.join('\n'))
     .addFields(
       { name: 'Total calories', value: `${Math.round(totalKcal)} kcal`, inline: true },
@@ -162,18 +177,38 @@ export function buildBatchMessage(session: Session) {
     )
     .setColor(0x10b981);
 
-  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+  // Time-of-day default gets ButtonStyle.Success; the others are Secondary.
+  // Click any meal-type button to commit the batch under that meal.
+  const styleFor = (m: MealType) =>
+    session.mealType === m ? ButtonStyle.Success : ButtonStyle.Secondary;
+
+  const mealRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId(CID.logAll(session.id))
-      .setLabel('Log all to today')
-      .setStyle(ButtonStyle.Success),
+      .setCustomId(CID.logBreakfast(session.id))
+      .setLabel('Breakfast')
+      .setStyle(styleFor('breakfast')),
+    new ButtonBuilder()
+      .setCustomId(CID.logLunch(session.id))
+      .setLabel('Lunch')
+      .setStyle(styleFor('lunch')),
+    new ButtonBuilder()
+      .setCustomId(CID.logDinner(session.id))
+      .setLabel('Dinner')
+      .setStyle(styleFor('dinner')),
+    new ButtonBuilder()
+      .setCustomId(CID.logSnack(session.id))
+      .setLabel('Snack')
+      .setStyle(styleFor('snack'))
+  );
+
+  const cancelRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(CID.cancel(session.id))
       .setLabel('Cancel')
-      .setStyle(ButtonStyle.Secondary)
+      .setStyle(ButtonStyle.Danger)
   );
 
-  return { embeds: [embed], components: [row] };
+  return { embeds: [embed], components: [mealRow, cancelRow] };
 }
 
 interface ItemSummary {
