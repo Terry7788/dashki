@@ -11,6 +11,7 @@ import type {
   Session,
   Unit,
 } from './types';
+import { isAllowedChannel } from './guards';
 import { findInDb } from './foodMatcher';
 import { defaultMealType, todayLocalIso } from './mealType';
 import {
@@ -35,12 +36,14 @@ export function registerHandlers(opts: {
   client: Client;
   api: DashkiClient;
   allowedUserId: string;
+  allowedChannelId: string | null;
 }) {
-  const { client, api, allowedUserId } = opts;
+  const { client, api, allowedUserId, allowedChannelId } = opts;
 
   client.on(Events.MessageCreate, async (msg) => {
     if (msg.author.bot) return;
     if (msg.author.id !== allowedUserId) return;
+    if (!isAllowedChannel(msg, allowedChannelId)) return;
 
     const content = msg.content.trim();
     if (!content) return;

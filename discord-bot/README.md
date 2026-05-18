@@ -24,6 +24,7 @@ Then DM the bot `!ping` from the allowed Discord account — it should reply `po
 |-----|----------|-------|
 | `DISCORD_BOT_TOKEN` | yes | From the Discord developer portal — never commit. |
 | `DISCORD_ALLOWED_USER_ID` | yes | Single allowed Discord user ID. |
+| `DISCORD_ALLOWED_CHANNEL_ID` | no | If set, bot only processes messages from this channel (plus DMs). If unset, DMs only. Useful when running multiple bots in the same server. |
 | `DASHKI_API_URL` | yes | Pinned to Terry's Dashki instance. |
 | `OPENAI_API_KEY` | from DSHKI-29 onwards | Used for parse-foods + estimate-nutrition. |
 

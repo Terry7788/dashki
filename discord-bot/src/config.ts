@@ -3,6 +3,10 @@ import 'dotenv/config';
 interface Config {
   discordBotToken: string;
   allowedUserId: string;
+  // Optional. When set, the bot processes messages from this channel (in
+  // addition to DMs). When null, only DMs from the allowed user are
+  // processed — preserves the original single-channel-via-DM behaviour.
+  allowedChannelId: string | null;
   dashkiApiUrl: string;
   openaiApiKey: string | null;
 }
@@ -29,6 +33,7 @@ export function loadConfig(): Config {
   const cfg: Config = {
     discordBotToken: get('DISCORD_BOT_TOKEN'),
     allowedUserId: get('DISCORD_ALLOWED_USER_ID'),
+    allowedChannelId: process.env.DISCORD_ALLOWED_CHANNEL_ID?.trim() || null,
     dashkiApiUrl: get('DASHKI_API_URL'),
     openaiApiKey: process.env.OPENAI_API_KEY?.trim() || null,
   };

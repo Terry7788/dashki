@@ -22,11 +22,15 @@ registerHandlers({
   client,
   api,
   allowedUserId: config.allowedUserId,
+  allowedChannelId: config.allowedChannelId,
 });
 
 client.once(Events.ClientReady, (c) => {
   console.log(`[bot] logged in as ${c.user.tag} (id: ${c.user.id})`);
   console.log(`[bot] gated to user id: ${config.allowedUserId}`);
+  console.log(
+    `[bot] gated to channel: ${config.allowedChannelId ?? 'DMs only'}`
+  );
   console.log(`[bot] dashki api: ${config.dashkiApiUrl}`);
 });
 
