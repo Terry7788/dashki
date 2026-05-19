@@ -790,7 +790,7 @@ function TodayVariant({
       <style jsx>{`
         @media (max-width: 900px) {
           .dashboard-grid {
-            grid-template-columns: 1fr !important;
+            grid-template-columns: minmax(0, 1fr) !important;
           }
         }
       `}</style>
@@ -1339,7 +1339,7 @@ function WeekVariant({
       <style jsx>{`
         @media (max-width: 900px) {
           :global(.week-grid) {
-            grid-template-columns: 1fr !important;
+            grid-template-columns: minmax(0, 1fr) !important;
           }
         }
       `}</style>

@@ -23,6 +23,7 @@ import {
 } from '@/lib/api';
 import type { JournalEntry, MealType, Food, SavedMeal, Unit } from '@/lib/types';
 import { useSocketEvent } from '@/lib/useSocketEvent';
+import { useIsNarrow } from '@/lib/useIsNarrow';
 import { QuantityInput } from '@/components/QuantityInput';
 import { nutritionFor, formatQuantity } from '@/lib/nutrition';
 
@@ -87,23 +88,9 @@ interface FoodPickerProps {
   setSelectedFoods: (next: SelectedFood[]) => void;
 }
 
-// Viewport-aware switch. The modal's table layout works on desktop but
-// at <640px the fixed colgroup widths starve the food-name column, so we
-// fall back to a stacked card list at that breakpoint.
-function useIsModalNarrow() {
-  const [narrow, setNarrow] = useState(() =>
-    typeof window !== 'undefined' ? window.innerWidth < 640 : false
-  );
-  useEffect(() => {
-    const onResize = () => setNarrow(window.innerWidth < 640);
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
-  return narrow;
-}
 
 function FoodPicker({ selectedFoods, setSelectedFoods }: FoodPickerProps) {
-  const isNarrow = useIsModalNarrow();
+  const isNarrow = useIsNarrow();
   const [query, setQuery] = useState('');
   const [tag, setTag] = useState<FoodTag | 'All'>('All');
   const [foods, setFoods] = useState<Food[]>([]);
@@ -776,7 +763,7 @@ interface AddFoodModalProps {
 }
 
 function AddFoodModal({ isOpen, onClose, mealType: initialMealType, date, onAdded }: AddFoodModalProps) {
-  const isNarrow = useIsModalNarrow();
+  const isNarrow = useIsNarrow();
   const [mealType, setMealType] = useState<MealType>(initialMealType);
   useEffect(() => {
     if (isOpen) setMealType(initialMealType);
@@ -2264,7 +2251,7 @@ function EntryRow({
       onPointerLeave={() => setHovered(false)}
       style={{
         display: 'grid',
-        gridTemplateColumns: '1fr auto auto auto',
+        gridTemplateColumns: 'minmax(0, 1fr) auto auto auto',
         alignItems: 'center',
         gap: 14,
         padding: '8px 12px',
@@ -2398,6 +2385,7 @@ function MealSection({
   onDragStartEntry,
   onDragEndEntry,
 }: MealSectionProps) {
+  const isNarrow = useIsNarrow();
   const [dragOver, setDragOver] = useState(false);
   const dragCounter = useRef(0);
 
@@ -2482,9 +2470,13 @@ function MealSection({
               display: 'flex',
               gap: 10,
               alignItems: 'baseline',
+              flexShrink: 0,
             }}
           >
-            {entries.length > 0 && (
+            {/* Per-meal totals — hidden on narrow viewports so the + Add
+                button stays clickable. The Day-summary card on the right
+                already aggregates these numbers. */}
+            {!isNarrow && entries.length > 0 && (
               <span
                 style={{
                   fontFamily: 'var(--font-mono)',
@@ -3165,7 +3157,7 @@ export default function JournalPage() {
         className="journal-grid"
         style={{
           display: 'grid',
-          gridTemplateColumns: '1.6fr 1fr',
+          gridTemplateColumns: 'minmax(0, 1.6fr) minmax(0, 1fr)',
           gap: 16,
           marginTop: 24,
         }}
@@ -3175,6 +3167,7 @@ export default function JournalPage() {
             display: 'flex',
             flexDirection: 'column',
             gap: 12,
+            minWidth: 0,
           }}
         >
           {loading ? (
@@ -3239,7 +3232,7 @@ export default function JournalPage() {
       <style jsx>{`
         @media (max-width: 900px) {
           :global(.journal-grid) {
-            grid-template-columns: 1fr !important;
+            grid-template-columns: minmax(0, 1fr) !important;
           }
         }
       `}</style>

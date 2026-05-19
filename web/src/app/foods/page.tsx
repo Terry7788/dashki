@@ -39,6 +39,7 @@ import type { FoodTag } from '@/lib/foodTags';
 import { getFoods, createFood, updateFood, deleteFood, addJournalEntry } from '@/lib/api';
 import type { Food, MealType } from '@/lib/types';
 import { useSocketEvent } from '@/lib/useSocketEvent';
+import { useIsNarrow } from '@/lib/useIsNarrow';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -620,10 +621,12 @@ function FoodRow({
   food,
   selected,
   onSelect,
+  showTag = true,
 }: {
   food: Food;
   selected: boolean;
   onSelect: () => void;
+  showTag?: boolean;
 }) {
   const [hover, setHover] = useState(false);
   const cal = food.calories ?? food.calories_per_100g ?? 0;
@@ -709,9 +712,17 @@ function FoodRow({
         <MonoNum size={14}>{protein}</MonoNum>
         <span style={{ fontSize: 11, color: 'var(--color-muted-foreground)', marginLeft: 2 }}>g</span>
       </td>
-      <td style={TD_STYLE}>
-        {tag ? <Pill tone={TAG_TONES[tag]}>{tag}</Pill> : <span style={{ fontSize: 12, color: 'var(--color-muted-foreground)' }}>—</span>}
-      </td>
+      {showTag && (
+        <td style={TD_STYLE}>
+          {tag ? (
+            <Pill tone={TAG_TONES[tag]}>{tag}</Pill>
+          ) : (
+            <span style={{ fontSize: 12, color: 'var(--color-muted-foreground)' }}>
+              —
+            </span>
+          )}
+        </td>
+      )}
     </tr>
   );
 }
@@ -1000,6 +1011,7 @@ function DetailStat({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function FoodsPage() {
+  const isNarrow = useIsNarrow();
   const [foods, setFoods] = useState<Food[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -1320,9 +1332,9 @@ export default function FoodsPage() {
               >
                 <colgroup>
                   <col />
-                  <col style={{ width: 70 }} />
-                  <col style={{ width: 80 }} />
-                  <col style={{ width: 90 }} />
+                  <col style={{ width: 64 }} />
+                  <col style={{ width: 72 }} />
+                  {!isNarrow && <col style={{ width: 90 }} />}
                 </colgroup>
                 <thead
                   style={{
@@ -1336,7 +1348,7 @@ export default function FoodsPage() {
                     <th style={TH_STYLE}>Food</th>
                     <th style={{ ...TH_STYLE, textAlign: 'right' }}>Cal</th>
                     <th style={{ ...TH_STYLE, textAlign: 'right' }}>Protein</th>
-                    <th style={TH_STYLE}>Tag</th>
+                    {!isNarrow && <th style={TH_STYLE}>Tag</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -1346,6 +1358,7 @@ export default function FoodsPage() {
                       food={f}
                       selected={f.id === selected}
                       onSelect={() => setSelected(f.id)}
+                      showTag={!isNarrow}
                     />
                   ))}
                 </tbody>
@@ -1376,7 +1389,7 @@ export default function FoodsPage() {
       <style jsx>{`
         @media (max-width: 900px) {
           :global(.foods-grid) {
-            grid-template-columns: 1fr !important;
+            grid-template-columns: minmax(0, 1fr) !important;
           }
         }
       `}</style>

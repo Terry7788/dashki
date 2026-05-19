@@ -663,7 +663,7 @@ export default function CalendarPage() {
       <style jsx>{`
         @media (max-width: 900px) {
           :global(.calendar-grid) {
-            grid-template-columns: 1fr !important;
+            grid-template-columns: minmax(0, 1fr) !important;
           }
         }
       `}</style>

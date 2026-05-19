@@ -1144,10 +1144,10 @@ export default function MealsPage() {
       <style jsx>{`
         @media (max-width: 900px) {
           :global(.meals-grid) {
-            grid-template-columns: 1fr !important;
+            grid-template-columns: minmax(0, 1fr) !important;
           }
           :global(.meals-card-grid) {
-            grid-template-columns: 1fr !important;
+            grid-template-columns: minmax(0, 1fr) !important;
           }
         }
       `}</style>

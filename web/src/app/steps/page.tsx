@@ -392,7 +392,7 @@ function StepCalculator({
       <style jsx>{`
         @media (max-width: 900px) {
           :global(.calc-grid) {
-            grid-template-columns: 1fr !important;
+            grid-template-columns: minmax(0, 1fr) !important;
           }
         }
       `}</style>
@@ -1740,7 +1740,7 @@ export default function StepsPage() {
             grid-template-columns: 1fr 1fr !important;
           }
           :global(.steps-grid) {
-            grid-template-columns: 1fr !important;
+            grid-template-columns: minmax(0, 1fr) !important;
           }
         }
       `}</style>

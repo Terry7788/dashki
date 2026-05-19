@@ -1041,7 +1041,7 @@ export default function WeightPage() {
             grid-template-columns: 1fr 1fr !important;
           }
           :global(.weight-grid) {
-            grid-template-columns: 1fr !important;
+            grid-template-columns: minmax(0, 1fr) !important;
           }
         }
       `}</style>
