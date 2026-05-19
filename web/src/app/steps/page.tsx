@@ -22,6 +22,7 @@ import {
   Footprints,
   List,
   Calculator,
+  Calendar as CalendarIcon,
 } from 'lucide-react';
 import {
   GlassButton,
@@ -573,23 +574,29 @@ function LogStepsModal({
   isOpen,
   onClose,
   date,
+  goal,
+  dayTotal,
   onLogged,
 }: {
   isOpen: boolean;
   onClose: () => void;
   date: string;
+  goal: number;
+  dayTotal: number;
   onLogged: () => void;
 }) {
   const [steps, setSteps] = useState('');
   const [logDate, setLogDate] = useState(date);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setLogDate(date);
       setSteps('');
       setError('');
+      setPickerOpen(false);
     }
   }, [isOpen, date]);
 
@@ -609,28 +616,270 @@ function LogStepsModal({
     }
   }
 
+  const today = todayISO();
+  const yesterday = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return d.toLocaleString('en-CA').split(',')[0];
+  })();
+
+  const stepsNum = parseInt(steps, 10);
+  const projected =
+    !isNaN(stepsNum) && stepsNum > 0 ? dayTotal + stepsNum : dayTotal;
+  const pct = goal > 0 ? Math.min(1, projected / goal) : 0;
+  const pctLabel = Math.round(pct * 100);
+  const remaining = Math.max(0, goal - projected);
+
+  const subtitle = new Date(logDate + 'T00:00:00').toLocaleDateString('en-AU', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+
   return (
-    <GlassModal isOpen={isOpen} onClose={onClose} title="Log steps" size="sm">
-      <div className="space-y-4">
-        <GlassInput
-          label="Date"
-          type="date"
-          value={logDate}
-          onChange={(e) => setLogDate(e.target.value)}
-        />
-        <GlassInput
-          label="Steps"
-          type="number"
-          inputMode="numeric"
-          min={1}
-          step={100}
-          placeholder="e.g. 3000"
-          value={steps}
-          onChange={(e) => setSteps(e.target.value)}
-        />
+    <GlassModal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Log steps"
+      subtitle={subtitle}
+      size="sm"
+      footer={
+        <>
+          <GlassButton variant="ghost" size="sm" onClick={onClose} disabled={saving}>
+            Cancel
+          </GlassButton>
+          <GlassButton
+            variant="primary"
+            size="sm"
+            onClick={handleLog}
+            disabled={saving || !steps}
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </GlassButton>
+        </>
+      }
+    >
+      <div style={{ padding: 4 }}>
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: 'var(--color-muted-foreground)',
+            marginBottom: 6,
+          }}
+        >
+          Step count
+        </div>
+        <div style={{ position: 'relative', marginBottom: 14 }}>
+          <input
+            type="number"
+            inputMode="numeric"
+            min={1}
+            step={100}
+            value={steps}
+            onChange={(e) => setSteps(e.target.value)}
+            placeholder="—"
+            style={{
+              width: '100%',
+              padding: '16px 16px',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 32,
+              fontWeight: 700,
+              letterSpacing: '-1px',
+              textAlign: 'right',
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 8,
+              color: 'var(--color-foreground)',
+            }}
+            autoFocus
+          />
+        </div>
+
+        {/* Goal progress preview */}
+        <div
+          style={{
+            padding: 12,
+            background: 'var(--color-surface-warm)',
+            borderRadius: 8,
+            marginBottom: 14,
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'baseline',
+              marginBottom: 6,
+            }}
+          >
+            <MicroLabel>vs goal</MicroLabel>
+            <span
+              style={{
+                fontSize: 11,
+                color: 'var(--color-muted-foreground)',
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontWeight: 600,
+                  color: 'var(--color-foreground)',
+                }}
+              >
+                {pctLabel}%
+              </span>{' '}
+              of {goal.toLocaleString()}
+            </span>
+          </div>
+          <div
+            style={{
+              height: 6,
+              borderRadius: 9999,
+              background: 'var(--color-surface)',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                height: '100%',
+                width: pctLabel + '%',
+                background:
+                  pct >= 1 ? 'var(--color-success)' : 'var(--color-primary)',
+                borderRadius: 9999,
+                transition: 'width 240ms ease-out',
+              }}
+            />
+          </div>
+          <div
+            style={{
+              fontSize: 11,
+              color: 'var(--color-muted-foreground)',
+              marginTop: 6,
+            }}
+          >
+            {pct >= 1 ? (
+              <>Goal reached — nice.</>
+            ) : (
+              <>
+                <span
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    color: 'var(--color-foreground)',
+                    fontWeight: 600,
+                  }}
+                >
+                  {remaining.toLocaleString()}
+                </span>{' '}
+                steps to go today.
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Date */}
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: 'var(--color-muted-foreground)',
+            marginBottom: 6,
+          }}
+        >
+          Date
+        </div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {[
+            { label: 'Today', value: today },
+            { label: 'Yesterday', value: yesterday },
+          ].map((d) => {
+            const active = logDate === d.value;
+            return (
+              <button
+                key={d.value}
+                type="button"
+                onClick={() => {
+                  setLogDate(d.value);
+                  setPickerOpen(false);
+                }}
+                className="cursor-pointer"
+                style={{
+                  flex: 1,
+                  padding: '8px 12px',
+                  fontSize: 13,
+                  fontWeight: active ? 600 : 500,
+                  background: active
+                    ? 'var(--color-primary)'
+                    : 'var(--color-surface)',
+                  color: active
+                    ? 'var(--color-primary-foreground)'
+                    : 'var(--color-muted-foreground)',
+                  border: active ? '0' : '1px solid var(--color-border)',
+                  borderRadius: 6,
+                  fontFamily: 'inherit',
+                }}
+              >
+                {d.label}
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => setPickerOpen((o) => !o)}
+            className="cursor-pointer"
+            style={{
+              padding: '8px 12px',
+              fontSize: 13,
+              fontWeight: 500,
+              background:
+                logDate !== today && logDate !== yesterday
+                  ? 'var(--color-primary)'
+                  : 'var(--color-surface)',
+              color:
+                logDate !== today && logDate !== yesterday
+                  ? 'var(--color-primary-foreground)'
+                  : 'var(--color-muted-foreground)',
+              border:
+                logDate !== today && logDate !== yesterday
+                  ? '0'
+                  : '1px solid var(--color-border)',
+              borderRadius: 6,
+              fontFamily: 'inherit',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
+            <CalendarIcon style={{ width: 12, height: 12, strokeWidth: 2 }} />
+            Pick
+          </button>
+        </div>
+        {pickerOpen && (
+          <input
+            type="date"
+            value={logDate}
+            max={today}
+            onChange={(e) => setLogDate(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 4,
+              color: 'var(--color-foreground)',
+              fontFamily: 'inherit',
+              fontSize: 14,
+              marginTop: 8,
+            }}
+            autoFocus
+          />
+        )}
+
         {error && (
           <p
             style={{
+              marginTop: 12,
               fontSize: 13,
               color: 'var(--color-critical)',
               background: 'rgba(201,28,43,0.10)',
@@ -642,24 +891,6 @@ function LogStepsModal({
             {error}
           </p>
         )}
-        <div style={{ display: 'flex', gap: 8 }}>
-          <GlassButton
-            variant="outline"
-            size="sm"
-            onClick={onClose}
-            disabled={saving}
-          >
-            Cancel
-          </GlassButton>
-          <GlassButton
-            variant="primary"
-            size="sm"
-            onClick={handleLog}
-            disabled={saving || !steps}
-          >
-            {saving ? 'Logging…' : 'Log steps'}
-          </GlassButton>
-        </div>
       </div>
     </GlassModal>
   );
@@ -1512,6 +1743,8 @@ export default function StepsPage() {
         isOpen={logOpen}
         onClose={() => setLogOpen(false)}
         date={selectedDate}
+        goal={goal}
+        dayTotal={dailyTotal}
         onLogged={() => {
           loadData();
           loadLogs();

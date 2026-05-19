@@ -34,6 +34,8 @@ import {
   List,
   Trash2,
   Plus,
+  Calendar as CalendarIcon,
+  Target,
 } from 'lucide-react';
 
 const BASE_URL =
@@ -186,23 +188,31 @@ function LogWeightModal({
   isOpen,
   onClose,
   date,
+  prevWeight,
+  goalWeight,
+  streak,
   onLogged,
 }: {
   isOpen: boolean;
   onClose: () => void;
   date: string;
+  prevWeight: number | null;
+  goalWeight: number | null;
+  streak: number;
   onLogged: (entry: WeightEntry) => void;
 }) {
   const [weight, setWeight] = useState('');
   const [logDate, setLogDate] = useState(date);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setLogDate(date);
       setWeight('');
       setError('');
+      setPickerOpen(false);
     }
   }, [isOpen, date]);
 
@@ -222,28 +232,259 @@ function LogWeightModal({
     }
   }
 
+  const today = todayISO();
+  const yesterday = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return d.toLocaleString('en-CA').split(',')[0];
+  })();
+
+  const kgNum = parseFloat(weight);
+  const diff =
+    !isNaN(kgNum) && prevWeight != null
+      ? Math.round((kgNum - prevWeight) * 10) / 10
+      : null;
+  const toGoal =
+    !isNaN(kgNum) && goalWeight != null
+      ? Math.round((kgNum - goalWeight) * 10) / 10
+      : null;
+
+  const subtitle = new Date(logDate + 'T00:00:00').toLocaleDateString('en-AU', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+
   return (
-    <GlassModal isOpen={isOpen} onClose={onClose} title="Log weight" size="sm">
-      <div className="space-y-4">
-        <GlassInput
-          label="Date"
-          type="date"
-          value={logDate}
-          onChange={(e) => setLogDate(e.target.value)}
-        />
-        <GlassInput
-          label="Weight (kg)"
-          type="number"
-          inputMode="decimal"
-          step={0.1}
-          min={0}
-          placeholder="e.g. 75.5"
-          value={weight}
-          onChange={(e) => setWeight(e.target.value)}
-        />
+    <GlassModal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Log weight"
+      subtitle={subtitle}
+      size="sm"
+      footer={
+        <>
+          <GlassButton variant="ghost" size="sm" onClick={onClose} disabled={saving}>
+            Cancel
+          </GlassButton>
+          <GlassButton
+            variant="primary"
+            size="sm"
+            onClick={handleLog}
+            disabled={saving || !weight}
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </GlassButton>
+        </>
+      }
+    >
+      <div style={{ padding: 4 }}>
+        {/* Hero number input */}
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: 'var(--color-muted-foreground)',
+            marginBottom: 6,
+          }}
+        >
+          Today&rsquo;s weight
+        </div>
+        <div style={{ position: 'relative', marginBottom: 12 }}>
+          <input
+            type="number"
+            inputMode="decimal"
+            step={0.1}
+            min={0}
+            value={weight}
+            onChange={(e) => setWeight(e.target.value)}
+            placeholder="—"
+            style={{
+              width: '100%',
+              padding: '16px 50px 16px 16px',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 32,
+              fontWeight: 700,
+              letterSpacing: '-1px',
+              textAlign: 'right',
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 8,
+              color: 'var(--color-foreground)',
+            }}
+            autoFocus
+          />
+          <span
+            style={{
+              position: 'absolute',
+              right: 18,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              fontSize: 14,
+              color: 'var(--color-muted-foreground)',
+              fontWeight: 600,
+            }}
+          >
+            kg
+          </span>
+        </div>
+
+        {/* Diff hint */}
+        {diff !== null && prevWeight != null && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              fontSize: 12,
+              color: 'var(--color-muted-foreground)',
+              marginBottom: 16,
+            }}
+          >
+            <Pill tone={diff < 0 ? 'success' : diff > 0 ? 'warning' : 'neutral'} dot>
+              {diff > 0 ? '+' : ''}
+              {diff} kg
+            </Pill>
+            <span>
+              from previous ({prevWeight.toFixed(1)} kg)
+            </span>
+          </div>
+        )}
+
+        {/* Date adjust */}
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: 'var(--color-muted-foreground)',
+            marginBottom: 6,
+          }}
+        >
+          Date
+        </div>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+          {[
+            { label: 'Today', value: today },
+            { label: 'Yesterday', value: yesterday },
+          ].map((d) => {
+            const active = logDate === d.value;
+            return (
+              <button
+                key={d.value}
+                type="button"
+                onClick={() => {
+                  setLogDate(d.value);
+                  setPickerOpen(false);
+                }}
+                className="cursor-pointer"
+                style={{
+                  flex: 1,
+                  padding: '8px 12px',
+                  fontSize: 13,
+                  fontWeight: active ? 600 : 500,
+                  background: active
+                    ? 'var(--color-primary)'
+                    : 'var(--color-surface)',
+                  color: active
+                    ? 'var(--color-primary-foreground)'
+                    : 'var(--color-muted-foreground)',
+                  border: active ? '0' : '1px solid var(--color-border)',
+                  borderRadius: 6,
+                  fontFamily: 'inherit',
+                }}
+              >
+                {d.label}
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => setPickerOpen((o) => !o)}
+            className="cursor-pointer"
+            style={{
+              padding: '8px 12px',
+              fontSize: 13,
+              fontWeight: 500,
+              background:
+                logDate !== today && logDate !== yesterday
+                  ? 'var(--color-primary)'
+                  : 'var(--color-surface)',
+              color:
+                logDate !== today && logDate !== yesterday
+                  ? 'var(--color-primary-foreground)'
+                  : 'var(--color-muted-foreground)',
+              border:
+                logDate !== today && logDate !== yesterday
+                  ? '0'
+                  : '1px solid var(--color-border)',
+              borderRadius: 6,
+              fontFamily: 'inherit',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
+            <CalendarIcon style={{ width: 12, height: 12, strokeWidth: 2 }} />
+            Pick
+          </button>
+        </div>
+        {pickerOpen && (
+          <input
+            type="date"
+            value={logDate}
+            max={today}
+            onChange={(e) => setLogDate(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 4,
+              color: 'var(--color-foreground)',
+              fontFamily: 'inherit',
+              fontSize: 14,
+              marginBottom: 14,
+            }}
+            autoFocus
+          />
+        )}
+
+        <div
+          style={{
+            fontSize: 11,
+            color: 'var(--color-muted-foreground)',
+            lineHeight: 1.5,
+          }}
+        >
+          {goalWeight != null && (
+            <>
+              Goal{' '}
+              <span
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  color: 'var(--color-foreground)',
+                  fontWeight: 600,
+                }}
+              >
+                {goalWeight.toFixed(1)} kg
+              </span>
+              {toGoal != null && (
+                <>
+                  {' · '}
+                  {Math.abs(toGoal).toFixed(1)} kg{' '}
+                  {toGoal > 0 ? 'to go' : toGoal < 0 ? 'past' : 'reached'}
+                </>
+              )}
+              {streak > 0 && ` · ${streak}-day logging streak.`}
+            </>
+          )}
+        </div>
+
         {error && (
           <p
             style={{
+              marginTop: 12,
               fontSize: 13,
               color: 'var(--color-critical)',
               background: 'rgba(201,28,43,0.10)',
@@ -255,19 +496,6 @@ function LogWeightModal({
             {error}
           </p>
         )}
-        <div style={{ display: 'flex', gap: 8 }}>
-          <GlassButton variant="outline" size="sm" onClick={onClose} disabled={saving}>
-            Cancel
-          </GlassButton>
-          <GlassButton
-            variant="primary"
-            size="sm"
-            onClick={handleLog}
-            disabled={saving || !weight}
-          >
-            {saving ? 'Logging…' : 'Log weight'}
-          </GlassButton>
-        </div>
       </div>
     </GlassModal>
   );
@@ -794,6 +1022,9 @@ export default function WeightPage() {
         isOpen={logOpen}
         onClose={() => setLogOpen(false)}
         date={todayISO()}
+        prevWeight={last?.weight_kg ?? null}
+        goalWeight={goalWeight}
+        streak={streak}
         onLogged={handleLogged}
       />
     </main>

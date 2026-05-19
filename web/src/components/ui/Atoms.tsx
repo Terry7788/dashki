@@ -432,6 +432,159 @@ export function MacroBar({
   );
 }
 
+// ─── Stepper — ±step numeric input (used in modals) ─────────
+
+export function Stepper({
+  value,
+  onChange,
+  min = 0.25,
+  max = 99,
+  step = 0.25,
+  suffix = '×',
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+  suffix?: string;
+}) {
+  const dec = () =>
+    onChange(Math.max(min, Math.round((value - step) * 100) / 100));
+  const inc = () =>
+    onChange(Math.min(max, Math.round((value + step) * 100) / 100));
+  return (
+    <div
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        border: '1px solid var(--color-border)',
+        borderRadius: 6,
+        background: 'var(--color-surface)',
+        overflow: 'hidden',
+      }}
+    >
+      <button
+        onClick={dec}
+        type="button"
+        className="cursor-pointer"
+        style={{
+          width: 36,
+          height: 36,
+          background: 'transparent',
+          border: 0,
+          color: 'var(--color-foreground)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 16,
+          fontWeight: 600,
+        }}
+        aria-label="Decrease"
+      >
+        −
+      </button>
+      <div
+        style={{
+          minWidth: 56,
+          padding: '0 8px',
+          textAlign: 'center',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 14,
+          fontWeight: 700,
+          borderLeft: '1px solid var(--color-border)',
+          borderRight: '1px solid var(--color-border)',
+          height: 36,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        {value}
+        {suffix}
+      </div>
+      <button
+        onClick={inc}
+        type="button"
+        className="cursor-pointer"
+        style={{
+          width: 36,
+          height: 36,
+          background: 'transparent',
+          border: 0,
+          color: 'var(--color-foreground)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 16,
+          fontWeight: 600,
+        }}
+        aria-label="Increase"
+      >
+        +
+      </button>
+    </div>
+  );
+}
+
+// ─── SegmentedControl — radio-like pill row ──────────────────
+
+export function SegmentedControl<T extends string>({
+  value,
+  options,
+  onChange,
+  size = 'sm',
+}: {
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (v: T) => void;
+  size?: 'xs' | 'sm';
+}) {
+  const padY = size === 'xs' ? '4px' : '6px';
+  const fz = size === 'xs' ? 11 : 12;
+  return (
+    <div
+      style={{
+        display: 'flex',
+        gap: 0,
+        padding: 3,
+        background: 'var(--color-surface-warm)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 6,
+      }}
+    >
+      {options.map((o) => {
+        const active = o.value === value;
+        return (
+          <button
+            key={o.value}
+            type="button"
+            onClick={() => onChange(o.value)}
+            className="cursor-pointer"
+            style={{
+              flex: 1,
+              padding: `${padY} 10px`,
+              borderRadius: 4,
+              background: active ? 'var(--color-surface)' : 'transparent',
+              color: active
+                ? 'var(--color-foreground)'
+                : 'var(--color-muted-foreground)',
+              border: 0,
+              fontSize: fz,
+              fontWeight: 600,
+              boxShadow: active ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+              fontFamily: 'inherit',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Sparkline ───────────────────────────────────────────────
 
 export function Sparkline({

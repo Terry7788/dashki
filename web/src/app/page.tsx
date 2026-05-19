@@ -24,6 +24,7 @@ import {
 } from '@/components/ui';
 import {
   getJournalSummary,
+  getJournalEntries,
   getSteps,
   getWeightEntries,
   addWeightEntry,
@@ -108,6 +109,12 @@ export default function DashboardPage() {
   const [weightHistory, setWeightHistory] = useState<WeightEntry[]>([]);
   const [goals, setGoals] = useState<Goals>(DEFAULT_GOALS);
   const [displayName, setDisplayName] = useState<string | null>(null);
+  const [weekJournal, setWeekJournal] = useState<
+    { date: string; cal: number; protein: number; partial?: boolean }[]
+  >([]);
+  const [weekSteps, setWeekSteps] = useState<{ date: string; steps: number }[]>(
+    []
+  );
 
   // Modals
   const [weightModal, setWeightModal] = useState(false);
@@ -138,16 +145,55 @@ export default function DashboardPage() {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [summaryData, stepsData, weightData, goalsData] = await Promise.allSettled([
+      // Last 7 days inclusive of today, oldest first.
+      const week = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date();
+        d.setDate(d.getDate() - (6 - i));
+        return d.toLocaleString('en-CA').split(',')[0];
+      });
+      const earliest = week[0];
+
+      const [
+        summaryData,
+        stepsTodayData,
+        weekStepsData,
+        weekJournalData,
+        weightData,
+        goalsData,
+      ] = await Promise.allSettled([
         getJournalSummary(today),
         getSteps({ date: today }),
+        getSteps({ startDate: earliest, endDate: today }),
+        getJournalEntries({ startDate: earliest, endDate: today }),
         getWeightEntries({ limit: 60 }),
         getGoals(),
       ]);
       if (summaryData.status === 'fulfilled') setSummary(summaryData.value);
-      if (stepsData.status === 'fulfilled') {
-        const arr = stepsData.value;
+      if (stepsTodayData.status === 'fulfilled') {
+        const arr = stepsTodayData.value;
         setSteps(arr.length > 0 ? arr[0] : null);
+      }
+      if (weekStepsData.status === 'fulfilled') {
+        const byDate = new Map<string, number>();
+        for (const s of weekStepsData.value) byDate.set(s.date, s.steps);
+        setWeekSteps(week.map((d) => ({ date: d, steps: byDate.get(d) ?? 0 })));
+      }
+      if (weekJournalData.status === 'fulfilled') {
+        const byDate = new Map<string, { cal: number; protein: number }>();
+        for (const e of weekJournalData.value) {
+          const cur = byDate.get(e.date) ?? { cal: 0, protein: 0 };
+          cur.cal += e.calories_snapshot ?? 0;
+          cur.protein += e.protein_snapshot ?? 0;
+          byDate.set(e.date, cur);
+        }
+        setWeekJournal(
+          week.map((d) => ({
+            date: d,
+            cal: byDate.get(d)?.cal ?? 0,
+            protein: byDate.get(d)?.protein ?? 0,
+            partial: d === today,
+          }))
+        );
       }
       if (weightData.status === 'fulfilled') {
         setWeightHistory(weightData.value ?? []);
@@ -309,6 +355,8 @@ export default function DashboardPage() {
           protein={protein}
           todaySteps={todaySteps}
           weightHistory={weightHistory}
+          weekJournal={weekJournal}
+          weekSteps={weekSteps}
           goals={goals}
         />
       )}
@@ -842,6 +890,8 @@ function WeekVariant({
   protein,
   todaySteps,
   weightHistory,
+  weekJournal,
+  weekSteps,
   goals,
 }: {
   loading: boolean;
@@ -850,16 +900,36 @@ function WeekVariant({
   protein: number;
   todaySteps: number;
   weightHistory: WeightEntry[];
+  weekJournal: { date: string; cal: number; protein: number; partial?: boolean }[];
+  weekSteps: { date: string; steps: number }[];
   goals: Goals;
 }) {
   const entries = summary?.entries ?? [];
+  const today = todayISO();
 
-  // Last 7 days of weight (oldest → newest) for the trend mini.
-  const weight7 = useMemo(() => {
+  // 7-day average (excludes today's partial)
+  const avg7 = useMemo(() => {
+    const past = weekJournal.filter((d) => !d.partial && d.cal > 0);
+    if (past.length === 0) return null;
+    return Math.round(past.reduce((a, d) => a + d.cal, 0) / past.length);
+  }, [weekJournal]);
+
+  // Weight: most-recent (60d limit) — show last 30 in sparkline
+  const weight30 = useMemo(() => {
     return [...weightHistory]
       .sort((a, b) => a.date.localeCompare(b.date))
-      .slice(-7);
+      .slice(-30);
   }, [weightHistory]);
+
+  // Week window label (oldest → newest)
+  const weekRangeLabel = useMemo(() => {
+    if (weekJournal.length < 2) return '';
+    const start = new Date(weekJournal[0].date + 'T00:00:00');
+    const end = new Date(weekJournal[weekJournal.length - 1].date + 'T00:00:00');
+    const fmt = (d: Date) =>
+      d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+    return `${fmt(start)} – ${fmt(end)}`;
+  }, [weekJournal]);
 
   return (
     <div
@@ -870,45 +940,93 @@ function WeekVariant({
         gap: 16,
       }}
     >
+      {/* This week — vertical DayStack viz with steps row beneath */}
       <CardShell
         title="This week"
         icon={<CalendarIcon style={{ width: 14, height: 14, strokeWidth: 2.25 }} />}
         hint={
-          <Pill tone="medium">
-            {goals.calories
-              ? `${Math.round((calories / goals.calories) * 100)}% to goal`
-              : ''}
-          </Pill>
+          weekRangeLabel ? (
+            <span style={{ color: 'var(--color-muted-foreground)', fontSize: 12 }}>
+              {weekRangeLabel}
+              {avg7 != null && (
+                <>
+                  {' '}
+                  · 7-day average{' '}
+                  <span
+                    style={{
+                      fontFamily: 'var(--font-mono)',
+                      color: 'var(--color-foreground)',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {avg7.toLocaleString()} kcal
+                  </span>
+                </>
+              )}
+            </span>
+          ) : undefined
         }
       >
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr 1fr',
-            gap: 14,
-          }}
-        >
-          <BigTile
-            label="Calories"
-            value={calories}
-            target={goals.calories}
-            unit=" kcal"
-          />
-          <BigTile
-            label="Protein"
-            value={protein}
-            target={goals.protein}
-            unit=" g"
-          />
-          <BigTile
-            label="Steps"
-            value={todaySteps}
-            target={goals.steps}
-            unit=""
-          />
-        </div>
+        {loading || weekJournal.length === 0 ? (
+          <div className="skeleton" style={{ height: 180, borderRadius: 8 }} />
+        ) : (
+          <>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(7, 1fr)',
+                gap: 8,
+              }}
+            >
+              {weekJournal.map((d) => (
+                <DayStack
+                  key={d.date}
+                  day={d}
+                  isToday={d.date === today}
+                  goal={goals.calories}
+                />
+              ))}
+            </div>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(7, 1fr)',
+                gap: 8,
+                marginTop: 8,
+              }}
+            >
+              {weekSteps.map((d) => (
+                <div
+                  key={d.date}
+                  style={{ textAlign: 'center', paddingTop: 4 }}
+                >
+                  <Footprints
+                    style={{
+                      width: 11,
+                      height: 11,
+                      strokeWidth: 2,
+                      color: 'var(--color-muted-foreground)',
+                      display: 'inline-block',
+                    }}
+                  />
+                  <div
+                    style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 10,
+                      color: 'var(--color-muted-foreground)',
+                      marginTop: 2,
+                    }}
+                  >
+                    {(d.steps / 1000).toFixed(1)}k
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </CardShell>
 
+      {/* Today + side rail */}
       <div
         style={{
           display: 'grid',
@@ -921,28 +1039,56 @@ function WeekVariant({
           title="Today"
           icon={<Utensils style={{ width: 14, height: 14, strokeWidth: 2.25 }} />}
           hint={
-            <span
-              style={{
-                color: 'var(--color-muted-foreground)',
-                fontSize: 12,
-              }}
-            >
-              {entries.length} entries
-            </span>
+            <Pill tone="medium">
+              {goals.calories
+                ? `${Math.round((calories / goals.calories) * 100)}% to goal`
+                : ''}
+            </Pill>
           }
         >
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr 1fr',
+              gap: 14,
+            }}
+          >
+            <BigTile
+              label="Calories"
+              value={calories}
+              target={goals.calories}
+              unit=" kcal"
+            />
+            <BigTile
+              label="Protein"
+              value={protein}
+              target={goals.protein}
+              unit=" g"
+            />
+            <BigTile
+              label="Steps"
+              value={todaySteps}
+              target={goals.steps}
+              unit=""
+            />
+          </div>
+
           {loading ? (
-            <div className="skeleton" style={{ height: 200, borderRadius: 8 }} />
+            <div
+              className="skeleton"
+              style={{ height: 120, borderRadius: 8, marginTop: 16 }}
+            />
           ) : entries.length === 0 ? (
             <div
               style={{
                 background: 'var(--color-surface-warm)',
                 border: '1px dashed var(--color-border)',
                 borderRadius: 12,
-                padding: '24px 16px',
+                padding: '20px 16px',
                 textAlign: 'center',
                 color: 'var(--color-muted-foreground)',
                 fontSize: 13,
+                marginTop: 16,
               }}
             >
               No food logged yet today.{' '}
@@ -953,12 +1099,12 @@ function WeekVariant({
           ) : (
             <div
               style={{
+                marginTop: 16,
                 display: 'flex',
                 flexDirection: 'column',
-                gap: 4,
               }}
             >
-              {entries.map((e) => (
+              {entries.slice(0, 10).map((e) => (
                 <div
                   key={e.id}
                   style={{
@@ -966,10 +1112,20 @@ function WeekVariant({
                     alignItems: 'center',
                     gap: 8,
                     fontSize: 13,
-                    padding: '4px 0',
+                    padding: '6px 0',
                     borderBottom: '1px solid var(--color-border)',
                   }}
                 >
+                  <span
+                    style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 11,
+                      color: 'var(--color-muted-foreground)',
+                      width: 38,
+                    }}
+                  >
+                    {(e.logged_at || '').slice(11, 16)}
+                  </span>
                   <Pill
                     tone={
                       e.meal_type === 'breakfast'
@@ -1013,14 +1169,25 @@ function WeekVariant({
                   </span>
                 </div>
               ))}
+              {entries.length > 10 && (
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: 'var(--color-muted-foreground)',
+                    marginTop: 6,
+                  }}
+                >
+                  +{entries.length - 10} more · <a href="/journal" style={{ color: 'var(--color-link)' }}>open journal</a>
+                </div>
+              )}
             </div>
           )}
         </CardShell>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <GlassCard padding={false} className="p-4">
-            <MicroLabel>Weight trend</MicroLabel>
-            {weight7.length > 0 ? (
+            <MicroLabel>Weight trend · 30 days</MicroLabel>
+            {weight30.length > 0 ? (
               <>
                 <div
                   style={{
@@ -1031,7 +1198,7 @@ function WeekVariant({
                   }}
                 >
                   <MonoNum size={28}>
-                    {weight7[weight7.length - 1].weight_kg.toFixed(1)}
+                    {weight30[weight30.length - 1].weight_kg.toFixed(1)}
                   </MonoNum>
                   <span
                     style={{
@@ -1041,18 +1208,26 @@ function WeekVariant({
                   >
                     kg
                   </span>
-                  {weight7.length > 1 && (
-                    <Pill tone="success" style={{ marginLeft: 'auto' }}>
+                  {weight30.length > 1 && (
+                    <Pill
+                      tone={
+                        weight30[weight30.length - 1].weight_kg <
+                        weight30[0].weight_kg
+                          ? 'success'
+                          : 'warning'
+                      }
+                      style={{ marginLeft: 'auto' }}
+                    >
                       {(
-                        weight7[weight7.length - 1].weight_kg -
-                        weight7[0].weight_kg
+                        weight30[weight30.length - 1].weight_kg -
+                        weight30[0].weight_kg
                       ).toFixed(1)}{' '}
                       kg
                     </Pill>
                   )}
                 </div>
                 <Sparkline
-                  data={weight7.map((w) => w.weight_kg)}
+                  data={weight30.map((w) => w.weight_kg)}
                   stroke="var(--color-primary)"
                   height={48}
                   fill
@@ -1113,11 +1288,108 @@ function WeekVariant({
 
       <style jsx>{`
         @media (max-width: 900px) {
-          .week-grid {
+          :global(.week-grid) {
             grid-template-columns: 1fr !important;
           }
         }
       `}</style>
+    </div>
+  );
+}
+
+// ─── DayStack — vertical bar showing one day's calorie load vs goal ──────────
+
+function DayStack({
+  day,
+  isToday,
+  goal,
+}: {
+  day: { date: string; cal: number; protein: number; partial?: boolean };
+  isToday: boolean;
+  goal: number;
+}) {
+  const pct = goal > 0 ? Math.min(1, day.cal / goal) : 0;
+  const d = new Date(day.date + 'T00:00:00');
+  const fill =
+    day.partial
+      ? 'var(--color-warning)'
+      : pct >= 0.95
+      ? 'var(--color-success)'
+      : 'var(--color-primary)';
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 6,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 11,
+          color: 'var(--color-muted-foreground)',
+          fontWeight: isToday ? 700 : 500,
+        }}
+      >
+        {d.toLocaleDateString('en-AU', { weekday: 'short' })}
+      </div>
+      <div
+        style={{
+          position: 'relative',
+          width: '100%',
+          height: 120,
+          borderRadius: 8,
+          background: 'var(--color-surface-warm)',
+          overflow: 'hidden',
+          border: isToday
+            ? '1px solid var(--color-primary)'
+            : '1px solid var(--color-border)',
+        }}
+      >
+        <div
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: `${pct * 100}%`,
+            background: fill,
+            opacity: 0.85,
+            transition: 'height 240ms ease-out',
+          }}
+        />
+        {/* Dashed goal line at the top edge */}
+        <div
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            top: 4,
+            height: 1,
+            borderTop: '1px dashed var(--color-warm-gray-300)',
+          }}
+        />
+      </div>
+      <div
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11,
+          fontWeight: 600,
+          color: isToday ? 'var(--color-primary)' : 'var(--color-foreground)',
+        }}
+      >
+        {day.cal === 0 ? '—' : (day.cal / 1000).toFixed(1) + 'k'}
+      </div>
+      <div
+        style={{
+          fontSize: 10,
+          color: 'var(--color-muted-foreground)',
+          marginTop: -3,
+        }}
+      >
+        {day.protein > 0 ? `${Math.round(day.protein)}g` : ''}
+      </div>
     </div>
   );
 }

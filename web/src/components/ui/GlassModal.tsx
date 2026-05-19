@@ -10,10 +10,19 @@ interface GlassModalProps {
   isOpen: boolean;
   onClose: () => void;
   title: string;
+  /** Optional second line under the title (e.g. "Tuesday, 19 May 2026") */
+  subtitle?: string;
+  /** Optional content rendered to the right of the title (e.g. a meal-type segmented control) */
+  headerTrailing?: ReactNode;
   children: ReactNode;
   size?: ModalSize;
   minHeight?: string;
+  /** Right-aligned footer content (Cancel + primary action) */
   footer?: ReactNode;
+  /** Left-aligned footer content (e.g. a destructive Delete button) */
+  leadingFooter?: ReactNode;
+  /** When false, hides the X close button in the header (defaults to true) */
+  showCloseButton?: boolean;
   mobileFullscreen?: boolean;
 }
 
@@ -35,10 +44,14 @@ export default function GlassModal({
   isOpen,
   onClose,
   title,
+  subtitle,
+  headerTrailing,
   children,
   size = 'md',
   minHeight,
   footer,
+  leadingFooter,
+  showCloseButton = true,
   mobileFullscreen = false,
 }: GlassModalProps) {
   const handleKeyDown = useCallback(
@@ -134,39 +147,56 @@ export default function GlassModal({
       >
         {/* Header */}
         <div
-          className="flex-shrink-0 flex items-center justify-between"
+          className="flex-shrink-0 flex items-center"
           style={{
             padding: '14px 20px',
             borderBottom: '1px solid var(--color-border)',
+            gap: 10,
           }}
         >
-          <h2
-            id="modal-title"
-            style={{
-              margin: 0,
-              fontSize: 16,
-              fontWeight: 700,
-              letterSpacing: '-0.2px',
-              color: 'var(--color-foreground)',
-            }}
-          >
-            {title}
-          </h2>
-          <button
-            onClick={onClose}
-            className="cursor-pointer flex items-center justify-center"
-            style={{
-              width: 28,
-              height: 28,
-              background: 'transparent',
-              border: 0,
-              color: 'var(--color-muted-foreground)',
-              borderRadius: 4,
-            }}
-            aria-label="Close modal"
-          >
-            <X style={{ width: 18, height: 18 }} />
-          </button>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h2
+              id="modal-title"
+              style={{
+                margin: 0,
+                fontSize: 16,
+                fontWeight: 700,
+                letterSpacing: '-0.25px',
+                color: 'var(--color-foreground)',
+              }}
+            >
+              {title}
+            </h2>
+            {subtitle && (
+              <div
+                style={{
+                  fontSize: 12,
+                  color: 'var(--color-muted-foreground)',
+                  marginTop: 1,
+                }}
+              >
+                {subtitle}
+              </div>
+            )}
+          </div>
+          {headerTrailing}
+          {showCloseButton && (
+            <button
+              onClick={onClose}
+              className="cursor-pointer flex items-center justify-center"
+              style={{
+                width: 28,
+                height: 28,
+                background: 'transparent',
+                border: 0,
+                color: 'var(--color-muted-foreground)',
+                borderRadius: 4,
+              }}
+              aria-label="Close modal"
+            >
+              <X style={{ width: 18, height: 18 }} />
+            </button>
+          )}
         </div>
 
         {/* Body */}
@@ -174,16 +204,21 @@ export default function GlassModal({
           {children}
         </div>
 
-        {/* Optional footer */}
-        {footer && (
+        {/* Optional footer (supports a leading slot for destructive actions) */}
+        {(footer || leadingFooter) && (
           <div
             className="flex-shrink-0"
             style={{
               padding: '12px 20px',
               borderTop: '1px solid var(--color-border)',
               background: 'var(--color-surface-warm)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
             }}
           >
+            {leadingFooter}
+            <div style={{ flex: 1 }} />
             {footer}
           </div>
         )}

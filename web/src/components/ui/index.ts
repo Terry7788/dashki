@@ -12,5 +12,7 @@ export {
   CalorieRing,
   MacroBar,
   Sparkline,
+  Stepper,
+  SegmentedControl,
 } from './Atoms';
 export type { PillTone } from './Atoms';

@@ -36,35 +36,18 @@ export default function MobileHeader({ onMenuToggle }: MobileHeaderProps) {
             width: 24,
             height: 24,
             borderRadius: 5,
-            background:
-              'linear-gradient(135deg, var(--color-primary) 0%, var(--color-teal) 100%)',
+            overflow: 'hidden',
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
-            boxShadow: 'inset 0 0 0 0.5px rgba(255,255,255,0.2)',
           }}
         >
-          <svg viewBox="0 0 32 32" width={18} height={18} aria-hidden>
-            <g
-              stroke="#ffffff"
-              strokeOpacity="0.55"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              fill="none"
-            >
-              <line x1="16" y1="16" x2="16" y2="7" />
-              <line x1="16" y1="16" x2="25" y2="16" />
-              <line x1="16" y1="16" x2="16" y2="25" />
-              <line x1="16" y1="16" x2="7" y2="16" />
-            </g>
-            <g fill="#ffffff">
-              <circle cx="16" cy="16" r="2.8" />
-              <circle cx="16" cy="6" r="1.9" />
-              <circle cx="26" cy="16" r="1.9" />
-              <circle cx="16" cy="26" r="1.9" />
-              <circle cx="6" cy="16" r="1.9" />
-            </g>
-          </svg>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/web/icon-192.png"
+            alt="Dashki"
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
         </div>
         <span
           style={{

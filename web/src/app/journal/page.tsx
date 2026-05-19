@@ -738,7 +738,6 @@ function EditGoalsModal({ isOpen, onClose, goals, onSave }: EditGoalsModalProps)
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Sync when goals change externally
   useEffect(() => {
     setCalories(String(goals.calories));
     setProtein(String(goals.protein));
@@ -746,8 +745,6 @@ function EditGoalsModal({ isOpen, onClose, goals, onSave }: EditGoalsModalProps)
 
   async function handleSave() {
     setError(null);
-    // Use Number (not parseInt) so decimal goals like 1850.5 aren't silently
-    // truncated to 1850 now that the inputs accept decimal entry.
     const cal = Number(calories);
     const pro = Number(protein);
     if (!Number.isFinite(cal) || cal < 1 || !Number.isFinite(pro) || pro < 1) {
@@ -765,40 +762,251 @@ function EditGoalsModal({ isOpen, onClose, goals, onSave }: EditGoalsModalProps)
     }
   }
 
+  const calSuggestions = [1800, 1900, 2000, 2100, 2200, 2300];
+  const proSuggestions = [120, 140, 150, 160, 180, 200];
+  const calNum = Number(calories);
+  const proNum = Number(protein);
+
   return (
-    <GlassModal isOpen={isOpen} onClose={onClose} title="Edit Daily Goals" size="sm">
-      <div className="space-y-4">
-        <GlassInput
-          label="Calorie Goal (kcal)"
-          type="number"
-          inputMode="decimal"
-          value={calories}
-          onChange={(e) => setCalories(e.target.value)}
-          min={1}
-          step={50}
-          disabled={saving}
-        />
-        <GlassInput
-          label="Protein Goal (g)"
-          type="number"
-          inputMode="decimal"
-          value={protein}
-          onChange={(e) => setProtein(e.target.value)}
-          min={1}
-          step={5}
-          disabled={saving}
-        />
+    <GlassModal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Daily goals"
+      subtitle="Used across the dashboard"
+      size="sm"
+      footer={
+        <>
+          <GlassButton variant="ghost" size="sm" onClick={onClose} disabled={saving}>
+            Cancel
+          </GlassButton>
+          <GlassButton
+            variant="primary"
+            size="sm"
+            onClick={handleSave}
+            disabled={saving}
+          >
+            {saving ? 'Saving…' : 'Save goals'}
+          </GlassButton>
+        </>
+      }
+    >
+      <div style={{ padding: 4 }}>
+        {/* Calories — hero input */}
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: 'var(--color-muted-foreground)',
+            marginBottom: 6,
+          }}
+        >
+          Calorie goal
+        </div>
+        <div style={{ position: 'relative', marginBottom: 12 }}>
+          <input
+            type="number"
+            inputMode="decimal"
+            value={calories}
+            onChange={(e) => setCalories(e.target.value)}
+            min={1}
+            step={50}
+            disabled={saving}
+            style={{
+              width: '100%',
+              padding: '16px 60px 16px 16px',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 28,
+              fontWeight: 700,
+              letterSpacing: '-0.8px',
+              textAlign: 'right',
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 8,
+              color: 'var(--color-foreground)',
+            }}
+          />
+          <span
+            style={{
+              position: 'absolute',
+              right: 16,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              fontSize: 13,
+              color: 'var(--color-muted-foreground)',
+              fontWeight: 600,
+            }}
+          >
+            kcal
+          </span>
+        </div>
+        <div
+          style={{
+            display: 'flex',
+            gap: 6,
+            marginBottom: 18,
+          }}
+        >
+          {calSuggestions.map((n) => {
+            const active = n === calNum;
+            return (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setCalories(String(n))}
+                className="cursor-pointer"
+                style={{
+                  flex: 1,
+                  padding: '8px 0',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  background: active
+                    ? 'var(--color-foreground)'
+                    : 'var(--color-surface)',
+                  color: active
+                    ? 'var(--color-background)'
+                    : 'var(--color-muted-foreground)',
+                  border:
+                    '1px solid ' +
+                    (active ? 'var(--color-foreground)' : 'var(--color-border)'),
+                  borderRadius: 6,
+                }}
+              >
+                {n}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Protein */}
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: 'var(--color-muted-foreground)',
+            marginBottom: 6,
+          }}
+        >
+          Protein goal
+        </div>
+        <div style={{ position: 'relative', marginBottom: 10 }}>
+          <input
+            type="number"
+            inputMode="decimal"
+            value={protein}
+            onChange={(e) => setProtein(e.target.value)}
+            min={1}
+            step={5}
+            disabled={saving}
+            style={{
+              width: '100%',
+              padding: '12px 40px 12px 14px',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 18,
+              fontWeight: 700,
+              textAlign: 'right',
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 6,
+              color: 'var(--color-foreground)',
+            }}
+          />
+          <span
+            style={{
+              position: 'absolute',
+              right: 14,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              fontSize: 12,
+              color: 'var(--color-muted-foreground)',
+              fontWeight: 600,
+            }}
+          >
+            g
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+          {proSuggestions.map((n) => {
+            const active = n === proNum;
+            return (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setProtein(String(n))}
+                className="cursor-pointer"
+                style={{
+                  flex: 1,
+                  padding: '6px 0',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  background: active
+                    ? 'var(--color-foreground)'
+                    : 'var(--color-surface)',
+                  color: active
+                    ? 'var(--color-background)'
+                    : 'var(--color-muted-foreground)',
+                  border:
+                    '1px solid ' +
+                    (active ? 'var(--color-foreground)' : 'var(--color-border)'),
+                  borderRadius: 6,
+                }}
+              >
+                {n}g
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Advisory */}
+        <div
+          style={{
+            padding: 12,
+            background: 'var(--color-surface-warm)',
+            borderRadius: 8,
+            fontSize: 12,
+            color: 'var(--color-muted-foreground)',
+            lineHeight: 1.5,
+          }}
+        >
+          Most active adults land between{' '}
+          <span
+            style={{
+              fontFamily: 'var(--font-mono)',
+              color: 'var(--color-foreground)',
+              fontWeight: 600,
+            }}
+          >
+            2,000 – 2,500 kcal
+          </span>{' '}
+          and{' '}
+          <span
+            style={{
+              fontFamily: 'var(--font-mono)',
+              color: 'var(--color-foreground)',
+              fontWeight: 600,
+            }}
+          >
+            140 – 180g protein
+          </span>{' '}
+          depending on size and activity. Adjust to fit your reality.
+        </div>
+
         {error && (
-          <p className="text-sm text-red-400 bg-red-500/10 border border-red-400/20 rounded-xl px-3 py-2">
+          <p
+            style={{
+              marginTop: 12,
+              fontSize: 13,
+              color: 'var(--color-critical)',
+              background: 'rgba(201,28,43,0.10)',
+              border: '1px solid rgba(201,28,43,0.25)',
+              padding: '8px 12px',
+              borderRadius: 4,
+            }}
+          >
             {error}
           </p>
         )}
-        <div className="flex gap-3">
-          <GlassButton variant="default" className="flex-1" onClick={onClose} disabled={saving}>Cancel</GlassButton>
-          <GlassButton variant="primary" className="flex-1" onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving…' : 'Save Goals'}
-          </GlassButton>
-        </div>
       </div>
     </GlassModal>
   );

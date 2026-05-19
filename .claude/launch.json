@@ -11,9 +11,8 @@
     {
       "name": "Dashki Server (Express)",
       "runtimeExecutable": "cmd",
-      "runtimeArgs": ["/c", "cd server && npm run dev"],
-      "port": 4001,
-      "autoPort": true
+      "runtimeArgs": ["/c", "cd server && set PORT=8080 && npm run dev"],
+      "port": 8080
     }
   ]
 }
