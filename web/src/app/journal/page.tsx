@@ -87,7 +87,23 @@ interface FoodPickerProps {
   setSelectedFoods: (next: SelectedFood[]) => void;
 }
 
+// Viewport-aware switch. The modal's table layout works on desktop but
+// at <640px the fixed colgroup widths starve the food-name column, so we
+// fall back to a stacked card list at that breakpoint.
+function useIsModalNarrow() {
+  const [narrow, setNarrow] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth < 640 : false
+  );
+  useEffect(() => {
+    const onResize = () => setNarrow(window.innerWidth < 640);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  return narrow;
+}
+
 function FoodPicker({ selectedFoods, setSelectedFoods }: FoodPickerProps) {
+  const isNarrow = useIsModalNarrow();
   const [query, setQuery] = useState('');
   const [tag, setTag] = useState<FoodTag | 'All'>('All');
   const [foods, setFoods] = useState<Food[]>([]);
@@ -302,7 +318,7 @@ function FoodPicker({ selectedFoods, setSelectedFoods }: FoodPickerProps) {
               No foods match.
             </div>
           )}
-          {!loading && visible.length > 0 && (
+          {!loading && visible.length > 0 && !isNarrow && (
             <table
               style={{
                 width: '100%',
@@ -530,6 +546,192 @@ function FoodPicker({ selectedFoods, setSelectedFoods }: FoodPickerProps) {
               </tbody>
             </table>
           )}
+
+          {/* Mobile card list — full food names get full width here */}
+          {!loading && visible.length > 0 && isNarrow && (
+            <ul
+              style={{
+                listStyle: 'none',
+                padding: 0,
+                margin: 0,
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+            >
+              {visible.map((food) => {
+                const selected = selectedFoods.find(
+                  (sf) => sf.food.id === food.id
+                );
+                const isSelected = !!selected;
+                const isExpanded = expandedId === food.id;
+                const inferred = inferTag(food);
+                const IconCmp = inferred ? TAG_ICONS[inferred] : Apple;
+                const cal = food.calories ?? food.calories_per_100g ?? 0;
+                const protein = food.protein ?? food.protein_per_100g ?? 0;
+                return (
+                  <li
+                    key={food.id}
+                    style={{
+                      borderBottom: '1px solid var(--color-border)',
+                      background: isSelected
+                        ? 'var(--color-badge-bg)'
+                        : 'transparent',
+                      transition: 'background 120ms',
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isSelected) {
+                          setExpandedId(isExpanded ? null : food.id);
+                        } else {
+                          toggleFood(food);
+                        }
+                      }}
+                      style={{
+                        display: 'flex',
+                        gap: 10,
+                        alignItems: 'flex-start',
+                        padding: '10px 12px',
+                        width: '100%',
+                        background: 'transparent',
+                        border: 0,
+                        textAlign: 'left',
+                        fontFamily: 'inherit',
+                        color: 'var(--color-foreground)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: 6,
+                          background: 'var(--color-surface-warm)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          border: '1px solid var(--color-border)',
+                          flexShrink: 0,
+                          marginTop: 2,
+                        }}
+                      >
+                        <IconCmp
+                          style={{
+                            width: 13,
+                            height: 13,
+                            color: 'var(--color-muted-foreground)',
+                          }}
+                        />
+                      </span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div
+                          style={{
+                            fontSize: 14,
+                            fontWeight: 500,
+                            lineHeight: 1.3,
+                            wordBreak: 'break-word',
+                          }}
+                        >
+                          {food.name}
+                        </div>
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            marginTop: 4,
+                            fontSize: 11,
+                            color: 'var(--color-muted-foreground)',
+                            flexWrap: 'wrap',
+                          }}
+                        >
+                          <span>{unitLabel(food)}</span>
+                          <span style={{ opacity: 0.4 }}>·</span>
+                          <span style={{ fontFamily: 'var(--font-mono)' }}>
+                            <span
+                              style={{
+                                color: 'var(--color-foreground)',
+                                fontWeight: 600,
+                              }}
+                            >
+                              {cal}
+                            </span>{' '}
+                            kcal
+                          </span>
+                          <span style={{ opacity: 0.4 }}>·</span>
+                          <span style={{ fontFamily: 'var(--font-mono)' }}>
+                            <span
+                              style={{
+                                color: 'var(--color-foreground)',
+                                fontWeight: 600,
+                              }}
+                            >
+                              {protein}
+                            </span>
+                            g
+                          </span>
+                          {inferred && <Pill tone={TAG_TONES[inferred]}>{inferred}</Pill>}
+                        </div>
+                      </div>
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleFood(food);
+                        }}
+                        role="button"
+                        aria-label={isSelected ? 'Unstage' : 'Stage'}
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 9999,
+                          background: isSelected
+                            ? 'var(--color-success)'
+                            : 'var(--color-primary)',
+                          color: 'var(--color-primary-foreground)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                        }}
+                      >
+                        {isSelected ? (
+                          <span style={{ fontSize: 14, fontWeight: 700 }}>✓</span>
+                        ) : (
+                          <Plus
+                            style={{
+                              width: 16,
+                              height: 16,
+                              strokeWidth: 2.5,
+                            }}
+                          />
+                        )}
+                      </span>
+                    </button>
+
+                    {isSelected && isExpanded && selected && (
+                      <div
+                        style={{
+                          padding: '8px 12px 12px',
+                          background: 'var(--color-surface-warm)',
+                          borderTop: '1px solid var(--color-border)',
+                        }}
+                      >
+                        <QuantityInput
+                          food={food}
+                          quantity={selected.quantity}
+                          unit={selected.unit}
+                          onChange={(next) =>
+                            setQuantityForFood(food.id, next)
+                          }
+                        />
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
       </div>
 
@@ -574,6 +776,7 @@ interface AddFoodModalProps {
 }
 
 function AddFoodModal({ isOpen, onClose, mealType: initialMealType, date, onAdded }: AddFoodModalProps) {
+  const isNarrow = useIsModalNarrow();
   const [mealType, setMealType] = useState<MealType>(initialMealType);
   useEffect(() => {
     if (isOpen) setMealType(initialMealType);
@@ -1048,6 +1251,149 @@ function AddFoodModal({ isOpen, onClose, mealType: initialMealType, date, onAdde
                       >
                         No meals match your search.
                       </div>
+                    );
+                  }
+                  if (isNarrow) {
+                    return (
+                      <ul
+                        style={{
+                          listStyle: 'none',
+                          padding: 0,
+                          margin: 0,
+                          display: 'flex',
+                          flexDirection: 'column',
+                        }}
+                      >
+                        {matched.map((meal) => {
+                          const totals = (meal.items || []).reduce(
+                            (acc, item) => {
+                              const qty = item.quantity ?? item.servings ?? 1;
+                              return {
+                                calories:
+                                  acc.calories + (item.calories || 0) * qty,
+                                protein:
+                                  acc.protein + (item.protein || 0) * qty,
+                              };
+                            },
+                            { calories: 0, protein: 0 }
+                          );
+                          const count = meal.items?.length ?? 0;
+                          return (
+                            <li
+                              key={meal.id}
+                              style={{
+                                borderBottom: '1px solid var(--color-border)',
+                              }}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => !saving && handleAddMeal(meal)}
+                                disabled={saving}
+                                style={{
+                                  display: 'flex',
+                                  gap: 10,
+                                  alignItems: 'flex-start',
+                                  padding: '10px 12px',
+                                  width: '100%',
+                                  background: 'transparent',
+                                  border: 0,
+                                  textAlign: 'left',
+                                  fontFamily: 'inherit',
+                                  color: 'var(--color-foreground)',
+                                  cursor: saving ? 'wait' : 'pointer',
+                                  opacity: saving ? 0.6 : 1,
+                                }}
+                              >
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div
+                                    style={{
+                                      fontSize: 14,
+                                      fontWeight: 500,
+                                      lineHeight: 1.3,
+                                      wordBreak: 'break-word',
+                                    }}
+                                  >
+                                    {meal.name}
+                                  </div>
+                                  {meal.description && (
+                                    <div
+                                      style={{
+                                        fontSize: 11,
+                                        color:
+                                          'var(--color-muted-foreground)',
+                                        marginTop: 2,
+                                        wordBreak: 'break-word',
+                                      }}
+                                    >
+                                      {meal.description}
+                                    </div>
+                                  )}
+                                  <div
+                                    style={{
+                                      display: 'flex',
+                                      gap: 6,
+                                      marginTop: 4,
+                                      fontSize: 11,
+                                      color:
+                                        'var(--color-muted-foreground)',
+                                      flexWrap: 'wrap',
+                                      fontFamily: 'var(--font-mono)',
+                                    }}
+                                  >
+                                    <span>{count} items</span>
+                                    <span style={{ opacity: 0.4 }}>·</span>
+                                    <span>
+                                      <span
+                                        style={{
+                                          color: 'var(--color-foreground)',
+                                          fontWeight: 600,
+                                        }}
+                                      >
+                                        {Math.round(totals.calories)}
+                                      </span>{' '}
+                                      kcal
+                                    </span>
+                                    <span style={{ opacity: 0.4 }}>·</span>
+                                    <span>
+                                      <span
+                                        style={{
+                                          color: 'var(--color-foreground)',
+                                          fontWeight: 600,
+                                        }}
+                                      >
+                                        {Math.round(totals.protein)}
+                                      </span>
+                                      g
+                                    </span>
+                                  </div>
+                                </div>
+                                <span
+                                  style={{
+                                    width: 32,
+                                    height: 32,
+                                    borderRadius: 9999,
+                                    background: 'var(--color-primary)',
+                                    color: 'var(--color-primary-foreground)',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    flexShrink: 0,
+                                  }}
+                                  aria-label="Log this meal"
+                                >
+                                  <Plus
+                                    style={{
+                                      width: 16,
+                                      height: 16,
+                                      strokeWidth: 2.5,
+                                    }}
+                                  />
+                                </span>
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
                     );
                   }
                   return (
