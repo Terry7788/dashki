@@ -28,7 +28,14 @@ import {
   MonoNum,
   EmptyState,
 } from '@/components/ui';
-import type { PillTone } from '@/components/ui';
+import {
+  FOOD_TAGS,
+  TAG_TONES,
+  TAG_ICONS,
+  inferTag,
+  unitLabel,
+} from '@/lib/foodTags';
+import type { FoodTag } from '@/lib/foodTags';
 import { getFoods, createFood, updateFood, deleteFood, addJournalEntry } from '@/lib/api';
 import type { Food, MealType } from '@/lib/types';
 import { useSocketEvent } from '@/lib/useSocketEvent';
@@ -604,76 +611,8 @@ function AddToJournalModal({ food, isOpen, onClose, onAdd }: AddToJournalModalPr
     </GlassModal>
   );
 }
-// ─── Tag / icon mapping ───────────────────────────────────────────────────────
-
-type FoodTag =
-  | 'Protein'
-  | 'Dairy'
-  | 'Grain'
-  | 'Fruit'
-  | 'Veg'
-  | 'Fat'
-  | 'Drink'
-  | 'Snack';
-
-const FOOD_TAGS: (FoodTag | 'All')[] = [
-  'All',
-  'Protein',
-  'Dairy',
-  'Grain',
-  'Fruit',
-  'Veg',
-  'Fat',
-  'Drink',
-  'Snack',
-];
-
-const TAG_TONES: Record<FoodTag, PillTone> = {
-  Protein: 'primary',
-  Dairy: 'medium',
-  Grain: 'warning',
-  Fruit: 'success',
-  Veg: 'success',
-  Fat: 'warning',
-  Drink: 'neutral',
-  Snack: 'pink',
-};
-
-const TAG_ICONS: Record<FoodTag, React.ComponentType<{ style?: React.CSSProperties }>> = {
-  Protein: Drumstick,
-  Dairy: Milk,
-  Grain: Wheat,
-  Fruit: Apple,
-  Veg: Leaf,
-  Fat: Droplet,
-  Drink: Coffee,
-  Snack: Cookie,
-};
-
-// Infer a tag for a Food. The DB doesn't store one, so guess from name keywords.
-// Returns null if no clear match — the row will fall back to a neutral pill.
-function inferTag(food: Food): FoodTag | null {
-  const name = food.name.toLowerCase();
-  const baseUnit = (food.base_unit ?? food.baseUnit ?? 'g') as string;
-  if (baseUnit === 'ml') return 'Drink';
-  if (/coffee|tea|drink|juice|water|soda/.test(name)) return 'Drink';
-  if (/milk|yogurt|yoghurt|cheese|cream|butter/.test(name)) return 'Dairy';
-  if (/chicken|beef|fish|salmon|tuna|egg|whey|protein|turkey|pork|tofu|tempeh/.test(name)) return 'Protein';
-  if (/oat|rice|bread|pasta|noodle|cereal|toast|wheat|flour/.test(name)) return 'Grain';
-  if (/banana|apple|berry|orange|pear|grape|melon|peach|kiwi|mango|pineapple/.test(name)) return 'Fruit';
-  if (/broccoli|spinach|lettuce|kale|veggie|vegetable|carrot|tomato|cucumber|salad|onion|garlic|pepper/.test(name)) return 'Veg';
-  if (/oil|nut|butter|avocado|seed/.test(name)) return 'Fat';
-  if (/chocolate|cookie|crisp|chip|candy|snack/.test(name)) return 'Snack';
-  return null;
-}
-
-function unitLabel(food: Food): string {
-  const amount = food.baseAmount ?? food.base_amount ?? 100;
-  const unit = (food.baseUnit ?? food.base_unit ?? 'g') as string;
-  if (unit === 'serving') return amount === 1 ? 'per 1 serving' : 'per ' + amount + ' servings';
-  if (unit === 'ml') return 'per ' + amount + 'ml';
-  return 'per ' + amount + 'g';
-}
+// Tag / icon mappings live in @/lib/foodTags so the AddFoodModal in the
+// journal page can render the exact same table styling.
 
 // ─── Food row (design-faithful: table row with icon, name, cal, protein, tag) ─
 

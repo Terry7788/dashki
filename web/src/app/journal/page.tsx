@@ -1,9 +1,17 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Loader2, Clock, Search, Copy, MoreHorizontal, Move, Sunrise, Sun, Cookie, Moon } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Loader2, Clock, Search, Copy, MoreHorizontal, Move, Sunrise, Sun, Cookie, Moon, X, Apple } from 'lucide-react';
 import { GlassCard, GlassButton, GlassInput, GlassModal, CalorieRing, MacroBar, Pill, MicroLabel, MonoNum, EmptyState, CardShell } from '@/components/ui';
+import {
+  FOOD_TAGS,
+  TAG_TONES,
+  TAG_ICONS,
+  inferTag,
+  unitLabel,
+} from '@/lib/foodTags';
+import type { FoodTag } from '@/lib/foodTags';
 import {
   getJournalEntries,
   addJournalEntry,
@@ -81,12 +89,13 @@ interface FoodPickerProps {
 
 function FoodPicker({ selectedFoods, setSelectedFoods }: FoodPickerProps) {
   const [query, setQuery] = useState('');
+  const [tag, setTag] = useState<FoodTag | 'All'>('All');
   const [foods, setFoods] = useState<Food[]>([]);
   const [loading, setLoading] = useState(false);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Load all foods on mount, then filter by search
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
@@ -97,151 +106,462 @@ function FoodPicker({ selectedFoods, setSelectedFoods }: FoodPickerProps) {
           : `${BASE_URL}/api/foods`;
         const res = await fetch(url);
         if (res.ok) setFoods(await res.json());
-      } catch { /* ignore */ } finally {
+      } catch {
+        /* ignore */
+      } finally {
         setLoading(false);
       }
-    }, 300);
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+    }, 250);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
   }, [query]);
 
-  // Auto-focus the search input on mount, but only on devices with a real
-  // hover capability (keyboards). Touch devices skip this so opening the
-  // modal doesn't immediately pop the on-screen keyboard.
+  // Auto-focus the search input on mount on devices with hover (keyboards).
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const isHoverCapable = window.matchMedia('(hover: hover)').matches;
     if (isHoverCapable && searchInputRef.current) {
-      // Delay slightly so the modal scale-in animation finishes first.
       const t = setTimeout(() => searchInputRef.current?.focus(), 150);
       return () => clearTimeout(t);
     }
   }, []);
 
+  // Apply tag filter client-side (search already done by the API).
+  const visible = useMemo(
+    () => (tag === 'All' ? foods : foods.filter((f) => inferTag(f) === tag)),
+    [foods, tag]
+  );
+
   function toggleFood(food: Food) {
     const existing = selectedFoods.find((sf) => sf.food.id === food.id);
     if (existing) {
       setSelectedFoods(selectedFoods.filter((sf) => sf.food.id !== food.id));
+      if (expandedId === food.id) setExpandedId(null);
     } else {
-      // Pick the food's default unit + sensible starting quantity
-      const units = food.units ?? [{ unit: 'serving' as Unit, label: 'serving', default: true }];
+      const units = food.units ?? [
+        { unit: 'serving' as Unit, label: 'serving', default: true },
+      ];
       const def = units.find((u) => u.default) ?? units[0];
       const startQty =
-        def.unit === 'serving' ? 1 :
-        (food.base_amount ?? food.baseAmount ?? 100);
-      setSelectedFoods([...selectedFoods, { food, quantity: startQty, unit: def.unit }]);
+        def.unit === 'serving'
+          ? 1
+          : food.base_amount ?? food.baseAmount ?? 100;
+      setSelectedFoods([
+        ...selectedFoods,
+        { food, quantity: startQty, unit: def.unit },
+      ]);
     }
   }
 
-  function setQuantityForFood(foodId: number, next: { quantity: number; unit: Unit }) {
+  function setQuantityForFood(
+    foodId: number,
+    next: { quantity: number; unit: Unit }
+  ) {
     const clamped = { quantity: Math.max(0, next.quantity), unit: next.unit };
-    setSelectedFoods(selectedFoods.map((sf) =>
-      sf.food.id === foodId ? { ...sf, ...clamped } : sf
-    ));
-  }
-
-  function getSelectedFood(foodId: number): SelectedFood | undefined {
-    return selectedFoods.find((sf) => sf.food.id === foodId);
+    setSelectedFoods(
+      selectedFoods.map((sf) =>
+        sf.food.id === foodId ? { ...sf, ...clamped } : sf
+      )
+    );
   }
 
   return (
-    <div className="space-y-3">
-      {/* Search bar — bigger, with icon prefix and clear button */}
-      <div className="relative">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 pointer-events-none" />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* Search */}
+      <div style={{ position: 'relative' }}>
+        <Search
+          style={{
+            position: 'absolute',
+            left: 10,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            width: 14,
+            height: 14,
+            color: 'var(--color-placeholder)',
+            strokeWidth: 1.75,
+          }}
+        />
         <input
           ref={searchInputRef}
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search foods…"
-          className="w-full pl-10 pr-10 py-3.5 text-base sm:text-sm bg-white/[0.06] border border-white/[0.12] rounded-2xl text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-indigo-400/40 focus:border-indigo-400/40 transition-all duration-200"
+          style={{
+            width: '100%',
+            padding: '8px 32px 8px 32px',
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 4,
+            color: 'var(--color-foreground)',
+            fontFamily: 'inherit',
+            fontSize: 14,
+          }}
         />
         {query && (
           <button
             onClick={() => setQuery('')}
-            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-white/40 hover:text-white hover:bg-white/10"
+            type="button"
+            style={{
+              position: 'absolute',
+              right: 6,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              background: 'transparent',
+              border: 0,
+              padding: 4,
+              color: 'var(--color-muted-foreground)',
+              cursor: 'pointer',
+              display: 'flex',
+            }}
             aria-label="Clear search"
           >
-            <Plus className="w-4 h-4 rotate-45" />
+            <X style={{ width: 14, height: 14 }} />
           </button>
         )}
       </div>
 
-      {/* Food list — bigger touch targets */}
-      <div className="space-y-2 pr-1">
-        {loading && <p className="text-center text-white/40 text-sm py-6">Searching…</p>}
-        {!loading && foods.length === 0 && (
-          <p className="text-center text-white/40 text-sm py-6">No foods found</p>
-        )}
-        {foods.map((food, idx) => {
-          const selected = getSelectedFood(food.id);
-          const isSelected = !!selected;
-
-          // Section dividers (recently used / all foods) — only when not searching.
-          const isFirst = idx === 0;
-          const prevWasRecent = idx > 0 ? foods[idx - 1].recently_used : false;
-          const showRecentHeader =
-            !query.trim() && isFirst && food.recently_used === true;
-          const showAllHeader =
-            !query.trim() && prevWasRecent === true && food.recently_used !== true;
-
+      {/* Tag chips */}
+      <div
+        style={{
+          display: 'flex',
+          gap: 6,
+          flexWrap: 'wrap',
+        }}
+      >
+        {FOOD_TAGS.map((t) => {
+          const active = tag === t;
           return (
-            <Fragment key={food.id}>
-              {showRecentHeader && (
-                <div className="text-[10px] font-semibold uppercase tracking-widest text-white/40 px-1 pt-1 flex items-center gap-1.5">
-                  <Clock className="w-3 h-3" />
-                  Recently used
-                </div>
-              )}
-              {showAllHeader && (
-                <div className="text-[10px] font-semibold uppercase tracking-widest text-white/40 px-1 pt-3">
-                  All foods
-                </div>
-              )}
-              <div
-                className={`rounded-2xl border transition-all duration-200 ${
-                  isSelected
-                    ? 'bg-indigo-500/20 border-indigo-400/60 shadow-sm shadow-indigo-500/10'
-                    : 'bg-white/5 hover:bg-white/10 border-white/10'
-                }`}
-              >
-                <button
-                  onClick={() => toggleFood(food)}
-                  className="w-full flex items-start justify-between gap-3 px-4 py-4 text-left"
-                >
-                  <div className="flex items-start gap-3 min-w-0 flex-1">
-                    {/* Bigger checkbox: 24px (was 20px) for easier tapping */}
-                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5 transition-colors ${
-                      isSelected ? 'border-indigo-400 bg-indigo-400' : 'border-white/30'
-                    }`}>
-                      {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-white" />}
-                    </div>
-                    <span className="text-sm font-medium text-white break-words leading-snug">
-                      {food.name}
-                    </span>
-                  </div>
-                  <div className="flex flex-col items-end shrink-0 text-xs text-white/50 leading-snug tabular-nums">
-                    <span>{food.calories ?? food.calories_per_100g ?? 0} kcal</span>
-                    <span>{food.protein ?? food.protein_per_100g ?? 0}g pro</span>
-                  </div>
-                </button>
-
-                {isSelected && (
-                  <QuantityInput
-                    food={food}
-                    quantity={selected.quantity}
-                    unit={selected.unit}
-                    onChange={(next) => setQuantityForFood(food.id, next)}
-                  />
-                )}
-              </div>
-            </Fragment>
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTag(t)}
+              className="cursor-pointer"
+              style={{
+                padding: '4px 10px',
+                borderRadius: 9999,
+                fontSize: 12,
+                fontWeight: 600,
+                background: active
+                  ? 'var(--color-foreground)'
+                  : 'var(--color-surface-warm)',
+                color: active
+                  ? 'var(--color-background)'
+                  : 'var(--color-muted-foreground)',
+                border:
+                  '1px solid ' +
+                  (active ? 'var(--color-foreground)' : 'var(--color-border)'),
+                fontFamily: 'inherit',
+              }}
+            >
+              {t}
+            </button>
           );
         })}
+      </div>
+
+      {/* Table-style list (matches Food Database page) */}
+      <div
+        style={{
+          border: '1px solid var(--color-border)',
+          borderRadius: 8,
+          overflow: 'hidden',
+          background: 'var(--color-surface)',
+        }}
+      >
+        <div
+          style={{
+            maxHeight: 'calc(100vh - 420px)',
+            minHeight: 320,
+            overflowY: 'auto',
+            overflowX: 'hidden',
+          }}
+        >
+          {loading && (
+            <div
+              style={{
+                padding: 24,
+                textAlign: 'center',
+                fontSize: 13,
+                color: 'var(--color-muted-foreground)',
+              }}
+            >
+              Searching…
+            </div>
+          )}
+          {!loading && visible.length === 0 && (
+            <div
+              style={{
+                padding: 24,
+                textAlign: 'center',
+                fontSize: 13,
+                color: 'var(--color-muted-foreground)',
+              }}
+            >
+              No foods match.
+            </div>
+          )}
+          {!loading && visible.length > 0 && (
+            <table
+              style={{
+                width: '100%',
+                tableLayout: 'fixed',
+                borderCollapse: 'collapse',
+              }}
+            >
+              <colgroup>
+                <col />
+                <col style={{ width: 70 }} />
+                <col style={{ width: 80 }} />
+                <col style={{ width: 64 }} />
+                <col style={{ width: 44 }} />
+              </colgroup>
+              <thead
+                style={{
+                  position: 'sticky',
+                  top: 0,
+                  background: 'var(--color-surface)',
+                  zIndex: 1,
+                }}
+              >
+                <tr>
+                  <th style={MODAL_TH}>Food</th>
+                  <th style={{ ...MODAL_TH, textAlign: 'right' }}>Cal</th>
+                  <th style={{ ...MODAL_TH, textAlign: 'right' }}>Protein</th>
+                  <th style={MODAL_TH}>Tag</th>
+                  <th style={MODAL_TH}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((food) => {
+                  const selected = selectedFoods.find(
+                    (sf) => sf.food.id === food.id
+                  );
+                  const isSelected = !!selected;
+                  const isExpanded = expandedId === food.id;
+                  const inferred = inferTag(food);
+                  const IconCmp = inferred ? TAG_ICONS[inferred] : Apple;
+                  const cal = food.calories ?? food.calories_per_100g ?? 0;
+                  const protein = food.protein ?? food.protein_per_100g ?? 0;
+                  return (
+                    <Fragment key={food.id}>
+                      <tr
+                        style={{
+                          background: isSelected
+                            ? 'var(--color-badge-bg)'
+                            : 'transparent',
+                          cursor: 'pointer',
+                          transition: 'background 120ms',
+                        }}
+                        onClick={() => {
+                          if (isSelected) {
+                            // Toggle the inline editor for selected rows
+                            setExpandedId(isExpanded ? null : food.id);
+                          } else {
+                            toggleFood(food);
+                          }
+                        }}
+                      >
+                        <td style={{ ...MODAL_TD, overflow: 'hidden' }}>
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 10,
+                              minWidth: 0,
+                            }}
+                          >
+                            <span
+                              style={{
+                                width: 28,
+                                height: 28,
+                                borderRadius: 6,
+                                background: 'var(--color-surface-warm)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                border: '1px solid var(--color-border)',
+                                flexShrink: 0,
+                              }}
+                            >
+                              <IconCmp
+                                style={{
+                                  width: 13,
+                                  height: 13,
+                                  color: 'var(--color-muted-foreground)',
+                                }}
+                              />
+                            </span>
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <div
+                                style={{
+                                  fontSize: 14,
+                                  fontWeight: 500,
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {food.name}
+                              </div>
+                              <div
+                                style={{
+                                  fontSize: 11,
+                                  color: 'var(--color-muted-foreground)',
+                                  marginTop: 1,
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {unitLabel(food)}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{ ...MODAL_TD, textAlign: 'right' }}>
+                          <MonoNum size={13}>{cal}</MonoNum>
+                          <span
+                            style={{
+                              fontSize: 10,
+                              color: 'var(--color-muted-foreground)',
+                              marginLeft: 2,
+                            }}
+                          >
+                            kcal
+                          </span>
+                        </td>
+                        <td style={{ ...MODAL_TD, textAlign: 'right' }}>
+                          <MonoNum size={13}>{protein}</MonoNum>
+                          <span
+                            style={{
+                              fontSize: 10,
+                              color: 'var(--color-muted-foreground)',
+                              marginLeft: 2,
+                            }}
+                          >
+                            g
+                          </span>
+                        </td>
+                        <td style={MODAL_TD}>
+                          {inferred ? (
+                            <Pill tone={TAG_TONES[inferred]}>{inferred}</Pill>
+                          ) : (
+                            <span
+                              style={{
+                                fontSize: 12,
+                                color: 'var(--color-muted-foreground)',
+                              }}
+                            >
+                              —
+                            </span>
+                          )}
+                        </td>
+                        <td style={{ ...MODAL_TD, textAlign: 'right' }}>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleFood(food);
+                            }}
+                            className="cursor-pointer"
+                            style={{
+                              width: 28,
+                              height: 28,
+                              borderRadius: 9999,
+                              background: isSelected
+                                ? 'var(--color-success)'
+                                : 'var(--color-primary)',
+                              color: 'var(--color-primary-foreground)',
+                              border: 0,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontFamily: 'inherit',
+                            }}
+                            aria-label={isSelected ? 'Unstage' : 'Stage'}
+                          >
+                            {isSelected ? (
+                              <span
+                                style={{
+                                  fontSize: 13,
+                                  fontWeight: 700,
+                                }}
+                              >
+                                ✓
+                              </span>
+                            ) : (
+                              <Plus
+                                style={{
+                                  width: 14,
+                                  height: 14,
+                                  strokeWidth: 2.5,
+                                }}
+                              />
+                            )}
+                          </button>
+                        </td>
+                      </tr>
+                      {isSelected && isExpanded && selected && (
+                        <tr style={{ background: 'var(--color-surface-warm)' }}>
+                          <td
+                            colSpan={5}
+                            style={{
+                              padding: '8px 12px',
+                              borderBottom:
+                                '1px solid var(--color-border)',
+                            }}
+                          >
+                            <QuantityInput
+                              food={food}
+                              quantity={selected.quantity}
+                              unit={selected.unit}
+                              onChange={(next) =>
+                                setQuantityForFood(food.id, next)
+                              }
+                            />
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      <div
+        style={{
+          fontSize: 11,
+          color: 'var(--color-muted-foreground)',
+        }}
+      >
+        Tap a row to stage it · tap an already-staged row to tweak quantity ·
+        the bottom bar shows your running total.
       </div>
     </div>
   );
 }
+
+const MODAL_TH: React.CSSProperties = {
+  padding: '10px 12px',
+  textAlign: 'left',
+  fontSize: 10,
+  fontWeight: 600,
+  textTransform: 'uppercase',
+  letterSpacing: '0.06em',
+  color: 'var(--color-muted-foreground)',
+  borderBottom: '1px solid var(--color-border)',
+};
+
+const MODAL_TD: React.CSSProperties = {
+  padding: '8px 12px',
+  borderBottom: '1px solid var(--color-border)',
+  verticalAlign: 'middle',
+};
 
 // ─── Add Food Modal ────────────────────────────────────────────────────────
 
@@ -615,67 +935,324 @@ function AddFoodModal({ isOpen, onClose, mealType: initialMealType, date, onAdde
         )}
 
         {tab === 'meals' && (
-          <div className="space-y-2">
-            {/* Meal search */}
-            <div className="relative">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {/* Search */}
+            <div style={{ position: 'relative' }}>
+              <Search
+                style={{
+                  position: 'absolute',
+                  left: 10,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  width: 14,
+                  height: 14,
+                  color: 'var(--color-placeholder)',
+                  strokeWidth: 1.75,
+                }}
+              />
               <input
                 type="text"
                 value={mealQuery}
                 onChange={(e) => setMealQuery(e.target.value)}
                 placeholder="Search saved meals…"
-                className="w-full pl-4 pr-9 py-2.5 text-sm bg-white/5 border border-white/10 text-white placeholder-white/30 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-400/40 focus:border-indigo-400/40 transition-all duration-200"
+                style={{
+                  width: '100%',
+                  padding: '8px 32px 8px 32px',
+                  background: 'var(--color-surface)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 4,
+                  color: 'var(--color-foreground)',
+                  fontFamily: 'inherit',
+                  fontSize: 14,
+                }}
               />
               {mealQuery && (
                 <button
                   onClick={() => setMealQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white transition-colors duration-200"
+                  type="button"
+                  style={{
+                    position: 'absolute',
+                    right: 6,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'transparent',
+                    border: 0,
+                    padding: 4,
+                    color: 'var(--color-muted-foreground)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                  }}
                   aria-label="Clear search"
                 >
-                  ×
+                  <X style={{ width: 14, height: 14 }} />
                 </button>
               )}
             </div>
-            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-            {loadingMeals && (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 text-indigo-400 animate-spin" />
-              </div>
-            )}
-            {!loadingMeals && savedMeals.length === 0 && (
-              <p className="text-center text-white/40 text-sm py-4">No saved meals yet</p>
-            )}
-            {!loadingMeals && savedMeals.length > 0 && mealQuery && savedMeals.filter((m) => m.name.toLowerCase().includes(mealQuery.toLowerCase())).length === 0 && (
-              <p className="text-center text-white/40 text-sm py-4">No meals match your search</p>
-            )}
-            {savedMeals.filter((m) => !mealQuery || m.name.toLowerCase().includes(mealQuery.toLowerCase())).map((meal) => {
-              // Calculate totals from items
-              const totals = (meal.items || []).reduce(
-                (acc, item) => {
-                  const qty = item.quantity ?? item.servings ?? 1;
-                  return {
-                    calories: acc.calories + (item.calories || 0) * qty,
-                    protein: acc.protein + (item.protein || 0) * qty,
-                  };
-                },
-                { calories: 0, protein: 0 }
-              );
-              return (
-                <button
-                  key={meal.id}
-                  onClick={() => handleAddMeal(meal)}
-                  disabled={saving}
-                  className="w-full flex items-center justify-between px-4 py-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 transition-all duration-200 text-left disabled:opacity-50"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-white">{meal.name}</p>
-                    <p className="text-xs text-white/50">
-                      {meal.items?.length ?? 0} items · {Math.round(totals.calories)} cal · {totals.protein.toFixed(1)}g protein
-                    </p>
+
+            {/* Table-style saved meal picker */}
+            <div
+              style={{
+                border: '1px solid var(--color-border)',
+                borderRadius: 8,
+                overflow: 'hidden',
+                background: 'var(--color-surface)',
+              }}
+            >
+              <div
+                style={{
+                  maxHeight: 'calc(100vh - 420px)',
+                  minHeight: 320,
+                  overflowY: 'auto',
+                  overflowX: 'hidden',
+                }}
+              >
+                {loadingMeals ? (
+                  <div
+                    style={{
+                      padding: 32,
+                      textAlign: 'center',
+                      color: 'var(--color-muted-foreground)',
+                    }}
+                  >
+                    <Loader2
+                      style={{ width: 18, height: 18, display: 'inline-block' }}
+                      className="animate-spin"
+                    />
                   </div>
-                  <Plus className="w-4 h-4 text-indigo-400 shrink-0" />
-                </button>
-              );
-            })}
+                ) : savedMeals.length === 0 ? (
+                  <div
+                    style={{
+                      padding: 24,
+                      textAlign: 'center',
+                      fontSize: 13,
+                      color: 'var(--color-muted-foreground)',
+                    }}
+                  >
+                    No saved meals yet.
+                  </div>
+                ) : (() => {
+                  const matched = savedMeals.filter(
+                    (m) =>
+                      !mealQuery ||
+                      m.name.toLowerCase().includes(mealQuery.toLowerCase())
+                  );
+                  if (matched.length === 0) {
+                    return (
+                      <div
+                        style={{
+                          padding: 24,
+                          textAlign: 'center',
+                          fontSize: 13,
+                          color: 'var(--color-muted-foreground)',
+                        }}
+                      >
+                        No meals match your search.
+                      </div>
+                    );
+                  }
+                  return (
+                    <table
+                      style={{
+                        width: '100%',
+                        tableLayout: 'fixed',
+                        borderCollapse: 'collapse',
+                      }}
+                    >
+                      <colgroup>
+                        <col />
+                        <col style={{ width: 60 }} />
+                        <col style={{ width: 70 }} />
+                        <col style={{ width: 80 }} />
+                        <col style={{ width: 44 }} />
+                      </colgroup>
+                      <thead
+                        style={{
+                          position: 'sticky',
+                          top: 0,
+                          background: 'var(--color-surface)',
+                          zIndex: 1,
+                        }}
+                      >
+                        <tr>
+                          <th style={MODAL_TH}>Meal</th>
+                          <th style={{ ...MODAL_TH, textAlign: 'right' }}>
+                            Items
+                          </th>
+                          <th style={{ ...MODAL_TH, textAlign: 'right' }}>
+                            Cal
+                          </th>
+                          <th style={{ ...MODAL_TH, textAlign: 'right' }}>
+                            Protein
+                          </th>
+                          <th style={MODAL_TH}></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {matched.map((meal) => {
+                          const totals = (meal.items || []).reduce(
+                            (acc, item) => {
+                              const qty =
+                                item.quantity ?? item.servings ?? 1;
+                              return {
+                                calories:
+                                  acc.calories +
+                                  (item.calories || 0) * qty,
+                                protein:
+                                  acc.protein +
+                                  (item.protein || 0) * qty,
+                              };
+                            },
+                            { calories: 0, protein: 0 }
+                          );
+                          const count = meal.items?.length ?? 0;
+                          return (
+                            <tr
+                              key={meal.id}
+                              onClick={() =>
+                                !saving && handleAddMeal(meal)
+                              }
+                              style={{
+                                cursor: saving ? 'wait' : 'pointer',
+                                opacity: saving ? 0.6 : 1,
+                                transition: 'background 120ms',
+                              }}
+                            >
+                              <td
+                                style={{ ...MODAL_TD, overflow: 'hidden' }}
+                              >
+                                <div style={{ minWidth: 0 }}>
+                                  <div
+                                    style={{
+                                      fontSize: 14,
+                                      fontWeight: 500,
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      whiteSpace: 'nowrap',
+                                    }}
+                                  >
+                                    {meal.name}
+                                  </div>
+                                  {meal.description && (
+                                    <div
+                                      style={{
+                                        fontSize: 11,
+                                        color:
+                                          'var(--color-muted-foreground)',
+                                        marginTop: 1,
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap',
+                                      }}
+                                    >
+                                      {meal.description}
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                              <td
+                                style={{
+                                  ...MODAL_TD,
+                                  textAlign: 'right',
+                                }}
+                              >
+                                <MonoNum size={13}>{count}</MonoNum>
+                              </td>
+                              <td
+                                style={{
+                                  ...MODAL_TD,
+                                  textAlign: 'right',
+                                }}
+                              >
+                                <MonoNum size={13}>
+                                  {Math.round(totals.calories)}
+                                </MonoNum>
+                                <span
+                                  style={{
+                                    fontSize: 10,
+                                    color:
+                                      'var(--color-muted-foreground)',
+                                    marginLeft: 2,
+                                  }}
+                                >
+                                  kcal
+                                </span>
+                              </td>
+                              <td
+                                style={{
+                                  ...MODAL_TD,
+                                  textAlign: 'right',
+                                }}
+                              >
+                                <MonoNum size={13}>
+                                  {Math.round(totals.protein)}
+                                </MonoNum>
+                                <span
+                                  style={{
+                                    fontSize: 10,
+                                    color:
+                                      'var(--color-muted-foreground)',
+                                    marginLeft: 2,
+                                  }}
+                                >
+                                  g
+                                </span>
+                              </td>
+                              <td
+                                style={{
+                                  ...MODAL_TD,
+                                  textAlign: 'right',
+                                }}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleAddMeal(meal);
+                                  }}
+                                  disabled={saving}
+                                  className="cursor-pointer"
+                                  style={{
+                                    width: 28,
+                                    height: 28,
+                                    borderRadius: 9999,
+                                    background: 'var(--color-primary)',
+                                    color:
+                                      'var(--color-primary-foreground)',
+                                    border: 0,
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    opacity: saving ? 0.5 : 1,
+                                  }}
+                                  aria-label="Log this meal"
+                                >
+                                  <Plus
+                                    style={{
+                                      width: 14,
+                                      height: 14,
+                                      strokeWidth: 2.5,
+                                    }}
+                                  />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  );
+                })()}
+              </div>
+            </div>
+
+            <div
+              style={{
+                fontSize: 11,
+                color: 'var(--color-muted-foreground)',
+              }}
+            >
+              Tap a row to log the full meal — items get added to{' '}
+              {MEAL_LABELS[mealType]} immediately.
             </div>
           </div>
         )}
