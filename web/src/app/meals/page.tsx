@@ -479,7 +479,7 @@ function CreateMealModal({ isOpen, onClose, onCreated, editingMeal }: CreateMeal
       subtitle={subtitle}
       size="xl"
       mobileFullscreen
-      minHeight="sm:min-h-[80vh]"
+      lockTabletHeight
       leadingFooter={
         items.length > 0 ? (
           <div style={{ display: 'flex', gap: 16, alignItems: 'baseline' }}>

@@ -988,7 +988,7 @@ function AddFoodModal({ isOpen, onClose, mealType: initialMealType, date, onAdde
       subtitle={subtitle}
       size="lg"
       mobileFullscreen
-      minHeight="sm:min-h-[80vh]"
+      lockTabletHeight
       footer={footerActions}
       leadingFooter={leadingFooter}
       headerTrailing={

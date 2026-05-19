@@ -24,6 +24,12 @@ interface GlassModalProps {
   /** When false, hides the X close button in the header (defaults to true) */
   showCloseButton?: boolean;
   mobileFullscreen?: boolean;
+  /**
+   * Lock the modal panel to a fixed height on tablet+ viewports so the
+   * panel doesn't visibly resize while inner content loads. Use for
+   * modals that contain tables or async-loaded lists.
+   */
+  lockTabletHeight?: boolean;
 }
 
 const sizeClasses: Record<ModalSize, string> = {
@@ -53,6 +59,7 @@ export default function GlassModal({
   leadingFooter,
   showCloseButton = true,
   mobileFullscreen = false,
+  lockTabletHeight = false,
 }: GlassModalProps) {
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -109,8 +116,19 @@ export default function GlassModal({
     'pb-[max(1rem,env(safe-area-inset-bottom))]'
   );
 
+  // Mobile fullscreen panels always fill the viewport (modulo safe-area).
+  // On tablet+ we either auto-size with max-h:90vh (default) or lock to
+  // 80vh when `lockTabletHeight` is set — locked is what async-loading
+  // tables want so the panel doesn't pop in size as data arrives.
+  const mobileHeightClass =
+    'h-[calc(100svh-max(1rem,env(safe-area-inset-top))-max(1rem,env(safe-area-inset-bottom)))]';
+  const tabletHeightClass = lockTabletHeight
+    ? 'sm:h-[80vh] sm:max-h-[80vh]'
+    : 'sm:h-auto sm:max-h-[90vh]';
   const panelShape = mobileFullscreen
-    ? 'h-[calc(100svh-max(1rem,env(safe-area-inset-top))-max(1rem,env(safe-area-inset-bottom)))] sm:h-auto sm:max-h-[90vh] rounded-md sm:rounded-xl'
+    ? `${mobileHeightClass} ${tabletHeightClass} rounded-md sm:rounded-xl`
+    : lockTabletHeight
+    ? 'h-[80vh] max-h-[80vh] rounded-xl'
     : 'max-h-[90vh] rounded-xl';
 
   return (
