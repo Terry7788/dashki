@@ -16,7 +16,7 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Dashki — Personal Health Dashboard',
+  title: 'Dashki',
   description:
     'Track your nutrition, weight, and steps — all in one beautiful place.',
   manifest: '/manifest.json',
