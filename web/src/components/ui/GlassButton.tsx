@@ -1,8 +1,10 @@
-import { ReactNode, ButtonHTMLAttributes } from 'react';
+'use client';
+
+import { ReactNode, ButtonHTMLAttributes, useState } from 'react';
 import clsx from 'clsx';
 
-type Variant = 'default' | 'primary' | 'danger';
-type Size = 'sm' | 'md' | 'lg';
+type Variant = 'default' | 'primary' | 'danger' | 'outline' | 'ghost' | 'soft';
+type Size = 'xs' | 'sm' | 'md' | 'lg';
 
 interface GlassButtonProps {
   children: ReactNode;
@@ -12,28 +14,62 @@ interface GlassButtonProps {
   disabled?: boolean;
   className?: string;
   type?: ButtonHTMLAttributes<HTMLButtonElement>['type'];
+  title?: string;
 }
 
-const variantClasses: Record<Variant, string> = {
-  default:
-    // Light
-    'bg-[#f5f4f1] hover:bg-[#d4eaf7] border border-[#cccbc8] text-[#1d1c1c] ' +
-    // Dark
-    'dark:bg-white/[0.08] dark:hover:bg-white/[0.14] dark:border-white/[0.12] dark:text-white',
-  primary:
-    // Light — use text-[#ffffff] not text-white to bypass the global light-mode text override
-    'bg-gradient-to-r from-[#00668c] to-[#004d6e] hover:from-[#0077a3] hover:to-[#00668c] border border-[#00668c]/30 text-[#ffffff] shadow-md shadow-[#00668c]/20 hover:shadow-[0_4px_16px_rgba(0,102,140,0.25)] ' +
-    // Dark
-    'dark:from-[#2E8B57] dark:to-[#345e37] dark:hover:from-[#61bc84] dark:hover:to-[#2E8B57] dark:border-[#2E8B57]/30 dark:shadow-[#2E8B57]/25 dark:hover:shadow-[0_4px_20px_rgba(46,139,87,0.25)]',
-  danger:
-    'bg-red-500/10 hover:bg-red-500/20 border border-red-400/30 text-red-700 hover:text-red-800 ' +
-    'dark:bg-red-500/15 dark:hover:bg-red-500/25 dark:text-red-300 dark:hover:text-red-200',
+const SIZES: Record<Size, { padding: string; font: number }> = {
+  xs: { padding: '4px 10px', font: 11 },
+  sm: { padding: '6px 12px', font: 13 },
+  md: { padding: '8px 16px', font: 14 },
+  lg: { padding: '10px 20px', font: 15 },
 };
 
-const sizeClasses: Record<Size, string> = {
-  sm: 'px-3 py-1.5 text-sm rounded-xl',
-  md: 'px-5 py-2.5 text-sm rounded-2xl',
-  lg: 'px-7 py-3.5 text-base rounded-2xl',
+interface VariantStyle {
+  bg: string;
+  color: string;
+  border: string;
+  hoverBg: string;
+}
+
+const VARIANTS: Record<Variant, VariantStyle> = {
+  primary: {
+    bg: 'var(--color-primary)',
+    color: 'var(--color-primary-foreground)',
+    border: '1px solid transparent',
+    hoverBg: 'var(--color-primary-hover)',
+  },
+  // `default` historically meant "secondary, on-surface" — keep that semantics
+  // but render with the new soft-on-warm token.
+  default: {
+    bg: 'var(--color-soft)',
+    color: 'var(--color-foreground)',
+    border: '1px solid transparent',
+    hoverBg: 'var(--color-soft-strong)',
+  },
+  soft: {
+    bg: 'var(--color-soft)',
+    color: 'var(--color-foreground)',
+    border: '1px solid transparent',
+    hoverBg: 'var(--color-soft-strong)',
+  },
+  outline: {
+    bg: 'var(--color-surface)',
+    color: 'var(--color-foreground)',
+    border: '1px solid var(--color-border)',
+    hoverBg: 'var(--color-surface-warm)',
+  },
+  ghost: {
+    bg: 'transparent',
+    color: 'var(--color-foreground)',
+    border: '1px solid transparent',
+    hoverBg: 'var(--color-soft)',
+  },
+  danger: {
+    bg: 'rgba(201,28,43,0.12)',
+    color: 'var(--color-critical)',
+    border: '1px solid transparent',
+    hoverBg: 'rgba(201,28,43,0.22)',
+  },
 };
 
 export default function GlassButton({
@@ -44,19 +80,46 @@ export default function GlassButton({
   disabled = false,
   className,
   type = 'button',
+  title,
 }: GlassButtonProps) {
+  const [hover, setHover] = useState(false);
+  const [pressed, setPressed] = useState(false);
+
+  const v = VARIANTS[variant] ?? VARIANTS.default;
+  const s = SIZES[size] ?? SIZES.md;
+
   return (
     <button
       type={type}
       onClick={onClick}
       disabled={disabled}
+      title={title}
+      onPointerEnter={() => setHover(true)}
+      onPointerLeave={() => {
+        setHover(false);
+        setPressed(false);
+      }}
+      onPointerDown={() => setPressed(true)}
+      onPointerUp={() => setPressed(false)}
       className={clsx(
-        'font-medium transition-all duration-300 active:scale-95 select-none',
-        'disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100',
-        variantClasses[variant],
-        sizeClasses[size],
+        'inline-flex items-center justify-center gap-1.5 select-none',
+        'font-semibold',
+        disabled && 'cursor-not-allowed',
+        !disabled && 'cursor-pointer',
         className
       )}
+      style={{
+        padding: s.padding,
+        fontSize: s.font,
+        borderRadius: 4,
+        background: hover && !disabled ? v.hoverBg : v.bg,
+        color: v.color,
+        border: v.border,
+        opacity: disabled ? 0.5 : 1,
+        transform: pressed && !disabled ? 'scale(0.97)' : 'none',
+        transition: 'background 120ms ease-out, transform 80ms ease-out',
+        fontFamily: 'inherit',
+      }}
     >
       {children}
     </button>

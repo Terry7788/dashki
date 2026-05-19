@@ -20,15 +20,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     }
   }
 
-  // Load persisted theme on mount, sync from DB, and listen for cross-device changes
   useEffect(() => {
-    // 1. Apply localStorage theme immediately (anti-flash, same as inline script)
     const stored = localStorage.getItem(THEME_KEY);
     const isDark = stored !== 'light';
     setDarkMode(isDark);
     applyTheme(isDark);
 
-    // 2. Sync from DB (may differ if another device changed the theme)
     getPreferences()
       .then((prefs) => {
         const dbIsDark = prefs.theme !== 'light';
@@ -38,11 +35,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           localStorage.setItem(THEME_KEY, prefs.theme);
         }
       })
-      .catch(() => {
-        // Server unavailable — localStorage value is fine
-      });
+      .catch(() => {});
 
-    // 3. Listen for real-time theme changes from other devices
     const socket = getSocket();
     const onPreferencesUpdated = ({ theme }: { theme: 'dark' | 'light' }) => {
       const incoming = theme !== 'light';
@@ -67,35 +61,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <body className="min-h-screen font-sans antialiased" style={{ color: 'var(--text-100)' }}>
-
-      {/* ── Animated Background ───────────────────────────── */}
-      <div
-        className="fixed inset-0 -z-10 dark:bg-gradient-to-br dark:from-[#111111] dark:via-[#1a1a1a] dark:to-[#111111] bg-gradient-to-br from-[#fffefb] via-[#f5f4f1] to-[#fffefb]"
-        aria-hidden="true"
-      >
-        {/* Blobs — dark mode: dark grey; light mode: soft grey */}
-        <div
-          className="absolute -top-32 -left-32 w-[600px] h-[600px] rounded-full blur-3xl animate-blob-1 dark:opacity-[0.08] opacity-[0.07]"
-          style={{ backgroundColor: darkMode ? '#2d2d2d' : '#b6ccd8' }}
-        />
-        <div
-          className="absolute -bottom-40 -right-32 w-[700px] h-[700px] rounded-full blur-3xl animate-blob-2 dark:opacity-[0.08] opacity-[0.07]"
-          style={{ backgroundColor: darkMode ? '#2d2d2d' : '#b6ccd8' }}
-        />
-        <div
-          className="absolute top-1/2 right-1/4 w-[500px] h-[500px] rounded-full blur-3xl animate-blob-3 dark:opacity-[0.06] opacity-[0.05]"
-          style={{ backgroundColor: darkMode ? '#2d2d2d' : '#b6ccd8' }}
-        />
-      </div>
-
-      {/* ── Mobile Header ─────────────────────────────────── */}
+    <body
+      className="min-h-screen font-sans antialiased"
+      style={{
+        background: 'var(--color-background)',
+        color: 'var(--color-foreground)',
+        fontFamily: 'var(--font-sans)',
+      }}
+    >
       <MobileHeader onMenuToggle={() => setSidebarOpen(true)} />
 
-      {/* ── Layout Shell ─────────────────────────────────── */}
       <div className="flex min-h-screen">
-
-        {/* Sidebar (desktop collapsible + mobile drawer) */}
         <Sidebar
           isOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
@@ -103,14 +79,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           onToggleTheme={toggleTheme}
         />
 
-        {/* Main content area — offset managed via CSS sidebar-offset class */}
-        <main className="flex-1 sidebar-offset pb-6 md:pb-0 min-h-screen min-w-0 animate-fade-in">
-          <div className="w-full max-w-full px-4 sm:px-6 lg:px-8 py-6 pt-16 md:pt-6 overflow-x-hidden">
+        <main className="flex-1 sidebar-offset min-h-screen min-w-0">
+          <div className="w-full max-w-full pt-14 md:pt-0 overflow-x-hidden">
             {children}
           </div>
         </main>
       </div>
-
     </body>
   );
 }

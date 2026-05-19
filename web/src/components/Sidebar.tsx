@@ -1,20 +1,23 @@
 'use client';
 
 import Link from 'next/link';
-import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import clsx from 'clsx';
-import { X, ChevronLeft, ChevronRight, Sun, Moon } from 'lucide-react';
 import {
-  LayoutDashboard,
-  BookOpen,
-  Apple,
-  UtensilsCrossed,
-  CalendarDays,
+  Home,
+  NotebookPen,
+  Utensils,
+  Salad,
   Scale,
   Footprints,
-  Settings,
+  Calendar,
+  Settings as SettingsIcon,
+  ChevronLeft,
+  ChevronRight,
+  Sun,
+  Moon,
+  X,
 } from 'lucide-react';
 
 interface NavItem {
@@ -23,15 +26,21 @@ interface NavItem {
   icon: React.ElementType;
 }
 
-const navItems: NavItem[] = [
-  { label: 'Home', href: '/', icon: LayoutDashboard },
-  { label: 'Journal', href: '/journal', icon: BookOpen },
-  { label: 'Foods', href: '/foods', icon: Apple },
-  { label: 'Meals', href: '/meals', icon: UtensilsCrossed },
-  { label: 'Calendar', href: '/calendar', icon: CalendarDays },
+const NAV_FOOD: NavItem[] = [
+  { label: 'Home', href: '/', icon: Home },
+  { label: 'Journal', href: '/journal', icon: NotebookPen },
+  { label: 'Foods', href: '/foods', icon: Utensils },
+  { label: 'Meals', href: '/meals', icon: Salad },
+];
+
+const NAV_TRACK: NavItem[] = [
   { label: 'Weight', href: '/weight', icon: Scale },
   { label: 'Steps', href: '/steps', icon: Footprints },
-  { label: 'Settings', href: '/settings', icon: Settings },
+  { label: 'Calendar', href: '/calendar', icon: Calendar },
+];
+
+const NAV_SECONDARY: NavItem[] = [
+  { label: 'Settings', href: '/settings', icon: SettingsIcon },
 ];
 
 const STORAGE_KEY = 'dashki-sidebar-collapsed';
@@ -43,7 +52,149 @@ interface SidebarProps {
   onToggleTheme: () => void;
 }
 
-// ─── Desktop collapsible sidebar content ─────────────────────────────────────
+// ─── Dashki hub-and-spoke glyph ─────────────────────────────────────────────
+// Four pillars: food, weight, movement, calendar.
+function DashkiGlyph({ size = 28, radius = 6 }: { size?: number; radius?: number }) {
+  return (
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius: radius,
+        background:
+          'linear-gradient(135deg, var(--color-primary) 0%, var(--color-teal) 100%)',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+        boxShadow: 'inset 0 0 0 0.5px rgba(255,255,255,0.2)',
+      }}
+    >
+      <svg
+        viewBox="0 0 32 32"
+        width={size * 0.78}
+        height={size * 0.78}
+        aria-hidden
+      >
+        <g
+          stroke="#ffffff"
+          strokeOpacity="0.55"
+          strokeWidth="1.25"
+          strokeLinecap="round"
+          fill="none"
+        >
+          <line x1="16" y1="16" x2="16" y2="7" />
+          <line x1="16" y1="16" x2="25" y2="16" />
+          <line x1="16" y1="16" x2="16" y2="25" />
+          <line x1="16" y1="16" x2="7" y2="16" />
+        </g>
+        <g fill="#ffffff">
+          <circle cx="16" cy="16" r="2.8" />
+          <circle cx="16" cy="6" r="1.9" />
+          <circle cx="26" cy="16" r="1.9" />
+          <circle cx="16" cy="26" r="1.9" />
+          <circle cx="6" cy="16" r="1.9" />
+        </g>
+      </svg>
+    </div>
+  );
+}
+
+function SidebarLink({
+  item,
+  active,
+  collapsed,
+  onClick,
+}: {
+  item: NavItem;
+  active: boolean;
+  collapsed: boolean;
+  onClick?: () => void;
+}) {
+  const Icon = item.icon;
+  return (
+    <Link
+      href={item.href}
+      title={collapsed ? item.label : undefined}
+      onClick={onClick}
+      className={clsx(
+        'flex items-center transition-colors duration-150',
+        collapsed ? 'justify-center px-0 py-2' : 'gap-2.5 px-2.5 py-2',
+        active ? 'font-semibold' : 'font-medium'
+      )}
+      style={{
+        borderRadius: 4,
+        fontSize: 14,
+        background: active ? 'var(--color-surface-warm)' : 'transparent',
+        color: active
+          ? 'var(--color-foreground)'
+          : 'var(--color-muted-foreground)',
+      }}
+    >
+      <Icon
+        className="flex-shrink-0"
+        style={{ width: 16, height: 16, strokeWidth: active ? 2.25 : 1.75 }}
+      />
+      {!collapsed && (
+        <span className="overflow-hidden text-ellipsis whitespace-nowrap">
+          {item.label}
+        </span>
+      )}
+    </Link>
+  );
+}
+
+function NavSection({
+  label,
+  collapsed,
+  items,
+  active,
+  onClickItem,
+}: {
+  label?: string;
+  collapsed: boolean;
+  items: NavItem[];
+  active: string;
+  onClickItem?: () => void;
+}) {
+  return (
+    <>
+      {label && !collapsed && (
+        <div
+          style={{
+            fontSize: 10,
+            fontWeight: 600,
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            color: 'var(--color-placeholder)',
+            padding: '4px 10px 6px',
+          }}
+        >
+          {label}
+        </div>
+      )}
+      <ul className="list-none p-0 m-0 flex flex-col gap-0.5">
+        {items.map((item) => (
+          <li key={item.href}>
+            <SidebarLink
+              item={item}
+              active={isActiveHref(active, item.href)}
+              collapsed={collapsed}
+              onClick={onClickItem}
+            />
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
+function isActiveHref(pathname: string, href: string): boolean {
+  if (href === '/') return pathname === '/';
+  return pathname.startsWith(href);
+}
+
+// ─── Desktop sidebar ────────────────────────────────────────────────────────
 
 function DesktopSidebarContent({
   collapsed,
@@ -58,115 +209,159 @@ function DesktopSidebarContent({
 }) {
   const pathname = usePathname();
 
-  const isActive = (href: string) => {
-    if (href === '/') return pathname === '/';
-    return pathname.startsWith(href);
-  };
-
   return (
-    <div className="flex flex-col h-full bg-[#d4eaf7]/95 dark:bg-[#1a2a1e]/95 backdrop-blur-xl border-r border-[#b6ccd8]/60 dark:border-[#2E8B57]/40">
+    <div
+      className="flex flex-col h-full"
+      style={{
+        background: 'var(--color-surface)',
+        borderRight: '1px solid var(--color-border)',
+      }}
+    >
       {/* Logo */}
-      <div className={clsx('py-7 flex items-center', collapsed ? 'justify-center px-0' : 'px-6 justify-between')}>
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-[#00668c] to-[#004d6e] dark:from-[#2E8B57] dark:to-[#345e37] flex items-center justify-center shadow-lg shadow-[#00668c]/30 dark:shadow-[#2E8B57]/30 flex-shrink-0 overflow-hidden">
-            <Image
-              src="/web/icon-192.png"
-              alt="Dashki"
-              width={36}
-              height={36}
-              className="w-full h-full object-cover"
-              unoptimized
-            />
-          </div>
-          {!collapsed && (
-            <span className="text-xl font-bold text-[#00668c] dark:text-[#61bc84] tracking-tight whitespace-nowrap">Dashki</span>
-          )}
-        </div>
-      </div>
-
-      {/* Divider */}
-      <div className="mx-4 h-px bg-[#cccbc8]/50 dark:bg-white/[0.08]" />
+      <Link
+        href="/"
+        className={clsx(
+          'flex items-center no-underline',
+          collapsed ? 'justify-center px-2' : 'gap-2.5 px-4'
+        )}
+        style={{ padding: collapsed ? '18px 8px' : '18px 16px' }}
+      >
+        <DashkiGlyph size={28} radius={6} />
+        {!collapsed && (
+          <span
+            style={{
+              fontSize: 15,
+              fontWeight: 700,
+              letterSpacing: '-0.3px',
+              color: 'var(--color-foreground)',
+            }}
+          >
+            Dashki
+          </span>
+        )}
+      </Link>
 
       {/* Nav */}
-      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto overflow-x-hidden">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const active = isActive(item.href);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              title={collapsed ? item.label : undefined}
-              className={clsx(
-                'flex items-center rounded-2xl transition-all duration-200 group',
-                collapsed ? 'justify-center px-0 py-3' : 'gap-3 px-4 py-3',
-                active
-                  ? collapsed
-                    ? 'bg-[#00668c]/15 dark:bg-[#2E8B57]/20 text-[#00668c] dark:text-[#61bc84] shadow-sm'
-                    : 'bg-[#00668c]/15 dark:bg-[#2E8B57]/20 border-l-2 border-[#00668c] dark:border-[#2E8B57] text-[#00668c] dark:text-[#61bc84] shadow-sm pl-[14px]'
-                  : 'text-[#313d44] dark:text-white/60 hover:text-[#1d1c1c] dark:hover:text-white hover:bg-[#d4eaf7]/60 dark:hover:bg-white/[0.06] border border-transparent'
-              )}
-            >
-              <Icon
-                className={clsx(
-                  'w-5 h-5 flex-shrink-0 transition-colors duration-200',
-                  active ? 'text-[#00668c] dark:text-[#61bc84]' : 'text-[#313d44]/60 dark:text-white/50 group-hover:text-[#1d1c1c] dark:group-hover:text-white/80'
-                )}
-              />
-              {!collapsed && (
-                <>
-                  <span className="text-sm font-medium text-[#313d44] dark:text-white">{item.label}</span>
-                  {active && (
-                    <div className="ml-auto w-1.5 h-1.5 rounded-full bg-[#00668c] dark:bg-[#61bc84]" />
-                  )}
-                </>
-              )}
-            </Link>
-          );
-        })}
+      <nav
+        className="flex-1 overflow-y-auto overflow-x-hidden"
+        style={{ padding: collapsed ? '0 8px 16px' : '0 12px 16px' }}
+      >
+        <NavSection
+          label="Food"
+          collapsed={collapsed}
+          items={NAV_FOOD}
+          active={pathname}
+        />
+        {collapsed && <div style={{ height: 12 }} />}
+        <div style={{ height: 16 }} />
+        <NavSection
+          label="Track"
+          collapsed={collapsed}
+          items={NAV_TRACK}
+          active={pathname}
+        />
+
+        <div
+          style={{
+            borderTop: '1px solid var(--color-border)',
+            margin: '16px 0',
+          }}
+        />
+
+        <NavSection
+          collapsed={collapsed}
+          items={NAV_SECONDARY}
+          active={pathname}
+        />
       </nav>
 
-      {/* Footer / Toggle */}
-      <div className="px-3 pb-6 flex flex-col items-center gap-2">
+      {/* Footer */}
+      <div
+        className="flex items-center"
+        style={{
+          justifyContent: collapsed ? 'center' : 'space-between',
+          padding: collapsed ? '10px 8px' : '12px 16px',
+          borderTop: '1px solid var(--color-border)',
+          gap: 8,
+        }}
+      >
         {!collapsed && (
-          <div className="text-xs text-[#313d44]/50 dark:text-white/25 text-center w-full px-3">
-            Dashki v0.1.0
+          <div className="min-w-0 flex-1">
+            <div
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: 'var(--color-foreground)',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Terry
+            </div>
+            <div
+              style={{
+                fontSize: 11,
+                color: 'var(--color-muted-foreground)',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              dashki.app
+            </div>
           </div>
         )}
-
-        {/* Theme toggle */}
         <button
+          type="button"
           onClick={onToggleTheme}
-          title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-          className={clsx(
-            'flex items-center justify-center rounded-2xl p-2 transition-all duration-200',
-            'text-[#313d44]/70 dark:text-white/40 hover:text-[#1d1c1c] dark:hover:text-yellow-300 hover:bg-[#d4eaf7]/60 dark:hover:bg-white/[0.08]',
-            collapsed ? 'w-10 h-10' : 'w-full h-10'
-          )}
-          aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+          title={darkMode ? 'Switch to light' : 'Switch to dark'}
+          className="flex items-center justify-center cursor-pointer"
+          style={{
+            width: collapsed ? '100%' : 28,
+            height: 28,
+            background: 'transparent',
+            border: '1px solid var(--color-border)',
+            borderRadius: 4,
+            color: 'var(--color-muted-foreground)',
+          }}
         >
-          {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-        </button>
-
-        {/* Collapse toggle */}
-        <button
-          onClick={onToggle}
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className={clsx(
-            'flex items-center justify-center rounded-2xl p-2 transition-all duration-200',
-            'text-[#313d44]/70 dark:text-white/40 hover:text-[#1d1c1c] dark:hover:text-white hover:bg-[#d4eaf7]/60 dark:hover:bg-white/[0.08]',
-            collapsed ? 'w-10 h-10' : 'w-full h-10'
+          {darkMode ? (
+            <Sun style={{ width: 14, height: 14, strokeWidth: 1.75 }} />
+          ) : (
+            <Moon style={{ width: 14, height: 14, strokeWidth: 1.75 }} />
           )}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          {collapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
         </button>
       </div>
+
+      {/* Collapse toggle */}
+      <button
+        type="button"
+        onClick={onToggle}
+        title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        className="flex items-center justify-center cursor-pointer"
+        style={{
+          padding: '10px 0',
+          borderTop: '1px solid var(--color-border)',
+          background: 'transparent',
+          border: 0,
+          borderTopColor: 'var(--color-border)',
+          borderTopStyle: 'solid',
+          borderTopWidth: 1,
+          color: 'var(--color-muted-foreground)',
+        }}
+      >
+        {collapsed ? (
+          <ChevronRight style={{ width: 16, height: 16 }} />
+        ) : (
+          <ChevronLeft style={{ width: 16, height: 16 }} />
+        )}
+      </button>
     </div>
   );
 }
 
-// ─── Mobile drawer content (always expanded) ──────────────────────────────────
+// ─── Mobile drawer ──────────────────────────────────────────────────────────
 
 function MobileSidebarContent({
   onClose,
@@ -179,98 +374,135 @@ function MobileSidebarContent({
 }) {
   const pathname = usePathname();
 
-  const isActive = (href: string) => {
-    if (href === '/') return pathname === '/';
-    return pathname.startsWith(href);
-  };
-
   return (
-    <div className="flex flex-col h-full bg-[#d4eaf7]/95 dark:bg-[#1a2a1e]/95 backdrop-blur-xl border-r border-[#b6ccd8]/60 dark:border-[#2E8B57]/40">
-      {/* Logo */}
-      <div className="px-6 py-7 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-[#00668c] to-[#004d6e] dark:from-[#2E8B57] dark:to-[#345e37] flex items-center justify-center shadow-lg shadow-[#00668c]/30 dark:shadow-[#2E8B57]/30 overflow-hidden">
-            <Image
-              src="/web/icon-192.png"
-              alt="Dashki"
-              width={36}
-              height={36}
-              className="w-full h-full object-cover"
-              unoptimized
-            />
-          </div>
-          <span className="text-xl font-bold text-[#00668c] dark:text-[#61bc84] tracking-tight">Dashki</span>
-        </div>
+    <div
+      className="flex flex-col h-full"
+      style={{
+        background: 'var(--color-surface)',
+        borderRight: '1px solid var(--color-border)',
+      }}
+    >
+      <div
+        className="flex items-center justify-between"
+        style={{ padding: '18px 16px' }}
+      >
+        <Link
+          href="/"
+          onClick={onClose}
+          className="flex items-center gap-2.5 no-underline"
+        >
+          <DashkiGlyph size={28} radius={6} />
+          <span
+            style={{
+              fontSize: 15,
+              fontWeight: 700,
+              letterSpacing: '-0.3px',
+              color: 'var(--color-foreground)',
+            }}
+          >
+            Dashki
+          </span>
+        </Link>
         <button
           onClick={onClose}
-          className="p-2 rounded-xl text-[#313d44]/60 hover:text-[#1d1c1c] hover:bg-[#d4eaf7]/60 dark:text-white/50 dark:hover:text-white dark:hover:bg-white/10 transition-all duration-200"
+          className="cursor-pointer flex items-center justify-center"
+          style={{
+            width: 32,
+            height: 32,
+            background: 'transparent',
+            border: 0,
+            color: 'var(--color-muted-foreground)',
+            borderRadius: 4,
+          }}
           aria-label="Close menu"
         >
-          <X className="w-5 h-5" />
+          <X style={{ width: 18, height: 18 }} />
         </button>
       </div>
 
-      {/* Divider */}
-      <div className="mx-4 h-px bg-[#cccbc8]/50 dark:bg-white/[0.08]" />
-
-      {/* Nav */}
-      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const active = isActive(item.href);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={onClose}
-              className={clsx(
-                'flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 group',
-                active
-                  ? 'bg-[#00668c]/15 dark:bg-[#2E8B57]/20 border-l-2 border-[#00668c] dark:border-[#2E8B57] text-[#00668c] dark:text-[#61bc84] shadow-sm pl-[14px]'
-                  : 'text-[#313d44] dark:text-white/60 hover:text-[#1d1c1c] dark:hover:text-white hover:bg-[#d4eaf7]/60 dark:hover:bg-white/[0.06] border border-transparent'
-              )}
-            >
-              <Icon
-                className={clsx(
-                  'w-5 h-5 flex-shrink-0 transition-colors duration-200',
-                  active ? 'text-[#00668c] dark:text-[#61bc84]' : 'text-[#313d44]/60 dark:text-white/50 group-hover:text-[#1d1c1c] dark:group-hover:text-white/80'
-                )}
-              />
-              <span className="text-sm font-medium text-[#313d44] dark:text-white">{item.label}</span>
-              {active && (
-                <div className="ml-auto w-1.5 h-1.5 rounded-full bg-[#00668c] dark:bg-[#61bc84]" />
-              )}
-            </Link>
-          );
-        })}
+      <nav
+        className="flex-1 overflow-y-auto"
+        style={{ padding: '0 12px 16px' }}
+      >
+        <NavSection
+          label="Food"
+          collapsed={false}
+          items={NAV_FOOD}
+          active={pathname}
+          onClickItem={onClose}
+        />
+        <div style={{ height: 16 }} />
+        <NavSection
+          label="Track"
+          collapsed={false}
+          items={NAV_TRACK}
+          active={pathname}
+          onClickItem={onClose}
+        />
+        <div
+          style={{
+            borderTop: '1px solid var(--color-border)',
+            margin: '16px 0',
+          }}
+        />
+        <NavSection
+          collapsed={false}
+          items={NAV_SECONDARY}
+          active={pathname}
+          onClickItem={onClose}
+        />
       </nav>
 
-      {/* Footer */}
-      <div className="px-6 pb-6 flex items-center justify-between">
-        <div className="text-xs text-[#313d44]/50 dark:text-white/25">
+      <div
+        className="flex items-center justify-between"
+        style={{
+          padding: '12px 16px',
+          borderTop: '1px solid var(--color-border)',
+        }}
+      >
+        <div
+          style={{
+            fontSize: 11,
+            color: 'var(--color-muted-foreground)',
+          }}
+        >
           Dashki v0.1.0
         </div>
         <button
+          type="button"
           onClick={onToggleTheme}
-          title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-          className="p-2 rounded-xl text-[#313d44]/70 dark:text-white/40 hover:text-[#1d1c1c] dark:hover:text-yellow-300 hover:bg-[#d4eaf7]/60 dark:hover:bg-white/10 transition-all duration-200"
+          className="flex items-center justify-center cursor-pointer"
+          style={{
+            width: 28,
+            height: 28,
+            background: 'transparent',
+            border: '1px solid var(--color-border)',
+            borderRadius: 4,
+            color: 'var(--color-muted-foreground)',
+          }}
           aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
         >
-          {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+          {darkMode ? (
+            <Sun style={{ width: 14, height: 14 }} />
+          ) : (
+            <Moon style={{ width: 14, height: 14 }} />
+          )}
         </button>
       </div>
     </div>
   );
 }
 
-// ─── Main Sidebar export ──────────────────────────────────────────────────────
+// ─── Main Sidebar export ────────────────────────────────────────────────────
 
-export default function Sidebar({ isOpen, onClose, darkMode, onToggleTheme }: SidebarProps) {
-  // Start collapsed=true so the sidebar-offset CSS is applied correctly before hydration
+export default function Sidebar({
+  isOpen,
+  onClose,
+  darkMode,
+  onToggleTheme,
+}: SidebarProps) {
   const [collapsed, setCollapsed] = useState(true);
 
-  // Read from localStorage on mount, sync to document
-  // Default: collapsed=true (sidebar starts collapsed on fresh load)
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
     const isCollapsed = stored !== null ? stored === 'true' : true;
@@ -295,13 +527,15 @@ export default function Sidebar({ isOpen, onClose, darkMode, onToggleTheme }: Si
 
   return (
     <>
-      {/* ── Desktop sidebar — collapsible ── */}
+      {/* Desktop */}
       <aside
         className={clsx(
-          'hidden md:flex flex-col fixed left-0 top-0 h-full z-40',
-          'transition-all duration-300',
-          collapsed ? 'w-16' : 'w-64'
+          'hidden md:flex flex-col fixed left-0 top-0 h-full z-40'
         )}
+        style={{
+          width: collapsed ? 56 : 220,
+          transition: 'width 150ms ease-out',
+        }}
       >
         <DesktopSidebarContent
           collapsed={collapsed}
@@ -311,18 +545,16 @@ export default function Sidebar({ isOpen, onClose, darkMode, onToggleTheme }: Si
         />
       </aside>
 
-      {/* ── Mobile drawer — always expanded ── */}
+      {/* Mobile drawer */}
       <div className="md:hidden">
-        {/* Backdrop */}
         {isOpen && (
           <div
-            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm animate-fade-in"
+            className="fixed inset-0 z-40"
+            style={{ background: 'rgba(0,0,0,0.4)' }}
             onClick={onClose}
             aria-hidden="true"
           />
         )}
-
-        {/* Drawer panel */}
         <aside
           className={clsx(
             'fixed left-0 top-0 h-full w-72 z-50 flex flex-col',

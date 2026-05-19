@@ -1,378 +1,561 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { GlassCard, GlassButton, GlassInput } from '@/components/ui';
+import { useEffect, useState } from 'react';
 import {
-  getPreferences,
-  updatePreferences,
+  User as UserIcon,
+  Target,
+  Settings as SettingsIcon,
+  Database,
+  Download,
+  Trash2,
+  Plug,
+  Link as LinkIcon,
+  Sun,
+  Moon,
+} from 'lucide-react';
+import {
+  GlassButton,
+  CardShell,
+  Pill,
+} from '@/components/ui';
+import {
   getGoals,
   updateGoals,
+  getPreferences,
+  updatePreferences,
 } from '@/lib/api';
-import { useSocketEvent } from '@/lib/useSocketEvent';
-import { Check, User, Target } from 'lucide-react';
 import type { Goals } from '@/lib/types';
+import { useSocketEvent } from '@/lib/useSocketEvent';
 
-// ─── Profile section (display name) ──────────────────────────────────────────
+const DEFAULT_GOALS: Goals = {
+  id: 0,
+  calories: 2000,
+  protein: 150,
+  carbs: null,
+  fat: null,
+  steps: 10000,
+  weight_kg: null,
+  weight_journey_start_date: null,
+  tdee_calories: null,
+  updated_at: '',
+};
 
-function ProfileSection() {
-  const [loading, setLoading] = useState(true);
-  const [savedName, setSavedName] = useState<string | null>(null);
-  const [draft, setDraft] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [savedFlash, setSavedFlash] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+// ─── Row helpers ────────────────────────────────────────────────────────────
 
-  const fetchPrefs = useCallback(async () => {
-    setLoading(true);
-    try {
-      const prefs = await getPreferences();
-      setSavedName(prefs.display_name);
-      setDraft(prefs.display_name ?? '');
-    } catch (e: any) {
-      setError(e?.message || 'Failed to load profile');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { fetchPrefs(); }, [fetchPrefs]);
-  useSocketEvent('preferences-updated', fetchPrefs);
-
-  const isDirty = (draft.trim() === '' ? null : draft.trim()) !== savedName;
-
-  async function handleSave() {
-    setError(null);
-    setSaving(true);
-    try {
-      const next = draft.trim() === '' ? null : draft.trim();
-      const result = await updatePreferences({ display_name: next });
-      setSavedName(result.display_name);
-      setDraft(result.display_name ?? '');
-      setSavedFlash(true);
-      setTimeout(() => setSavedFlash(false), 1500);
-    } catch (e: any) {
-      setError(e?.message || 'Failed to save');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Enter' && isDirty && !saving) handleSave();
-  }
-
+function Row({
+  label,
+  hint,
+  control,
+}: {
+  label: string;
+  hint?: string;
+  control: React.ReactNode;
+}) {
   return (
-    <div>
-      <h2 className="text-xs font-semibold text-white/40 uppercase tracking-widest mb-3 flex items-center gap-2">
-        <User className="w-3.5 h-3.5" />
-        Profile
-      </h2>
-      <GlassCard>
-        <div className="space-y-4">
-          <div>
-            <GlassInput
-              label="Display name"
-              placeholder="e.g. Terry"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={handleKeyDown}
-              maxLength={50}
-              disabled={loading || saving}
-            />
-            <p className="text-xs text-white/40 mt-2">
-              Shown in your dashboard greeting. Leave blank for a generic greeting.
-            </p>
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr auto',
+        gap: 16,
+        alignItems: 'center',
+        padding: '14px 0',
+        borderBottom: '1px solid var(--color-border)',
+      }}
+    >
+      <div>
+        <div style={{ fontSize: 14, fontWeight: 500 }}>{label}</div>
+        {hint && (
+          <div
+            style={{
+              fontSize: 12,
+              color: 'var(--color-muted-foreground)',
+              marginTop: 2,
+            }}
+          >
+            {hint}
           </div>
-
-          {error && (
-            <p className="text-sm text-red-400 bg-red-500/10 border border-red-400/20 rounded-xl px-3 py-2">
-              {error}
-            </p>
-          )}
-
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-xs text-white/40">
-              {savedFlash ? (
-                <span className="text-emerald-400 inline-flex items-center gap-1">
-                  <Check className="w-3.5 h-3.5" /> Saved
-                </span>
-              ) : isDirty ? (
-                <span className="text-amber-400">Unsaved changes</span>
-              ) : (
-                <span>Up to date</span>
-              )}
-            </span>
-            <GlassButton
-              variant="primary"
-              onClick={handleSave}
-              disabled={!isDirty || saving || loading}
-            >
-              {saving ? 'Saving…' : 'Save'}
-            </GlassButton>
-          </div>
-        </div>
-      </GlassCard>
+        )}
+      </div>
+      <div>{control}</div>
     </div>
   );
 }
 
-// ─── Daily Goals section ─────────────────────────────────────────────────────
-
-function GoalsSection() {
-  const [loading, setLoading] = useState(true);
-  const [savedGoals, setSavedGoals] = useState<Goals | null>(null);
-  const [calorieDraft, setCalorieDraft] = useState('');
-  const [proteinDraft, setProteinDraft] = useState('');
-  const [stepDraft, setStepDraft] = useState('');
-  const [weightDraft, setWeightDraft] = useState('');
-  const [startDateDraft, setStartDateDraft] = useState('');
-  const [tdeeDraft, setTdeeDraft] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [savedFlash, setSavedFlash] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchGoals = useCallback(async () => {
-    setLoading(true);
-    try {
-      const g = await getGoals();
-      setSavedGoals(g);
-      setCalorieDraft(String(g.calories ?? ''));
-      setProteinDraft(String(g.protein ?? ''));
-      setStepDraft(String(g.steps ?? ''));
-      setWeightDraft(g.weight_kg !== null ? String(g.weight_kg) : '');
-      setStartDateDraft(g.weight_journey_start_date ?? '');
-      setTdeeDraft(g.tdee_calories !== null ? String(g.tdee_calories) : '');
-    } catch (e: any) {
-      setError(e?.message || 'Failed to load goals');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { fetchGoals(); }, [fetchGoals]);
-  useSocketEvent('goals-updated', fetchGoals);
-
-  // What "is dirty" — compare drafts to saved
-  function parseField(v: string): number | null {
-    const n = Number(v.trim());
-    if (!Number.isFinite(n) || n <= 0) return null;
-    return n;
-  }
-
-  const draftCalories = parseField(calorieDraft);
-  const draftProtein = parseField(proteinDraft);
-  const draftSteps = parseField(stepDraft);
-  // Weight is optional — empty string means "no goal set" (null), otherwise
-  // it must parse to a positive number.
-  const draftWeight = weightDraft.trim() === ''
-    ? null
-    : parseField(weightDraft);
-  const draftWeightValid = weightDraft.trim() === '' || draftWeight !== null;
-
-  // Start date is optional — empty means "no journey", otherwise must look like ISO YYYY-MM-DD.
-  const draftStartDate = startDateDraft.trim() === '' ? null : startDateDraft.trim();
-  const startDateValid =
-    draftStartDate === null || /^\d{4}-\d{2}-\d{2}$/.test(draftStartDate);
-
-  // TDEE is optional — empty means "not set", otherwise must be a positive number.
-  const draftTdee = tdeeDraft.trim() === '' ? null : parseField(tdeeDraft);
-  const tdeeValid = tdeeDraft.trim() === '' || draftTdee !== null;
-
-  const savedCalories = savedGoals?.calories ?? null;
-  const savedProtein = savedGoals?.protein ?? null;
-  const savedSteps = savedGoals?.steps ?? null;
-  const savedWeight = savedGoals?.weight_kg ?? null;
-  const savedStartDate = savedGoals?.weight_journey_start_date ?? null;
-  const savedTdee = savedGoals?.tdee_calories ?? null;
-
-  const isDirty =
-    draftCalories !== savedCalories ||
-    draftProtein !== savedProtein ||
-    draftSteps !== savedSteps ||
-    draftWeight !== savedWeight ||
-    draftStartDate !== savedStartDate ||
-    draftTdee !== savedTdee;
-
-  // For the steps goal, must be a positive integer (matches backend validation).
-  const stepsValid = draftSteps === null || Number.isInteger(draftSteps);
-
-  const allValid =
-    draftCalories !== null &&
-    draftProtein !== null &&
-    draftSteps !== null &&
-    stepsValid &&
-    draftWeightValid &&
-    startDateValid &&
-    tdeeValid;
-
-  async function handleSave() {
-    setError(null);
-    if (!allValid) {
-      setError('Calories/protein/steps must be positive numbers (steps whole). Weight is optional.');
-      return;
-    }
-    setSaving(true);
-    try {
-      const updated = await updateGoals({
-        calories: draftCalories,
-        protein: draftProtein,
-        steps: draftSteps,
-        weight_kg: draftWeight,
-        weight_journey_start_date: draftStartDate,
-        tdee_calories: draftTdee,
-      });
-      setSavedGoals(updated);
-      setCalorieDraft(String(updated.calories ?? ''));
-      setProteinDraft(String(updated.protein ?? ''));
-      setStepDraft(String(updated.steps ?? ''));
-      setWeightDraft(updated.weight_kg !== null ? String(updated.weight_kg) : '');
-      setStartDateDraft(updated.weight_journey_start_date ?? '');
-      setTdeeDraft(updated.tdee_calories !== null ? String(updated.tdee_calories) : '');
-      setSavedFlash(true);
-      setTimeout(() => setSavedFlash(false), 1500);
-    } catch (e: any) {
-      setError(e?.message || 'Failed to save — please try again');
-      // Reset drafts to last known saved values so user knows it didn't stick
-      if (savedGoals) {
-        setCalorieDraft(String(savedGoals.calories ?? ''));
-        setProteinDraft(String(savedGoals.protein ?? ''));
-        setStepDraft(String(savedGoals.steps ?? ''));
-        setWeightDraft(savedGoals.weight_kg !== null ? String(savedGoals.weight_kg) : '');
-        setStartDateDraft(savedGoals.weight_journey_start_date ?? '');
-        setTdeeDraft(savedGoals.tdee_calories !== null ? String(savedGoals.tdee_calories) : '');
-      }
-    } finally {
-      setSaving(false);
-    }
-  }
-
+function NumInput({
+  value,
+  onChange,
+  unit,
+  width = 120,
+}: {
+  value: number | string;
+  onChange: (v: number) => void;
+  unit: string;
+  width?: number;
+}) {
   return (
-    <div>
-      <h2 className="text-xs font-semibold text-white/40 uppercase tracking-widest mb-3 flex items-center gap-2">
-        <Target className="w-3.5 h-3.5" />
-        Daily Goals
-      </h2>
-      <GlassCard>
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <GlassInput
-              label="Calories (kcal)"
-              type="number"
-              inputMode="decimal"
-              value={calorieDraft}
-              onChange={(e) => setCalorieDraft(e.target.value)}
-              min={1}
-              step={50}
-              disabled={loading || saving}
-            />
-            <GlassInput
-              label="Protein (g)"
-              type="number"
-              inputMode="decimal"
-              value={proteinDraft}
-              onChange={(e) => setProteinDraft(e.target.value)}
-              min={1}
-              step={5}
-              disabled={loading || saving}
-            />
-            <GlassInput
-              label="Steps"
-              type="number"
-              inputMode="numeric"
-              value={stepDraft}
-              onChange={(e) => setStepDraft(e.target.value)}
-              min={1}
-              step={500}
-              disabled={loading || saving}
-            />
-            <GlassInput
-              label="Weight (kg)"
-              type="number"
-              inputMode="decimal"
-              value={weightDraft}
-              onChange={(e) => setWeightDraft(e.target.value)}
-              min={0}
-              step={0.1}
-              placeholder="optional"
-              disabled={loading || saving}
-            />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <GlassInput
-              label="Journey start date"
-              type="date"
-              value={startDateDraft}
-              onChange={(e) => setStartDateDraft(e.target.value)}
-              placeholder="optional"
-              disabled={loading || saving}
-            />
-            <GlassInput
-              label="Maintenance calories (TDEE)"
-              type="number"
-              inputMode="decimal"
-              value={tdeeDraft}
-              onChange={(e) => setTdeeDraft(e.target.value)}
-              min={0}
-              step={50}
-              placeholder="optional"
-              disabled={loading || saving}
-            />
-          </div>
-          <p className="text-xs text-white/40">
-            Goals are saved to your Dashki database — they persist across all your
-            devices. Weight and journey fields are optional; setting a start date
-            + TDEE unlocks the journey card on the Weight page with a projected
-            goal date.
-          </p>
-
-          {error && (
-            <p className="text-sm text-red-400 bg-red-500/10 border border-red-400/20 rounded-xl px-3 py-2">
-              {error}
-            </p>
-          )}
-
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-xs text-white/40">
-              {savedFlash ? (
-                <span className="text-emerald-400 inline-flex items-center gap-1">
-                  <Check className="w-3.5 h-3.5" /> Saved
-                </span>
-              ) : isDirty ? (
-                <span className="text-amber-400">Unsaved changes</span>
-              ) : (
-                <span>Up to date</span>
-              )}
-            </span>
-            <GlassButton
-              variant="primary"
-              onClick={handleSave}
-              disabled={!isDirty || saving || loading || !allValid}
-            >
-              {saving ? 'Saving…' : 'Save'}
-            </GlassButton>
-          </div>
-        </div>
-      </GlassCard>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <input
+        type="number"
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        style={{
+          width,
+          textAlign: 'right',
+          padding: '6px 10px',
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border)',
+          borderRadius: 4,
+          color: 'var(--color-foreground)',
+          fontFamily: 'inherit',
+          fontSize: 14,
+        }}
+      />
+      <span style={{ fontSize: 12, color: 'var(--color-muted-foreground)' }}>
+        {unit}
+      </span>
     </div>
   );
 }
 
-// ─── Page ────────────────────────────────────────────────────────────────────
+function Switch({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <label
+      style={{
+        position: 'relative',
+        display: 'inline-block',
+        width: 32,
+        height: 18,
+        cursor: 'pointer',
+      }}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        style={{ opacity: 0, width: 0, height: 0 }}
+      />
+      <span
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: checked ? 'var(--color-primary)' : 'var(--color-soft-strong)',
+          borderRadius: 9999,
+          transition: 'background 120ms',
+        }}
+      />
+      <span
+        style={{
+          position: 'absolute',
+          top: 2,
+          left: 2,
+          width: 14,
+          height: 14,
+          background: '#fff',
+          borderRadius: 9999,
+          boxShadow: '0 1px 2px rgba(0,0,0,0.18)',
+          transform: checked ? 'translateX(14px)' : 'translateX(0)',
+          transition: 'transform 120ms ease-out',
+        }}
+      />
+    </label>
+  );
+}
+
+// ─── Page ───────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
-  return (
-    <div className="px-4 py-8 animate-fade-in">
-      <div className="max-w-2xl mx-auto space-y-8">
-        <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Settings</h1>
-          <p className="text-white/50 text-sm mt-1">
-            Personalize your Dashki instance.
-          </p>
-        </div>
+  const [goals, setGoals] = useState<Goals>(DEFAULT_GOALS);
+  const [displayName, setDisplayName] = useState<string>('');
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [notif, setNotif] = useState(true);
+  const [voice, setVoice] = useState(false);
+  const [savingDisplayName, setSavingDisplayName] = useState(false);
 
-        <ProfileSection />
-        <GoalsSection />
+  useEffect(() => {
+    getGoals().then(setGoals).catch(() => {});
+    getPreferences()
+      .then((p) => {
+        setDisplayName(p.display_name ?? '');
+        setTheme(p.theme);
+      })
+      .catch(() => {});
+  }, []);
+
+  useSocketEvent('goals-updated', () => {
+    getGoals().then(setGoals).catch(() => {});
+  });
+
+  function saveGoal<K extends keyof Goals>(key: K, value: Goals[K]) {
+    const next = { ...goals, [key]: value };
+    setGoals(next);
+    // updateGoals only accepts a Partial of the editable fields; cast to its
+    // parameter type.
+    updateGoals({ [key]: value } as Parameters<typeof updateGoals>[0]).catch(
+      () => {}
+    );
+  }
+
+  async function saveDisplayName() {
+    setSavingDisplayName(true);
+    try {
+      await updatePreferences({ display_name: displayName.trim() || null });
+    } finally {
+      setSavingDisplayName(false);
+    }
+  }
+
+  function toggleTheme() {
+    const next: 'dark' | 'light' = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    localStorage.setItem('dashki-theme', next);
+    if (next === 'dark') document.documentElement.classList.add('dark');
+    else document.documentElement.classList.remove('dark');
+    updatePreferences({ theme: next }).catch(() => {});
+  }
+
+  return (
+    <main
+      className="page-mount"
+      style={{
+        maxWidth: 800,
+        margin: '0 auto',
+        padding: '24px 16px 80px',
+      }}
+    >
+      <div>
+        <h1
+          style={{
+            fontSize: 22,
+            fontWeight: 700,
+            letterSpacing: '-0.4px',
+            margin: 0,
+            color: 'var(--color-foreground)',
+          }}
+        >
+          Settings
+        </h1>
+        <div
+          style={{
+            color: 'var(--color-muted-foreground)',
+            marginTop: 4,
+            fontSize: 14,
+          }}
+        >
+          Goals, preferences, and connected accounts.
+        </div>
       </div>
+
+      {/* Account */}
+      <div style={{ marginTop: 24 }}>
+        <CardShell
+          title="Account"
+          icon={<UserIcon style={{ width: 14, height: 14, strokeWidth: 2.25 }} />}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 14,
+              padding: '6px 0 14px',
+            }}
+          >
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 9999,
+                background:
+                  'linear-gradient(135deg, var(--color-primary) 0%, var(--color-teal) 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#fff',
+                fontSize: 18,
+                fontWeight: 700,
+              }}
+            >
+              {(displayName || 'T').slice(0, 1).toUpperCase()}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  placeholder="Display name"
+                  style={{
+                    flex: 1,
+                    padding: '6px 10px',
+                    background: 'var(--color-surface)',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 4,
+                    color: 'var(--color-foreground)',
+                    fontFamily: 'inherit',
+                    fontSize: 14,
+                  }}
+                />
+                <GlassButton
+                  variant="outline"
+                  size="sm"
+                  onClick={saveDisplayName}
+                  disabled={savingDisplayName}
+                >
+                  {savingDisplayName ? 'Saving…' : 'Save'}
+                </GlassButton>
+              </div>
+              <div
+                style={{
+                  fontSize: 12,
+                  color: 'var(--color-muted-foreground)',
+                  marginTop: 4,
+                }}
+              >
+                Shown in greetings across the app.
+              </div>
+            </div>
+          </div>
+        </CardShell>
+      </div>
+
+      {/* Daily goals */}
+      <div style={{ marginTop: 16 }}>
+        <CardShell
+          title="Daily goals"
+          icon={<Target style={{ width: 14, height: 14, strokeWidth: 2.25 }} />}
+          hint={
+            <span
+              style={{
+                fontSize: 12,
+                color: 'var(--color-muted-foreground)',
+              }}
+            >
+              Used across the dashboard.
+            </span>
+          }
+        >
+          <Row
+            label="Calories"
+            hint="Target daily energy intake."
+            control={
+              <NumInput
+                value={goals.calories}
+                onChange={(v) => saveGoal('calories', v)}
+                unit="kcal"
+              />
+            }
+          />
+          <Row
+            label="Protein"
+            hint="Target daily protein."
+            control={
+              <NumInput
+                value={goals.protein}
+                onChange={(v) => saveGoal('protein', v)}
+                unit="g"
+              />
+            }
+          />
+          <Row
+            label="Weight"
+            hint="Long-term target."
+            control={
+              <NumInput
+                value={goals.weight_kg ?? ''}
+                onChange={(v) => saveGoal('weight_kg', v || null)}
+                unit="kg"
+              />
+            }
+          />
+          <Row
+            label="Steps per day"
+            hint="Daily movement target."
+            control={
+              <NumInput
+                value={goals.steps}
+                onChange={(v) => saveGoal('steps', v)}
+                unit="steps"
+                width={140}
+              />
+            }
+          />
+        </CardShell>
+      </div>
+
+      {/* Preferences */}
+      <div style={{ marginTop: 16 }}>
+        <CardShell
+          title="Preferences"
+          icon={
+            <SettingsIcon
+              style={{ width: 14, height: 14, strokeWidth: 2.25 }}
+            />
+          }
+        >
+          <Row
+            label="Theme"
+            hint={theme === 'dark' ? 'Dark mode.' : 'Light mode.'}
+            control={
+              <GlassButton variant="outline" size="sm" onClick={toggleTheme}>
+                {theme === 'dark' ? (
+                  <>
+                    <Sun style={{ width: 14, height: 14, marginRight: 6 }} />
+                    Switch to light
+                  </>
+                ) : (
+                  <>
+                    <Moon style={{ width: 14, height: 14, marginRight: 6 }} />
+                    Switch to dark
+                  </>
+                )}
+              </GlassButton>
+            }
+          />
+          <Row
+            label="Notifications"
+            hint="Daily reminders to log meals and weight."
+            control={<Switch checked={notif} onChange={setNotif} />}
+          />
+          <Row
+            label="Voice meal entry"
+            hint="Use AI to parse voice notes into entries."
+            control={<Switch checked={voice} onChange={setVoice} />}
+          />
+        </CardShell>
+      </div>
+
+      {/* Integrations */}
+      <div style={{ marginTop: 16 }}>
+        <CardShell
+          title="Integrations"
+          icon={<Plug style={{ width: 14, height: 14, strokeWidth: 2.25 }} />}
+        >
+          <IntegrationRow
+            name="Discord bot"
+            desc="Log meals from Discord with AI parsing."
+            status="on"
+          />
+          <IntegrationRow
+            name="Google Calendar"
+            desc="Pull events for the calendar view."
+            status="off"
+          />
+          <IntegrationRow
+            name="OpenAI"
+            desc="Powers AI fuzzy food matching."
+            status="on"
+          />
+        </CardShell>
+      </div>
+
+      {/* Data */}
+      <div style={{ marginTop: 16 }}>
+        <CardShell
+          title="Data"
+          icon={<Database style={{ width: 14, height: 14, strokeWidth: 2.25 }} />}
+        >
+          <Row
+            label="Export"
+            hint="Download your journal, weights, steps as JSON."
+            control={
+              <GlassButton variant="outline" size="sm">
+                <Download style={{ width: 13, height: 13, marginRight: 6 }} />
+                Export
+              </GlassButton>
+            }
+          />
+          <Row
+            label="Reset"
+            hint="Clear all data. This permanently removes every entry. Cannot be undone."
+            control={
+              <GlassButton variant="danger" size="sm">
+                <Trash2 style={{ width: 13, height: 13, marginRight: 6 }} />
+                Reset
+              </GlassButton>
+            }
+          />
+        </CardShell>
+      </div>
+
+      <div
+        style={{
+          marginTop: 24,
+          fontSize: 11,
+          color: 'var(--color-muted-foreground)',
+          textAlign: 'center',
+        }}
+      >
+        Dashki · Built in Melbourne.
+      </div>
+    </main>
+  );
+}
+
+function IntegrationRow({
+  name,
+  desc,
+  status,
+}: {
+  name: string;
+  desc: string;
+  status: 'on' | 'off';
+}) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '12px 0',
+        borderBottom: '1px solid var(--color-border)',
+      }}
+    >
+      <div
+        style={{
+          width: 36,
+          height: 36,
+          borderRadius: 8,
+          background: 'var(--color-surface-warm)',
+          border: '1px solid var(--color-border)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <LinkIcon
+          style={{
+            width: 14,
+            height: 14,
+            strokeWidth: 2,
+            color: 'var(--color-muted-foreground)',
+          }}
+        />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 500 }}>{name}</div>
+        <div
+          style={{
+            fontSize: 12,
+            color: 'var(--color-muted-foreground)',
+            marginTop: 1,
+          }}
+        >
+          {desc}
+        </div>
+      </div>
+      {status === 'on' ? (
+        <Pill tone="success" dot>
+          Connected
+        </Pill>
+      ) : (
+        <GlassButton variant="outline" size="sm">
+          Connect
+        </GlassButton>
+      )}
     </div>
   );
 }
