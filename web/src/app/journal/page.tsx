@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Loader2, Clock, Search, Copy, MoreHorizontal, Move } from 'lucide-react';
-import { GlassCard, GlassButton, GlassInput, GlassModal, CalorieRing, MacroBar, Pill, MicroLabel } from '@/components/ui';
+import { ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Loader2, Clock, Search, Copy, MoreHorizontal, Move, Sunrise, Sun, Cookie, Moon } from 'lucide-react';
+import { GlassCard, GlassButton, GlassInput, GlassModal, CalorieRing, MacroBar, Pill, MicroLabel, MonoNum, EmptyState, CardShell } from '@/components/ui';
 import {
   getJournalEntries,
   addJournalEntry,
@@ -22,7 +22,7 @@ import { nutritionFor, formatQuantity } from '@/lib/nutrition';
 
 const DEFAULT_GOALS = { calories: 2000, protein: 150 };
 
-const MEAL_TYPES: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
+const MEAL_TYPES: MealType[] = ['breakfast', 'lunch', 'snack', 'dinner'];
 const MEAL_LABELS: Record<MealType, string> = {
   breakfast: 'Breakfast',
   lunch: 'Lunch',
@@ -45,8 +45,9 @@ function formatDateLabel(d: Date): string {
   const key = toISODate(d);
   if (key === today) return 'Today';
   if (key === yesterday) return 'Yesterday';
-  return d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
+  return d.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short' });
 }
+
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 
@@ -960,7 +961,7 @@ function EntryActionMenu({ anchor, currentMeal, onEdit, onMove, onCopy, onDelete
   );
 }
 
-// ─── Entry Row ─────────────────────────────────────────────────────────────
+// ─── Entry row (design-faithful: grid with food, cals, protein, more) ──────────
 
 interface EntryRowProps {
   entry: JournalEntry;
@@ -986,6 +987,7 @@ function EntryRow({
   const [menuAnchor, setMenuAnchor] = useState<{ x: number; y: number } | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [hovered, setHovered] = useState(false);
   const threeDotRef = useRef<HTMLButtonElement>(null);
 
   function handleDragStart(e: React.DragEvent) {
@@ -998,17 +1000,15 @@ function EntryRow({
     setDragging(false);
     onDragEndEntry();
   }
-
   function handleContextMenu(e: React.MouseEvent) {
     e.preventDefault();
     setMenuAnchor({ x: e.clientX, y: e.clientY });
   }
-
-  function openMenuFromButton() {
+  function openMenuFromButton(e: React.MouseEvent) {
+    e.stopPropagation();
     const rect = threeDotRef.current?.getBoundingClientRect();
     if (rect) setMenuAnchor({ x: rect.left, y: rect.bottom + 4 });
   }
-
   async function handleDelete() {
     setDeleting(true);
     try {
@@ -1017,52 +1017,110 @@ function EntryRow({
       setDeleting(false);
     }
   }
-
   async function handleCopy(target: MealType) {
     setMenuAnchor(null);
     await onCopy(entry, target);
   }
-
   async function handleMove(target: MealType) {
     setMenuAnchor(null);
     await onMove(entry.id, target);
   }
 
+  const qty = entry.quantity ?? entry.servings ?? 1;
+  const unit = (entry.unit as Unit) ?? 'serving';
+
   return (
-    <div
+    <li
       draggable={pointerCapable}
       onDragStart={pointerCapable ? handleDragStart : undefined}
       onDragEnd={pointerCapable ? handleDragEnd : undefined}
       onContextMenu={handleContextMenu}
-      className={`flex items-center gap-2 px-4 py-3 rounded-2xl bg-white/5 border border-white/10 group transition-opacity ${
-        dragging ? 'opacity-40' : ''
-      } ${pointerCapable ? 'cursor-grab active:cursor-grabbing' : ''}`}
+      onClick={() => onEdit(entry)}
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr auto auto auto',
+        alignItems: 'center',
+        gap: 14,
+        padding: '8px 12px',
+        margin: '0 -12px',
+        borderBottom: '1px solid var(--color-border)',
+        cursor: pointerCapable ? 'grab' : 'pointer',
+        opacity: dragging ? 0.4 : 1,
+        background: hovered ? 'var(--color-surface-warm)' : 'transparent',
+        transition: 'background 120ms ease-out',
+      }}
     >
-      <button
-        type="button"
-        onClick={() => onEdit(entry)}
-        className="flex-1 text-left min-w-0 cursor-pointer"
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 14,
+            fontWeight: 500,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {entry.food_name_snapshot}
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            color: 'var(--color-muted-foreground)',
+            marginTop: 2,
+          }}
+        >
+          {formatQuantity(qty, unit)}
+        </div>
+      </div>
+      <span
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 12,
+          color: 'var(--color-muted-foreground)',
+          textAlign: 'right',
+          minWidth: 64,
+        }}
       >
-        <p className="text-sm font-medium text-white truncate">{entry.food_name_snapshot}</p>
-        <p className="text-xs text-white/50">
-          {formatQuantity(entry.quantity ?? entry.servings ?? 1, (entry.unit as Unit) ?? 'serving')} · {entry.calories_snapshot} kcal · {entry.protein_snapshot}g protein
-        </p>
-      </button>
-
-      {/* 3-dot icon → opens action menu (Edit / Copy to ▸ / Delete) */}
+        <span style={{ color: 'var(--color-foreground)', fontWeight: 600 }}>
+          {Math.round(entry.calories_snapshot)}
+        </span>{' '}
+        kcal
+      </span>
+      <span
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 12,
+          color: 'var(--color-muted-foreground)',
+          textAlign: 'right',
+          minWidth: 56,
+        }}
+      >
+        <span style={{ color: 'var(--color-foreground)', fontWeight: 600 }}>
+          {Math.round(entry.protein_snapshot * 10) / 10}
+        </span>
+        g P
+      </span>
       <button
         ref={threeDotRef}
         type="button"
         onClick={openMenuFromButton}
         disabled={deleting}
-        className="p-1.5 rounded-xl text-white/40 hover:text-white hover:bg-white/10 transition-all duration-200 opacity-60 group-hover:opacity-100 disabled:opacity-30"
+        className="cursor-pointer"
+        style={{
+          background: 'transparent',
+          border: 0,
+          color: 'var(--color-muted-foreground)',
+          padding: 4,
+          borderRadius: 4,
+        }}
         aria-label="More actions"
-        title="More actions"
       >
         {deleting ? (
-          <Loader2 className="w-4 h-4 animate-spin" />
+          <Loader2 style={{ width: 14, height: 14 }} className="animate-spin" />
         ) : (
-          <MoreHorizontal className="w-4 h-4" />
+          <MoreHorizontal style={{ width: 14, height: 14, strokeWidth: 1.75 }} />
         )}
       </button>
 
@@ -1070,18 +1128,24 @@ function EntryRow({
         <EntryActionMenu
           anchor={menuAnchor}
           currentMeal={entry.meal_type}
-          onEdit={() => { setMenuAnchor(null); onEdit(entry); }}
-          onMove={(target) => { handleMove(target); }}
-          onCopy={(target) => { handleCopy(target); }}
-          onDelete={() => { setMenuAnchor(null); handleDelete(); }}
+          onEdit={() => {
+            setMenuAnchor(null);
+            onEdit(entry);
+          }}
+          onMove={handleMove}
+          onCopy={handleCopy}
+          onDelete={() => {
+            setMenuAnchor(null);
+            handleDelete();
+          }}
           onClose={() => setMenuAnchor(null)}
         />
       )}
-    </div>
+    </li>
   );
 }
 
-// ─── Meal Section ──────────────────────────────────────────────────────────
+// ─── Meal section (design-faithful: CardShell with totals hint + Add) ──────────
 
 interface MealSectionProps {
   type: MealType;
@@ -1092,7 +1156,6 @@ interface MealSectionProps {
   onRequestAdd: (mealType: MealType) => void;
   onCopyEntry: (entry: JournalEntry, target: MealType) => Promise<void> | void;
   onMoveEntry: (id: number, target: MealType) => Promise<void> | void;
-  /** Set true while ANY drag is active so other sections can highlight on hover */
   draggingActive: boolean;
   onDragStartEntry: () => void;
   onDragEndEntry: () => void;
@@ -1111,20 +1174,26 @@ function MealSection({
   onDragStartEntry,
   onDragEndEntry,
 }: MealSectionProps) {
-  const [collapsed, setCollapsed] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const dragCounter = useRef(0);
 
-  const totalCal = entries.reduce((a, e) => a + e.calories_snapshot, 0);
-  const totalPro = entries.reduce((a, e) => a + e.protein_snapshot, 0);
+  const totals = entries.reduce(
+    (a, e) => {
+      a.cal += e.calories_snapshot;
+      a.protein += e.protein_snapshot;
+      return a;
+    },
+    { cal: 0, protein: 0 }
+  );
 
   async function handleDelete(id: number) {
     try {
       await deleteJournalEntry(id);
       onDeleted(id);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
-
   function handleDragOver(e: React.DragEvent) {
     if (!pointerCapable) return;
     e.preventDefault();
@@ -1152,76 +1221,464 @@ function MealSection({
     }
   }
 
+  const mealIconName =
+    type === 'breakfast' ? 'Sunrise' : type === 'lunch' ? 'Sun' : type === 'snack' ? 'Cookie' : 'Moon';
+  const IconCmp =
+    type === 'breakfast'
+      ? Sunrise
+      : type === 'lunch'
+      ? Sun
+      : type === 'snack'
+      ? Cookie
+      : Moon;
+
   return (
-    <GlassCard
-      padding={false}
-      className={`overflow-hidden transition-all duration-150 ${
-        dragOver
-          ? 'ring-2 ring-indigo-400/70 bg-indigo-500/5'
+    <div
+      onDragOver={handleDragOver}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      style={{
+        outline: dragOver
+          ? '2px solid var(--color-primary)'
           : draggingActive
-            ? 'ring-1 ring-white/15'
-            : ''
-      }`}
+          ? '1px dashed var(--color-border)'
+          : 'none',
+        outlineOffset: 2,
+        borderRadius: 12,
+        transition: 'outline-color 120ms ease-out',
+      }}
     >
-      {/* Header */}
-      <button
-        onClick={() => setCollapsed(!collapsed)}
-        className="w-full flex items-center justify-between px-5 py-4 hover:bg-white/5 transition-colors duration-200"
-      >
-        <div className="flex items-center gap-3">
-          <span className="text-base font-semibold text-white">{MEAL_LABELS[type]}</span>
-          {entries.length > 0 && (
-            <span className="text-xs text-white/40 font-normal">
-              {Math.round(totalCal)} kcal · {Math.round(totalPro * 10) / 10}g protein
-            </span>
-          )}
-        </div>
-        <ChevronRight
-          className={`w-4 h-4 text-white/40 transition-transform duration-300 ${collapsed ? '' : 'rotate-90'}`}
-        />
-      </button>
-
-      {!collapsed && (
-        <div
-          className="px-5 pb-4 space-y-2"
-          onDragOver={handleDragOver}
-          onDragEnter={handleDragEnter}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-        >
-          {entries.length === 0 && (
-            <p className="text-sm text-white/30 text-center py-2">
-              {dragOver ? `Drop to move here` : 'Nothing logged yet'}
-            </p>
-          )}
-
-          {entries.map((entry) => (
-            <EntryRow
-              key={entry.id}
-              entry={entry}
-              pointerCapable={pointerCapable}
-              onEdit={onEditRequest}
-              onDelete={handleDelete}
-              onCopy={onCopyEntry}
-              onMove={onMoveEntry}
-              onDragStartEntry={onDragStartEntry}
-              onDragEndEntry={onDragEndEntry}
-            />
-          ))}
-
-          <button
-            onClick={() => onRequestAdd(type)}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl border border-dashed border-white/20 text-sm text-white/50 hover:text-white hover:border-indigo-400/50 hover:bg-white/5 transition-all duration-300"
+      <CardShell
+        title={MEAL_LABELS[type]}
+        icon={<IconCmp style={{ width: 14, height: 14, strokeWidth: 2.25 }} aria-label={mealIconName} />}
+        hint={
+          <div
+            style={{
+              display: 'flex',
+              gap: 10,
+              alignItems: 'baseline',
+            }}
           >
-            <Plus className="w-4 h-4" /> Add Food
-          </button>
-        </div>
-      )}
-    </GlassCard>
+            {entries.length > 0 && (
+              <span
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 12,
+                  color: 'var(--color-muted-foreground)',
+                }}
+              >
+                <span
+                  style={{
+                    color: 'var(--color-foreground)',
+                    fontWeight: 600,
+                  }}
+                >
+                  {Math.round(totals.cal)}
+                </span>{' '}
+                kcal ·{' '}
+                <span
+                  style={{
+                    color: 'var(--color-foreground)',
+                    fontWeight: 600,
+                  }}
+                >
+                  {Math.round(totals.protein)}g
+                </span>{' '}
+                P
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => onRequestAdd(type)}
+              className="cursor-pointer"
+              style={{
+                background: 'transparent',
+                border: 0,
+                color: 'var(--color-link)',
+                fontSize: 12,
+                fontWeight: 600,
+                padding: 0,
+              }}
+            >
+              + Add
+            </button>
+          </div>
+        }
+      >
+        {entries.length === 0 ? (
+          <EmptyState>
+            {dragOver
+              ? 'Drop to move here'
+              : `No ${MEAL_LABELS[type].toLowerCase()} logged.`}
+          </EmptyState>
+        ) : (
+          <ul
+            style={{
+              listStyle: 'none',
+              padding: 0,
+              margin: 0,
+            }}
+          >
+            {entries.map((entry) => (
+              <EntryRow
+                key={entry.id}
+                entry={entry}
+                pointerCapable={pointerCapable}
+                onEdit={onEditRequest}
+                onDelete={handleDelete}
+                onCopy={onCopyEntry}
+                onMove={onMoveEntry}
+                onDragStartEntry={onDragStartEntry}
+                onDragEndEntry={onDragEndEntry}
+              />
+            ))}
+          </ul>
+        )}
+      </CardShell>
+    </div>
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// ─── Day summary card (right column) ───────────────────────────────────────────
+
+function JournalSummaryCard({
+  calories,
+  protein,
+  entries,
+  goals,
+}: {
+  calories: number;
+  protein: number;
+  entries: number;
+  goals: { calories: number; protein: number };
+}) {
+  return (
+    <div
+      style={{
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 12,
+        boxShadow: 'var(--shadow-card)',
+        padding: 20,
+      }}
+    >
+      <MicroLabel>Day summary</MicroLabel>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          marginTop: 12,
+        }}
+      >
+        <CalorieRing
+          value={Math.round(calories)}
+          target={goals.calories}
+          size={140}
+          stroke={12}
+        />
+      </div>
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+          marginTop: 16,
+        }}
+      >
+        <MacroBar
+          label="Protein"
+          value={Math.round(protein)}
+          target={goals.protein}
+          unit="g"
+          tone={protein >= goals.protein ? 'success' : 'primary'}
+        />
+      </div>
+      <div
+        style={{
+          borderTop: '1px solid var(--color-border)',
+          marginTop: 16,
+          paddingTop: 12,
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'baseline',
+          }}
+        >
+          <MicroLabel>Entries</MicroLabel>
+          <MonoNum size={18}>{entries}</MonoNum>
+        </div>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'baseline',
+            marginTop: 6,
+          }}
+        >
+          <MicroLabel>Calories remaining</MicroLabel>
+          <MonoNum
+            size={18}
+            color={
+              calories > goals.calories
+                ? 'var(--color-critical)'
+                : 'var(--color-success)'
+            }
+          >
+            {calories > goals.calories
+              ? '+' + (calories - goals.calories).toLocaleString()
+              : (goals.calories - calories).toLocaleString()}
+          </MonoNum>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Quick add panel ──────────────────────────────────────────────────────────
+
+function QuickAddPanel({
+  date,
+  defaultMeal,
+  onAdded,
+}: {
+  date: string;
+  defaultMeal: MealType;
+  onAdded: (entry: JournalEntry) => void;
+}) {
+  const [q, setQ] = useState('');
+  const [foods, setFoods] = useState<Food[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [adding, setAdding] = useState<number | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const url = q.trim()
+          ? BASE_URL + '/api/foods?search=' + encodeURIComponent(q.trim())
+          : BASE_URL + '/api/foods';
+        const res = await fetch(url);
+        if (res.ok) setFoods((await res.json()) as Food[]);
+      } catch {
+        /* ignore */
+      } finally {
+        setLoading(false);
+      }
+    }, 250);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [q]);
+
+  async function addOne(food: Food) {
+    setAdding(food.id);
+    try {
+      const units = food.units ?? [
+        { unit: 'serving' as Unit, label: 'serving', default: true },
+      ];
+      const def = units.find((u) => u.default) ?? units[0];
+      const startQty =
+        def.unit === 'serving'
+          ? 1
+          : (food.base_amount ?? food.baseAmount ?? 100);
+      const entry = await addJournalEntry({
+        date,
+        meal_type: defaultMeal,
+        food_id: food.id,
+        food_name_snapshot: food.name,
+        quantity: startQty,
+        unit: def.unit,
+      });
+      onAdded(entry);
+    } catch {
+      /* swallow */
+    } finally {
+      setAdding(null);
+    }
+  }
+
+  const visible = foods.slice(0, 8);
+
+  return (
+    <div
+      style={{
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 12,
+        boxShadow: 'var(--shadow-card)',
+        padding: 20,
+      }}
+    >
+      <h2
+        style={{
+          margin: 0,
+          fontSize: 15,
+          fontWeight: 700,
+          letterSpacing: '-0.25px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+        }}
+      >
+        <Search
+          style={{
+            width: 14,
+            height: 14,
+            color: 'var(--color-muted-foreground)',
+          }}
+        />
+        Quick add
+      </h2>
+      <div style={{ position: 'relative', marginTop: 12, marginBottom: 12 }}>
+        <Search
+          style={{
+            position: 'absolute',
+            left: 10,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            width: 14,
+            height: 14,
+            color: 'var(--color-placeholder)',
+          }}
+        />
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Find a food…"
+          style={{
+            width: '100%',
+            padding: '8px 10px 8px 32px',
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 4,
+            color: 'var(--color-foreground)',
+            fontFamily: 'inherit',
+            fontSize: 14,
+          }}
+        />
+      </div>
+      {loading && (
+        <div
+          style={{
+            fontSize: 12,
+            color: 'var(--color-muted-foreground)',
+            textAlign: 'center',
+            padding: '8px 0',
+          }}
+        >
+          Searching…
+        </div>
+      )}
+      {!loading && visible.length === 0 && (
+        <div
+          style={{
+            fontSize: 12,
+            color: 'var(--color-muted-foreground)',
+            textAlign: 'center',
+            padding: '8px 0',
+          }}
+        >
+          No foods match.
+        </div>
+      )}
+      <ul
+        style={{
+          listStyle: 'none',
+          padding: 0,
+          margin: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 2,
+        }}
+      >
+        {visible.map((f) => {
+          const cal = f.calories ?? f.calories_per_100g ?? 0;
+          return (
+            <li
+              key={f.id}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '6px 8px',
+                borderRadius: 4,
+                fontSize: 13,
+              }}
+            >
+              <span
+                style={{
+                  flex: 1,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {f.name}
+              </span>
+              <span
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 11,
+                  color: 'var(--color-muted-foreground)',
+                }}
+              >
+                {cal} kcal
+              </span>
+              <button
+                onClick={() => addOne(f)}
+                disabled={adding === f.id}
+                className="cursor-pointer"
+                style={{
+                  background: 'var(--color-soft)',
+                  border: 0,
+                  borderRadius: 4,
+                  padding: '3px 6px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  color: 'var(--color-foreground)',
+                  opacity: adding === f.id ? 0.5 : 1,
+                }}
+              >
+                {adding === f.id ? (
+                  <Loader2
+                    style={{ width: 12, height: 12 }}
+                    className="animate-spin"
+                  />
+                ) : (
+                  <Plus
+                    style={{ width: 12, height: 12, strokeWidth: 2.25 }}
+                  />
+                )}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function MealStackSkeleton() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {MEAL_TYPES.map((m) => (
+        <div
+          key={m}
+          className="skeleton"
+          style={{ height: 110, borderRadius: 12 }}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function JournalPage() {
   const [currentDate, setCurrentDate] = useState<Date>(() => new Date());
@@ -1237,42 +1694,40 @@ export default function JournalPage() {
   const [pointerCapable, setPointerCapable] = useState(false);
   const [draggingActive, setDraggingActive] = useState(false);
 
-  // Detect hover-capable input (mouse/trackpad) to gate drag-and-drop.
-  // Touch devices fall back to the 3-dot menu / copy button.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     setPointerCapable(window.matchMedia('(hover: hover)').matches);
   }, []);
 
-  // Load goals from API
   useEffect(() => {
     getGoals()
       .then((g) => setGoals({ calories: g.calories, protein: g.protein }))
-      .catch(() => {}); // keep defaults on failure
+      .catch(() => {});
   }, []);
 
-  async function handleSaveGoals(newGoals: { calories: number; protein: number }) {
-    // No optimistic update — wait for the backend to confirm so the modal
-    // can surface failures rather than closing on a fire-and-forget save
-    // that silently dropped the user's input.
+  async function handleSaveGoals(newGoals: {
+    calories: number;
+    protein: number;
+  }) {
     const updated = await updateGoals(newGoals);
     setGoals({ calories: updated.calories, protein: updated.protein });
   }
 
   const dateStr = toISODate(currentDate);
 
-  // `silent`: skip the loading skeleton so socket-driven refetches don't
-  // tear down the meal sections (which scroll-snaps the page back to top
-  // after a delete/edit). Only initial load + date change should show the
-  // skeleton — every other refresh updates entries in place.
-  const fetchEntries = useCallback((silent = false) => {
-    if (!silent) setLoading(true);
-    setError('');
-    getJournalEntries({ date: dateStr })
-      .then(setEntries)
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to load'))
-      .finally(() => setLoading(false));
-  }, [dateStr]);
+  const fetchEntries = useCallback(
+    (silent = false) => {
+      if (!silent) setLoading(true);
+      setError('');
+      getJournalEntries({ date: dateStr })
+        .then(setEntries)
+        .catch((e: unknown) =>
+          setError(e instanceof Error ? e.message : 'Failed to load')
+        )
+        .finally(() => setLoading(false));
+    },
+    [dateStr]
+  );
 
   useEffect(() => {
     fetchEntries();
@@ -1312,7 +1767,6 @@ export default function JournalPage() {
     setEditEntry(null);
   }
 
-  // Duplicate an entry into another meal on the same day.
   async function handleEntryCopy(entry: JournalEntry, target: MealType) {
     setError('');
     try {
@@ -1332,27 +1786,27 @@ export default function JournalPage() {
     }
   }
 
-  // Move an entry to a different meal section (drag/drop).
-  // Optimistic update with rollback on failure.
   async function handleEntryMove(id: number, target: MealType) {
     const current = entries.find((e) => e.id === id);
     if (!current || current.meal_type === target) return;
     const previous = current;
-    setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, meal_type: target } : e)));
+    setEntries((prev) =>
+      prev.map((e) => (e.id === id ? { ...e, meal_type: target } : e))
+    );
     try {
       const updated = await updateJournalEntry(id, { meal_type: target });
       setEntries((prev) => prev.map((e) => (e.id === id ? updated : e)));
     } catch (e: unknown) {
-      setEntries((prev) => prev.map((entry) => (entry.id === id ? previous : entry)));
+      setEntries((prev) =>
+        prev.map((entry) => (entry.id === id ? previous : entry))
+      );
       setError(e instanceof Error ? e.message : 'Failed to move entry');
     }
   }
 
-  // Totals
   const totalCalories = entries.reduce((a, e) => a + e.calories_snapshot, 0);
   const totalProtein = entries.reduce((a, e) => a + e.protein_snapshot, 0);
 
-  // Group
   const byMeal: Record<MealType, JournalEntry[]> = {
     breakfast: [],
     lunch: [],
@@ -1365,23 +1819,30 @@ export default function JournalPage() {
 
   const isToday = dateStr === toISODate(new Date());
 
+  function defaultMealForNow(): MealType {
+    const h = new Date().getHours();
+    if (h < 11) return 'breakfast';
+    if (h < 15) return 'lunch';
+    if (h < 17) return 'snack';
+    return 'dinner';
+  }
+
   return (
     <main
-      className="page-mount w-full max-w-full overflow-x-hidden"
+      className="page-mount"
       style={{
         maxWidth: 1120,
         margin: '0 auto',
         padding: '24px 16px 80px',
       }}
     >
-      {/* Header */}
+      {/* Date bar */}
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: 12,
-          marginBottom: 18,
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1441,120 +1902,25 @@ export default function JournalPage() {
             )}
           </div>
         </div>
+        <GlassButton
+          variant="primary"
+          size="sm"
+          onClick={() => setAddMealType(defaultMealForNow())}
+        >
+          <Plus style={{ width: 14, height: 14, strokeWidth: 2.25 }} />
+          Log food
+        </GlassButton>
       </div>
       <div
         style={{
           color: 'var(--color-muted-foreground)',
-          marginTop: -10,
-          marginBottom: 18,
+          marginTop: 4,
           fontSize: 14,
         }}
       >
         Logged across the day. Tap any entry to edit.
       </div>
 
-      {/* Daily Totals */}
-      <GlassCard className="mt-2">
-        {(() => {
-          const caloriesOver = totalCalories > goals.calories;
-          const remaining = Math.max(goals.calories - Math.round(totalCalories), 0);
-          const proteinLeft = Math.max(
-            0,
-            Math.round((goals.protein - totalProtein) * 10) / 10
-          );
-          return (
-            <>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'auto 1fr',
-                  gap: 24,
-                  alignItems: 'center',
-                }}
-              >
-                <CalorieRing
-                  value={Math.round(totalCalories)}
-                  target={goals.calories}
-                  size={132}
-                  stroke={11}
-                />
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 14,
-                  }}
-                >
-                  <MacroBar
-                    label="Protein"
-                    value={Math.round(totalProtein * 10) / 10}
-                    target={goals.protein}
-                    unit="g"
-                    tone={totalProtein >= goals.protein ? 'success' : 'primary'}
-                  />
-                  <div
-                    style={{
-                      display: 'flex',
-                      gap: 14,
-                      paddingTop: 12,
-                      borderTop: '1px solid var(--color-border)',
-                    }}
-                  >
-                    <div style={{ flex: 1 }}>
-                      <MicroLabel>Remaining</MicroLabel>
-                      <div
-                        style={{
-                          fontFamily: 'var(--font-mono)',
-                          fontWeight: 700,
-                          fontSize: 18,
-                          color: caloriesOver
-                            ? 'var(--color-critical)'
-                            : 'var(--color-foreground)',
-                          marginTop: 2,
-                        }}
-                      >
-                        {caloriesOver
-                          ? `+${Math.abs(remaining - 0).toLocaleString()} over`
-                          : `${remaining.toLocaleString()} kcal`}
-                      </div>
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <MicroLabel>Protein left</MicroLabel>
-                      <div
-                        style={{
-                          fontFamily: 'var(--font-mono)',
-                          fontWeight: 700,
-                          fontSize: 18,
-                          color:
-                            totalProtein >= goals.protein
-                              ? 'var(--color-success)'
-                              : 'var(--color-foreground)',
-                          marginTop: 2,
-                        }}
-                      >
-                        {totalProtein >= goals.protein
-                          ? '✓ Goal met'
-                          : `${proteinLeft}g`}
-                      </div>
-                    </div>
-                    <div style={{ flex: 1, alignSelf: 'center' }}>
-                      <GlassButton
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setGoalsModalOpen(true)}
-                      >
-                        Edit goals
-                      </GlassButton>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </>
-          );
-        })()}
-      </GlassCard>
-
-      {/* Error */}
       {error && (
         <div
           style={{
@@ -1571,33 +1937,89 @@ export default function JournalPage() {
         </div>
       )}
 
-      {/* Meals */}
-      <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {loading ? (
-        <JournalSkeleton />
-      ) : (
-        <>
-          {MEAL_TYPES.map((mealType) => (
-            <MealSection
-              key={mealType}
-              type={mealType}
-              entries={byMeal[mealType]}
-              pointerCapable={pointerCapable}
-              onDeleted={handleEntryDeleted}
-              onEditRequest={setEditEntry}
-              onRequestAdd={(type) => setAddMealType(type)}
-              onCopyEntry={handleEntryCopy}
-              onMoveEntry={handleEntryMove}
-              draggingActive={draggingActive}
-              onDragStartEntry={() => setDraggingActive(true)}
-              onDragEndEntry={() => setDraggingActive(false)}
-            />
-          ))}
-        </>
-      )}
+      <div
+        className="journal-grid"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1.6fr 1fr',
+          gap: 16,
+          marginTop: 24,
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 12,
+          }}
+        >
+          {loading ? (
+            <MealStackSkeleton />
+          ) : (
+            MEAL_TYPES.map((mealType) => (
+              <MealSection
+                key={mealType}
+                type={mealType}
+                entries={byMeal[mealType]}
+                pointerCapable={pointerCapable}
+                onDeleted={handleEntryDeleted}
+                onEditRequest={setEditEntry}
+                onRequestAdd={(type) => setAddMealType(type)}
+                onCopyEntry={handleEntryCopy}
+                onMoveEntry={handleEntryMove}
+                draggingActive={draggingActive}
+                onDragStartEntry={() => setDraggingActive(true)}
+                onDragEndEntry={() => setDraggingActive(false)}
+              />
+            ))
+          )}
+        </div>
+        <div
+          style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
+        >
+          <JournalSummaryCard
+            calories={totalCalories}
+            protein={totalProtein}
+            entries={entries.length}
+            goals={goals}
+          />
+          <QuickAddPanel
+            date={dateStr}
+            defaultMeal={defaultMealForNow()}
+            onAdded={handleEntryAdded}
+          />
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+            }}
+          >
+            <button
+              onClick={() => setGoalsModalOpen(true)}
+              className="cursor-pointer"
+              style={{
+                background: 'transparent',
+                border: 0,
+                color: 'var(--color-link)',
+                fontSize: 12,
+                fontWeight: 600,
+                padding: 0,
+              }}
+            >
+              Edit goals
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* Add Food Modal — rendered at page level so it escapes the card overflow */}
+      <style jsx>{`
+        @media (max-width: 900px) {
+          :global(.journal-grid) {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
+
       <AddFoodModal
         isOpen={addMealType !== null}
         onClose={() => setAddMealType(null)}
@@ -1605,16 +2027,12 @@ export default function JournalPage() {
         date={dateStr}
         onAdded={handleEntryAdded}
       />
-
-      {/* Edit Entry Modal */}
       <EditEntryModal
         isOpen={!!editEntry}
         onClose={() => setEditEntry(null)}
         entry={editEntry}
         onUpdated={handleEntryUpdated}
       />
-
-      {/* Edit Goals Modal */}
       <EditGoalsModal
         isOpen={goalsModalOpen}
         onClose={() => setGoalsModalOpen(false)}

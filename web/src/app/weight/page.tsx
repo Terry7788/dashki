@@ -9,106 +9,280 @@ import {
   CartesianGrid,
   Tooltip,
   ReferenceLine,
-  Label,
   ResponsiveContainer,
 } from 'recharts';
-import { GlassCard, GlassButton, GlassInput, MicroLabel, MonoNum, Pill } from '@/components/ui';
-import { getWeightEntries, addWeightEntry, getGoals, getWeightJourney } from '@/lib/api';
+import {
+  GlassButton,
+  GlassInput,
+  GlassModal,
+  CardShell,
+  MicroLabel,
+  MonoNum,
+  Pill,
+} from '@/components/ui';
+import {
+  getWeightEntries,
+  addWeightEntry,
+  getGoals,
+  getWeightJourney,
+} from '@/lib/api';
 import type { WeightEntry, WeightJourney } from '@/lib/types';
 import { JourneyCard } from '@/components/JourneyCard';
 import { useSocketEvent } from '@/lib/useSocketEvent';
-import { Scale, Trash2, Target } from 'lucide-react';
-
-// ─── Inline API helper ────────────────────────────────────────────────────────
+import {
+  TrendingDown,
+  List,
+  Trash2,
+  Plus,
+} from 'lucide-react';
 
 const BASE_URL =
   (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '')) ||
   'http://localhost:4000';
 
 async function deleteWeightEntry(id: number): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/weight/${id}`, { method: 'DELETE' });
-  if (!res.ok) throw new Error(`API error ${res.status}`);
+  const res = await fetch(BASE_URL + '/api/weight/' + id, { method: 'DELETE' });
+  if (!res.ok) throw new Error('API error ' + res.status);
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function todayISO(): string {
-  // Use en-CA locale for YYYY-MM-DD in local time (not UTC like toISOString())
   return new Date().toLocaleString('en-CA').split(',')[0];
 }
 
 function formatDateShort(iso: string): string {
   return new Date(iso + 'T00:00:00').toLocaleDateString('en-AU', {
-    day: 'numeric', month: 'short',
+    day: 'numeric',
+    month: 'short',
   });
 }
 
 function formatDateFull(iso: string): string {
   return new Date(iso + 'T00:00:00').toLocaleDateString('en-AU', {
-    weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
   });
 }
 
-function addDaysISO(iso: string, days: number): string {
-  const d = new Date(iso + 'T00:00:00');
-  d.setDate(d.getDate() + days);
-  return d.toLocaleString('en-CA').split(',')[0];
-}
+type Range = '14d' | '30d' | '60d' | 'all';
 
-const KCAL_PER_KG_FAT = 7700;
+const RANGES: { label: string; value: Range; days: number | null }[] = [
+  { label: '14d', value: '14d', days: 14 },
+  { label: '30d', value: '30d', days: 30 },
+  { label: '60d', value: '60d', days: 60 },
+  { label: 'All', value: 'all', days: null },
+];
 
-type Range = '30' | '90' | 'all';
+// ─── Tooltip ─────────────────────────────────────────────────────────────────
 
-// ─── Custom Tooltip ───────────────────────────────────────────────────────────
-
-function CustomTooltip({ active, payload, label }: any) {
+function ChartTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
-  // Prefer the actual weight series; fall back to the projected series.
-  const actual = payload.find((p: any) => p.dataKey === 'weight' && p.value != null);
-  const projected = payload.find((p: any) => p.dataKey === 'projected' && p.value != null);
-  const point = actual ?? projected;
+  const point = payload.find((p: any) => p.value != null);
   if (!point) return null;
   return (
-    <div className="backdrop-blur-xl bg-black/70 border border-white/15 rounded-2xl px-4 py-3 shadow-xl">
-      <p className="text-white/60 text-xs mb-1">{label}</p>
-      <p className={`font-semibold text-sm ${actual ? 'text-indigo-300' : 'text-white/60 italic'}`}>
-        {point.value} kg{actual ? '' : ' (projected)'}
-      </p>
+    <div
+      style={{
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 6,
+        padding: '8px 12px',
+        boxShadow: 'var(--shadow-deep)',
+      }}
+    >
+      <div
+        style={{
+          fontSize: 11,
+          color: 'var(--color-muted-foreground)',
+          marginBottom: 2,
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 13,
+          fontWeight: 700,
+          color: 'var(--color-primary)',
+        }}
+      >
+        {point.value} kg
+      </div>
     </div>
   );
 }
 
-// ─── Stat Card ────────────────────────────────────────────────────────────────
+// ─── Hero stat tile ──────────────────────────────────────────────────────────
 
-function StatCard({ label, value }: { label: string; value: string }) {
+function HeroStat({
+  label,
+  value,
+  unit,
+  hint,
+  tone = 'neutral',
+}: {
+  label: string;
+  value: string | number;
+  unit?: string;
+  hint?: string;
+  tone?: 'neutral' | 'success' | 'warning' | 'primary';
+}) {
+  const color =
+    tone === 'success'
+      ? 'var(--color-success)'
+      : tone === 'warning'
+      ? 'var(--color-warning)'
+      : tone === 'primary'
+      ? 'var(--color-primary)'
+      : 'var(--color-foreground)';
   return (
-    <GlassCard className="flex-1 min-w-0" padding={false}>
-      <div style={{ padding: 16 }}>
-        <MicroLabel>{label}</MicroLabel>
-        <div style={{ marginTop: 6 }}>
-          <MonoNum size={28}>{value}</MonoNum>
-        </div>
+    <div
+      style={{
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 12,
+        boxShadow: 'var(--shadow-card)',
+        padding: 18,
+      }}
+    >
+      <MicroLabel>{label}</MicroLabel>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: 4,
+          marginTop: 6,
+        }}
+      >
+        <MonoNum size={30} color={color}>
+          {value}
+        </MonoNum>
+        {unit && (
+          <span style={{ fontSize: 13, color: 'var(--color-muted-foreground)' }}>
+            {unit}
+          </span>
+        )}
       </div>
-    </GlassCard>
+      {hint && (
+        <div
+          style={{
+            fontSize: 11,
+            color: 'var(--color-muted-foreground)',
+            marginTop: 4,
+          }}
+        >
+          {hint}
+        </div>
+      )}
+    </div>
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// ─── Log weight modal ────────────────────────────────────────────────────────
+
+function LogWeightModal({
+  isOpen,
+  onClose,
+  date,
+  onLogged,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  date: string;
+  onLogged: (entry: WeightEntry) => void;
+}) {
+  const [weight, setWeight] = useState('');
+  const [logDate, setLogDate] = useState(date);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      setLogDate(date);
+      setWeight('');
+      setError('');
+    }
+  }, [isOpen, date]);
+
+  async function handleLog() {
+    const kg = parseFloat(weight);
+    if (isNaN(kg) || kg <= 0) return;
+    setSaving(true);
+    setError('');
+    try {
+      const entry = await addWeightEntry({ date: logDate, weight_kg: kg });
+      onLogged(entry);
+      onClose();
+    } catch (e: any) {
+      setError(e.message || 'Failed to log weight');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <GlassModal isOpen={isOpen} onClose={onClose} title="Log weight" size="sm">
+      <div className="space-y-4">
+        <GlassInput
+          label="Date"
+          type="date"
+          value={logDate}
+          onChange={(e) => setLogDate(e.target.value)}
+        />
+        <GlassInput
+          label="Weight (kg)"
+          type="number"
+          inputMode="decimal"
+          step={0.1}
+          min={0}
+          placeholder="e.g. 75.5"
+          value={weight}
+          onChange={(e) => setWeight(e.target.value)}
+        />
+        {error && (
+          <p
+            style={{
+              fontSize: 13,
+              color: 'var(--color-critical)',
+              background: 'rgba(201,28,43,0.10)',
+              border: '1px solid rgba(201,28,43,0.25)',
+              padding: '8px 12px',
+              borderRadius: 4,
+            }}
+          >
+            {error}
+          </p>
+        )}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <GlassButton variant="outline" size="sm" onClick={onClose} disabled={saving}>
+            Cancel
+          </GlassButton>
+          <GlassButton
+            variant="primary"
+            size="sm"
+            onClick={handleLog}
+            disabled={saving || !weight}
+          >
+            {saving ? 'Logging…' : 'Log weight'}
+          </GlassButton>
+        </div>
+      </div>
+    </GlassModal>
+  );
+}
+
+// ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function WeightPage() {
   const [entries, setEntries] = useState<WeightEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [range, setRange] = useState<Range>('30');
-  const [date, setDate] = useState(todayISO());
-  const [weightKg, setWeightKg] = useState('');
-  const [logging, setLogging] = useState(false);
-
-  // Weight goal — fetched from /api/goals so it's editable in Settings.
-  // null when the user hasn't set one yet.
+  const [range, setRange] = useState<Range>('30d');
   const [goalWeight, setGoalWeight] = useState<number | null>(null);
-
   const [journey, setJourney] = useState<WeightJourney | null>(null);
+  const [logOpen, setLogOpen] = useState(false);
 
   const loadEntries = useCallback(async () => {
     setLoading(true);
@@ -127,17 +301,16 @@ export default function WeightPage() {
     try {
       const g = await getGoals();
       setGoalWeight(g.weight_kg ?? null);
-    } catch (_) {
-      // silent — chart just won't show the line
+    } catch {
+      /* silent */
     }
   }, []);
 
   const loadJourney = useCallback(async () => {
     try {
-      const j = await getWeightJourney();
-      setJourney(j);
-    } catch (_) {
-      // silent — card just won't render until next refresh
+      setJourney(await getWeightJourney());
+    } catch {
+      /* silent */
     }
   }, []);
 
@@ -160,146 +333,79 @@ export default function WeightPage() {
     loadJourney();
   });
 
-  // ── Derived stats ──
-  const stats = useMemo(() => {
-    if (!entries.length) return null;
-    const weights = entries.map((e) => e.weight_kg);
-    const current = entries[entries.length - 1].weight_kg;
-    const lowest = Math.min(...weights);
-    const highest = Math.max(...weights);
-    const avg = weights.reduce((a, b) => a + b, 0) / weights.length;
-    return {
-      current: `${current.toFixed(1)} kg`,
-      lowest: `${lowest.toFixed(1)} kg`,
-      highest: `${highest.toFixed(1)} kg`,
-      avg: `${avg.toFixed(1)} kg`,
-    };
-  }, [entries]);
-
-  // ── Chart data filtered by range, with optional projected trajectory ──
-  // Each row carries both `weight` (actual) and `projected`. Recharts breaks
-  // a line where the value is null, so the actual series ends after the last
-  // entry and the projected series begins at the same point (the "bridge"
-  // row carries both values so the two lines visually connect).
-  const chartData = useMemo(() => {
-    const today = new Date();
-    const cutoff =
-      range === 'all'
-        ? null
-        : new Date(today.getTime() - Number(range) * 86400000);
-
-    const filtered = cutoff
-      ? entries.filter((e) => new Date(e.date + 'T00:00:00') >= cutoff)
-      : entries;
-
-    type Row = { date: string; weight: number | null; projected: number | null };
-    const rows: Row[] = filtered.map((e) => ({
-      date: formatDateShort(e.date),
-      weight: e.weight_kg,
-      projected: null,
-    }));
-
-    const canProject =
-      rows.length > 0 &&
-      journey !== null &&
-      journey.avg_deficit_per_day !== null &&
-      journey.avg_deficit_per_day > 0;
-
-    if (!canProject) return rows;
-
-    const lastEntry = filtered[filtered.length - 1];
-    const lastWeight = lastEntry.weight_kg;
-    const kgPerDay = (journey!.avg_deficit_per_day as number) / KCAL_PER_KG_FAT;
-
-    let horizonDays: number;
-    if (range === '30') horizonDays = 30;
-    else if (range === '90') horizonDays = 90;
-    else horizonDays = journey!.days_to_goal ?? 0;
-
-    if (horizonDays <= 0) return rows;
-
-    // Bridge: last actual row also carries the starting projected value so the
-    // two lines meet without a visual gap.
-    rows[rows.length - 1].projected = lastWeight;
-
-    const futureIso = addDaysISO(lastEntry.date, horizonDays);
-    const futureWeight = lastWeight - kgPerDay * horizonDays;
-    rows.push({
-      date: formatDateShort(futureIso),
-      weight: null,
-      projected: parseFloat(futureWeight.toFixed(1)),
+  function handleLogged(entry: WeightEntry) {
+    setEntries((prev) => {
+      const next = prev.filter((e) => e.date !== entry.date);
+      return [...next, entry].sort((a, b) => a.date.localeCompare(b.date));
     });
+  }
 
-    return rows;
-  }, [entries, range, journey]);
-
-  // ── Recent 10 entries (newest first) ──
-  const recentEntries = useMemo(
-    () => [...entries].reverse().slice(0, 10),
-    [entries]
-  );
-
-  const handleLog = async () => {
-    const kg = parseFloat(weightKg);
-    if (isNaN(kg) || kg <= 0) return;
-    setLogging(true);
-    try {
-      const entry = await addWeightEntry({ date, weight_kg: kg });
-      setEntries((prev) => {
-        const next = prev.filter((e) => e.date !== entry.date);
-        return [...next, entry].sort((a, b) => a.date.localeCompare(b.date));
-      });
-      setWeightKg('');
-    } catch (e: any) {
-      setError(e.message || 'Failed to log weight');
-    }
-    setLogging(false);
-  };
-
-  const handleDelete = async (id: number) => {
+  async function handleDelete(id: number) {
     try {
       await deleteWeightEntry(id);
       setEntries((prev) => prev.filter((e) => e.id !== id));
-    } catch {}
-  };
+    } catch {
+      /* swallow */
+    }
+  }
 
-  const ranges: { label: string; value: Range }[] = [
-    { label: '30 days', value: '30' },
-    { label: '90 days', value: '90' },
-    { label: 'All time', value: 'all' },
-  ];
+  // Hero stats
+  const last = entries[entries.length - 1];
+  const windowDays =
+    RANGES.find((r) => r.value === range)?.days ?? entries.length;
+  const startEntry =
+    windowDays && entries.length > windowDays
+      ? entries[entries.length - windowDays - 1] ?? entries[0]
+      : entries[0];
+  const delta = last && startEntry ? last.weight_kg - startEntry.weight_kg : 0;
+  const toGoal = last && goalWeight != null ? last.weight_kg - goalWeight : null;
 
-  // ── Y axis domain with padding ──
-  // Includes the goal weight in the calculation so the red goal line is
-  // always visible on the chart, even when the user is far from it.
+  // Streak — count consecutive days from latest with a logged weight.
+  const streak = useMemo(() => {
+    if (!entries.length) return 0;
+    const set = new Set(entries.map((e) => e.date));
+    let count = 0;
+    const cursor = new Date(last.date + 'T00:00:00');
+    while (set.has(cursor.toLocaleString('en-CA').split(',')[0])) {
+      count++;
+      cursor.setDate(cursor.getDate() - 1);
+    }
+    return count;
+  }, [entries, last]);
+
+  // Chart data filtered by range
+  const chartData = useMemo(() => {
+    const days = RANGES.find((r) => r.value === range)?.days ?? null;
+    const cutoff = days
+      ? new Date(Date.now() - days * 86400000)
+      : null;
+    return entries
+      .filter((e) =>
+        cutoff ? new Date(e.date + 'T00:00:00') >= cutoff : true
+      )
+      .map((e) => ({
+        date: formatDateShort(e.date),
+        weight: e.weight_kg,
+      }));
+  }, [entries, range]);
+
   const yDomain = useMemo((): [number | string, number | string] => {
     if (!chartData.length) return ['auto', 'auto'];
-    const values: number[] = [];
-    for (const d of chartData) {
-      if (d.weight !== null) values.push(d.weight);
-      if (d.projected !== null) values.push(d.projected);
-    }
-    if (goalWeight !== null) values.push(goalWeight);
-    if (!values.length) return ['auto', 'auto'];
+    const values = chartData.map((d) => d.weight);
+    if (goalWeight != null) values.push(goalWeight);
     const min = Math.min(...values);
     const max = Math.max(...values);
-    const pad = Math.max((max - min) * 0.2, 1);
+    const pad = Math.max((max - min) * 0.2, 0.6);
     return [
       parseFloat((min - pad).toFixed(1)),
       parseFloat((max + pad).toFixed(1)),
     ];
   }, [chartData, goalWeight]);
 
-  // ── Goal proximity (for header chip) ──
-  const goalProximity = useMemo(() => {
-    if (goalWeight === null || !entries.length) return null;
-    const current = entries[entries.length - 1].weight_kg;
-    const diff = current - goalWeight;
-    return {
-      diff: Math.abs(diff),
-      direction: diff > 0 ? 'above' : diff < 0 ? 'below' : 'on',
-    };
-  }, [entries, goalWeight]);
+  const recentEntries = useMemo(
+    () => [...entries].reverse().slice(0, 12),
+    [entries]
+  );
 
   return (
     <main
@@ -308,9 +414,6 @@ export default function WeightPage() {
         maxWidth: 1120,
         margin: '0 auto',
         padding: '24px 16px 80px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 16,
       }}
     >
       <div
@@ -341,8 +444,8 @@ export default function WeightPage() {
             }}
           >
             Trend over time.{' '}
-            {goalWeight !== null && (
-              <span>
+            {goalWeight != null ? (
+              <>
                 Your goal is{' '}
                 <span
                   style={{
@@ -354,250 +457,345 @@ export default function WeightPage() {
                   {goalWeight.toFixed(1)} kg
                 </span>
                 .
-              </span>
+              </>
+            ) : (
+              'Set a goal in Settings.'
             )}
           </div>
         </div>
+        <GlassButton variant="primary" size="sm" onClick={() => setLogOpen(true)}>
+          <Plus style={{ width: 14, height: 14, strokeWidth: 2.25 }} />
+          Log weight
+        </GlassButton>
       </div>
 
-      {/* ── Stats row ── */}
-      {loading ? (
-        <div className="flex gap-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="skeleton flex-1 h-20 rounded-3xl" />
-          ))}
-        </div>
-      ) : stats ? (
-        <div className="flex gap-3 flex-wrap sm:flex-nowrap">
-          <StatCard label="Current" value={stats.current} />
-          <StatCard label="Lowest" value={stats.lowest} />
-          <StatCard label="Highest" value={stats.highest} />
-          <StatCard label="Average" value={stats.avg} />
-        </div>
-      ) : (
-        <GlassCard>
-          <div className="flex items-center gap-3">
-            <Scale className="w-5 h-5 text-indigo-400" />
-            <p className="text-white/50 text-sm">No weight entries yet. Log your first entry below.</p>
-          </div>
-        </GlassCard>
-      )}
-
-      {/* ── Journey ── */}
-      <JourneyCard journey={journey} />
-
-      {/* ── Chart ── */}
-      <GlassCard>
+      {error && (
         <div
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: 16,
-            flexWrap: 'wrap',
-            gap: 12,
+            marginTop: 16,
+            padding: '10px 14px',
+            borderRadius: 6,
+            background: 'rgba(201,28,43,0.10)',
+            border: '1px solid rgba(201,28,43,0.25)',
+            color: 'var(--color-critical)',
+            fontSize: 13,
           }}
         >
+          {error}
+        </div>
+      )}
+
+      {/* Hero stats */}
+      <div
+        className="weight-hero"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr 1fr 1fr',
+          gap: 12,
+          marginTop: 24,
+        }}
+      >
+        {loading ? (
+          Array.from({ length: 4 }).map((_, i) => (
+            <div
+              key={i}
+              className="skeleton"
+              style={{ height: 86, borderRadius: 12 }}
+            />
+          ))
+        ) : last ? (
+          <>
+            <HeroStat
+              label="Latest"
+              value={last.weight_kg.toFixed(1)}
+              unit="kg"
+              hint={formatDateFull(last.date)}
+            />
+            <HeroStat
+              label={'Change · ' + range}
+              value={(delta > 0 ? '+' : '') + delta.toFixed(1)}
+              unit="kg"
+              tone={delta < 0 ? 'success' : delta > 0 ? 'warning' : 'neutral'}
+              hint={
+                startEntry && startEntry.date !== last.date
+                  ? 'since ' + formatDateShort(startEntry.date)
+                  : 'window'
+              }
+            />
+            <HeroStat
+              label="From goal"
+              value={toGoal != null ? (toGoal > 0 ? '+' : '') + toGoal.toFixed(1) : '—'}
+              unit={toGoal != null ? 'kg' : ''}
+              tone={
+                toGoal == null
+                  ? 'neutral'
+                  : Math.abs(toGoal) < 1
+                  ? 'success'
+                  : 'primary'
+              }
+              hint={goalWeight != null ? 'goal ' + goalWeight.toFixed(1) + ' kg' : 'no goal set'}
+            />
+            <HeroStat
+              label="Streak"
+              value={streak}
+              unit={streak === 1 ? 'day' : 'days'}
+              hint="logged in a row"
+            />
+          </>
+        ) : (
           <div
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              flexWrap: 'wrap',
+              gridColumn: '1 / -1',
+              padding: 32,
+              textAlign: 'center',
+              color: 'var(--color-muted-foreground)',
+              background: 'var(--color-surface-warm)',
+              border: '1px dashed var(--color-border)',
+              borderRadius: 12,
             }}
           >
-            <h2
+            No weight entries yet.{' '}
+            <a
+              onClick={() => setLogOpen(true)}
               style={{
-                margin: 0,
-                fontSize: 15,
-                fontWeight: 700,
-                letterSpacing: '-0.25px',
+                color: 'var(--color-link)',
+                cursor: 'pointer',
               }}
             >
-              Weight over time
-            </h2>
-            {goalWeight !== null && (
-              <Pill tone="critical">
-                <Target style={{ width: 11, height: 11 }} />
-                Goal {goalWeight.toFixed(1)} kg
-                {goalProximity && goalProximity.direction !== 'on' && (
-                  <span style={{ opacity: 0.7 }}>
-                    {' '}
-                    · {goalProximity.diff.toFixed(1)} kg{' '}
-                    {goalProximity.direction}
-                  </span>
-                )}
-              </Pill>
-            )}
+              Log your first.
+            </a>
           </div>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {ranges.map((r) => (
-              <button
-                key={r.value}
-                onClick={() => setRange(r.value)}
-                className="cursor-pointer"
-                style={{
-                  padding: '4px 10px',
-                  borderRadius: 4,
-                  fontSize: 12,
-                  fontWeight: 600,
-                  background:
-                    range === r.value
-                      ? 'var(--color-foreground)'
-                      : 'transparent',
-                  color:
-                    range === r.value
-                      ? 'var(--color-background)'
-                      : 'var(--color-muted-foreground)',
-                  border: `1px solid ${
-                    range === r.value
-                      ? 'var(--color-foreground)'
-                      : 'var(--color-border)'
-                  }`,
-                  fontFamily: 'inherit',
-                }}
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="skeleton h-64 rounded-2xl" />
-        ) : chartData.length < 2 ? (
-          <div className="h-64 flex items-center justify-center text-white/40 text-sm">
-            Log at least two entries to see a chart.
-          </div>
-        ) : (
-          <ResponsiveContainer width="100%" height={260}>
-            <LineChart data={chartData} margin={{ top: 4, right: 8, bottom: 4, left: -8 }}>
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="rgba(255,255,255,0.1)"
-                vertical={false}
-              />
-              <XAxis
-                dataKey="date"
-                tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 11 }}
-                axisLine={false}
-                tickLine={false}
-                interval="preserveStartEnd"
-              />
-              <YAxis
-                domain={yDomain}
-                tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 11 }}
-                axisLine={false}
-                tickLine={false}
-                tickFormatter={(v) => `${v}`}
-              />
-              <Tooltip content={<CustomTooltip />} />
-              {/* Goal line — dashed red horizontal across the chart */}
-              {goalWeight !== null && (
-                <ReferenceLine
-                  y={goalWeight}
-                  stroke="#ef4444"
-                  strokeWidth={2}
-                  strokeDasharray="5 4"
-                  ifOverflow="extendDomain"
-                >
-                  <Label
-                    value={`Goal ${goalWeight.toFixed(1)} kg`}
-                    position="insideTopRight"
-                    fill="#ef4444"
-                    fontSize={11}
-                    fontWeight={600}
-                  />
-                </ReferenceLine>
-              )}
-              <Line
-                type="monotone"
-                dataKey="weight"
-                stroke="var(--color-primary)"
-                strokeWidth={2.5}
-                dot={{ fill: 'var(--color-primary)', r: 4, strokeWidth: 0 }}
-                activeDot={{ r: 6, fill: 'var(--color-primary)', stroke: 'rgba(0,117,222,0.25)', strokeWidth: 4 }}
-                isAnimationActive={false}
-              />
-              {/* Projected trajectory — dashed continuation of the line at the
-                  user's current calorie deficit. Hidden when no projection is
-                  available (no journey, no TDEE, or in surplus). */}
-              <Line
-                type="linear"
-                dataKey="projected"
-                stroke="var(--color-primary)"
-                strokeOpacity={0.6}
-                strokeWidth={2}
-                strokeDasharray="5 4"
-                dot={false}
-                activeDot={{ r: 5, fill: 'var(--color-primary)', fillOpacity: 0.6, stroke: 'rgba(0,117,222,0.18)', strokeWidth: 4 }}
-                isAnimationActive={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
         )}
-      </GlassCard>
+      </div>
 
-      {/* ── Log form ── */}
-      <GlassCard>
-        <h2 className="text-white font-semibold mb-4">Log Weight</h2>
-        <div className="flex gap-3 flex-wrap sm:flex-nowrap items-end">
-          <GlassInput
-            label="Date"
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="w-full sm:w-44"
-          />
-          <GlassInput
-            label="Weight (kg)"
-            type="number"
-            inputMode="decimal"
-            step={0.1}
-            min={0}
-            placeholder="e.g. 75.5"
-            value={weightKg}
-            onChange={(e) => setWeightKg(e.target.value)}
-            className="w-full sm:w-40"
-          />
-          <GlassButton
-            variant="primary"
-            onClick={handleLog}
-            disabled={logging || !weightKg}
-            className="flex-shrink-0"
-          >
-            {logging ? 'Logging…' : 'Log Weight'}
-          </GlassButton>
-        </div>
-        {error && <p className="text-red-400 text-sm mt-3">{error}</p>}
-      </GlassCard>
+      <JourneyCard journey={journey} />
 
-      {/* ── Recent entries ── */}
-      {recentEntries.length > 0 && (
-        <GlassCard>
-          <h2 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 700, letterSpacing: '-0.25px' }}>Recent entries</h2>
-          <div className="space-y-2">
-            {recentEntries.map((entry) => (
-              <div
-                key={entry.id}
-                className="flex items-center justify-between py-2.5 px-3 rounded-2xl bg-white/[0.04] hover:bg-white/[0.07] transition-colors group"
-              >
-                <div>
-                  <p className="text-white text-sm font-medium">{entry.weight_kg.toFixed(1)} kg</p>
-                  <p className="text-white/40 text-xs mt-0.5">{formatDateFull(entry.date)}</p>
-                </div>
+      {/* Chart + recent */}
+      <div
+        className="weight-grid"
+        style={{
+          marginTop: 16,
+          display: 'grid',
+          gridTemplateColumns: '2fr 1fr',
+          gap: 16,
+        }}
+      >
+        <CardShell
+          title="Trend"
+          icon={<TrendingDown style={{ width: 14, height: 14, strokeWidth: 2.25 }} />}
+          hint={
+            <div style={{ display: 'flex', gap: 4 }}>
+              {RANGES.map((r) => (
                 <button
-                  onClick={() => handleDelete(entry.id)}
-                  className="opacity-0 group-hover:opacity-100 p-1.5 rounded-xl text-white/30 hover:text-red-400 hover:bg-red-400/10 transition-all duration-150"
-                  aria-label="Delete entry"
+                  key={r.value}
+                  onClick={() => setRange(r.value)}
+                  className="cursor-pointer"
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: 4,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    background:
+                      range === r.value
+                        ? 'var(--color-foreground)'
+                        : 'transparent',
+                    color:
+                      range === r.value
+                        ? 'var(--color-background)'
+                        : 'var(--color-muted-foreground)',
+                    border:
+                      '1px solid ' +
+                      (range === r.value
+                        ? 'var(--color-foreground)'
+                        : 'var(--color-border)'),
+                    fontFamily: 'inherit',
+                  }}
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  {r.label}
                 </button>
-              </div>
-            ))}
-          </div>
-        </GlassCard>
-      )}
+              ))}
+            </div>
+          }
+        >
+          {loading ? (
+            <div
+              className="skeleton"
+              style={{ height: 220, borderRadius: 8 }}
+            />
+          ) : chartData.length < 2 ? (
+            <div
+              style={{
+                height: 220,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--color-muted-foreground)',
+                fontSize: 13,
+              }}
+            >
+              Log at least two entries to see a chart.
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={240}>
+              <LineChart data={chartData} margin={{ top: 8, right: 12, bottom: 4, left: -8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fill: 'var(--color-muted-foreground)', fontSize: 11 }}
+                  axisLine={false}
+                  tickLine={false}
+                  interval="preserveStartEnd"
+                />
+                <YAxis
+                  domain={yDomain}
+                  tick={{ fill: 'var(--color-muted-foreground)', fontSize: 11 }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <Tooltip content={<ChartTooltip />} />
+                {goalWeight != null && (
+                  <ReferenceLine
+                    y={goalWeight}
+                    stroke="var(--color-success)"
+                    strokeDasharray="4 4"
+                    strokeWidth={1.5}
+                  />
+                )}
+                <Line
+                  type="monotone"
+                  dataKey="weight"
+                  stroke="var(--color-primary)"
+                  strokeWidth={2}
+                  dot={{ fill: 'var(--color-primary)', r: 3, strokeWidth: 0 }}
+                  activeDot={{ r: 5, fill: 'var(--color-primary)' }}
+                  isAnimationActive={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </CardShell>
+
+        <CardShell
+          title="Recent entries"
+          icon={<List style={{ width: 14, height: 14, strokeWidth: 2.25 }} />}
+        >
+          {loading ? (
+            <div
+              className="skeleton"
+              style={{ height: 200, borderRadius: 8 }}
+            />
+          ) : recentEntries.length === 0 ? (
+            <div
+              style={{
+                fontSize: 13,
+                color: 'var(--color-muted-foreground)',
+                textAlign: 'center',
+                padding: '16px 0',
+              }}
+            >
+              Nothing logged yet.
+            </div>
+          ) : (
+            <ul
+              style={{
+                listStyle: 'none',
+                padding: 0,
+                margin: 0,
+                maxHeight: 280,
+                overflowY: 'auto',
+              }}
+            >
+              {recentEntries.map((entry, idx) => {
+                const prev = recentEntries[idx + 1];
+                const diff = prev ? entry.weight_kg - prev.weight_kg : null;
+                return (
+                  <li
+                    key={entry.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '8px 0',
+                      borderBottom: '1px solid var(--color-border)',
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 500 }}>
+                        {entry.date === todayISO()
+                          ? 'Today'
+                          : formatDateFull(entry.date)}
+                      </div>
+                    </div>
+                    <MonoNum size={14}>{entry.weight_kg.toFixed(1)}</MonoNum>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        color: 'var(--color-muted-foreground)',
+                      }}
+                    >
+                      kg
+                    </span>
+                    {diff !== null && diff !== 0 ? (
+                      <span
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 11,
+                          fontWeight: 600,
+                          minWidth: 38,
+                          textAlign: 'right',
+                          color:
+                            diff < 0
+                              ? 'var(--color-success)'
+                              : 'var(--color-warning)',
+                        }}
+                      >
+                        {diff > 0 ? '+' : ''}
+                        {diff.toFixed(1)}
+                      </span>
+                    ) : (
+                      <span style={{ minWidth: 38 }} />
+                    )}
+                    <button
+                      onClick={() => handleDelete(entry.id)}
+                      className="cursor-pointer"
+                      style={{
+                        background: 'transparent',
+                        border: 0,
+                        color: 'var(--color-muted-foreground)',
+                        padding: 4,
+                        borderRadius: 4,
+                      }}
+                      aria-label="Delete entry"
+                    >
+                      <Trash2
+                        style={{ width: 13, height: 13, strokeWidth: 1.75 }}
+                      />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </CardShell>
+      </div>
+
+      <style jsx>{`
+        @media (max-width: 900px) {
+          :global(.weight-hero) {
+            grid-template-columns: 1fr 1fr !important;
+          }
+          :global(.weight-grid) {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
+
+      <LogWeightModal
+        isOpen={logOpen}
+        onClose={() => setLogOpen(false)}
+        date={todayISO()}
+        onLogged={handleLogged}
+      />
     </main>
   );
 }
