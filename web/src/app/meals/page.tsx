@@ -916,21 +916,76 @@ export default function MealsPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 animate-fade-in">
+    <main
+      className="page-mount"
+      style={{
+        maxWidth: 1120,
+        margin: '0 auto',
+        padding: '24px 16px 80px',
+      }}
+    >
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Saved Meals</h1>
-        <GlassButton variant="primary" onClick={() => setCreateOpen(true)}>
-          <span className="flex items-center gap-2"><Plus className="w-4 h-4" /> Create Meal</span>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          marginBottom: 4,
+        }}
+      >
+        <div>
+          <h1
+            style={{
+              fontSize: 22,
+              fontWeight: 700,
+              letterSpacing: '-0.4px',
+              margin: 0,
+              color: 'var(--color-foreground)',
+            }}
+          >
+            Saved meals
+          </h1>
+          <div
+            style={{
+              color: 'var(--color-muted-foreground)',
+              marginTop: 4,
+              fontSize: 14,
+            }}
+          >
+            Templates for meals you log over and over.{' '}
+            {!loading && meals.length > 0 && (
+              <span style={{ fontFamily: 'var(--font-mono)' }}>
+                {meals.length} saved.
+              </span>
+            )}
+          </div>
+        </div>
+        <GlassButton variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
+          <Plus style={{ width: 14, height: 14, strokeWidth: 2.25 }} />
+          New meal
         </GlassButton>
       </div>
 
       {/* Error */}
       {error && (
-        <div className="px-4 py-3 rounded-2xl bg-red-500/10 border border-red-400/20 text-red-400 text-sm">{error}</div>
+        <div
+          style={{
+            marginTop: 16,
+            padding: '10px 14px',
+            borderRadius: 6,
+            background: 'rgba(201,28,43,0.10)',
+            border: '1px solid rgba(201,28,43,0.25)',
+            color: 'var(--color-critical)',
+            fontSize: 13,
+          }}
+        >
+          {error}
+        </div>
       )}
 
       {/* List */}
+      <div style={{ marginTop: 24 }}>
       {loading ? (
         <MealSkeleton />
       ) : meals.length === 0 ? (
@@ -959,6 +1014,7 @@ export default function MealsPage() {
           ))}
         </div>
       )}
+      </div>
 
       {/* Modals */}
       <CreateMealModal
@@ -978,6 +1034,6 @@ export default function MealsPage() {
         meal={deleteTarget}
         onDeleted={handleDeleted}
       />
-    </div>
+    </main>
   );
 }

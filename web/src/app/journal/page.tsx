@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Loader2, Clock, Search, Copy, MoreHorizontal, Move } from 'lucide-react';
-import { GlassCard, GlassButton, GlassInput, GlassModal } from '@/components/ui';
+import { GlassCard, GlassButton, GlassInput, GlassModal, CalorieRing, MacroBar, Pill, MicroLabel } from '@/components/ui';
 import {
   getJournalEntries,
   addJournalEntry,
@@ -46,29 +46,6 @@ function formatDateLabel(d: Date): string {
   if (key === today) return 'Today';
   if (key === yesterday) return 'Yesterday';
   return d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
-}
-
-// ─── Progress Ring ────────────────────────────────────────────────────────────
-
-function ProgressRing({ value, max, size = 64, stroke = 5, color = '#6366f1' }: {
-  value: number; max: number; size?: number; stroke?: number; color?: string;
-}) {
-  const r = (size - stroke * 2) / 2;
-  const circ = 2 * Math.PI * r;
-  const pct = Math.min(value / max, 1);
-  const offset = circ * (1 - pct);
-  return (
-    <svg width={size} height={size} className="rotate-[-90deg]">
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth={stroke} />
-      <circle
-        cx={size / 2} cy={size / 2} r={r} fill="none"
-        stroke={color} strokeWidth={stroke}
-        strokeDasharray={circ} strokeDashoffset={offset}
-        strokeLinecap="round"
-        style={{ transition: 'stroke-dashoffset 0.5s ease' }}
-      />
-    </svg>
-  );
 }
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
@@ -830,11 +807,18 @@ function EditGoalsModal({ isOpen, onClose, goals, onSave }: EditGoalsModalProps)
 
 // Shared styling tokens for the action menu surface and its items. Kept at
 // module scope so the menu and any submenus pull from the same source.
-const MENU_SURFACE_CLASS =
-  'min-w-[180px] p-1 rounded-2xl bg-[#1a1a1a]/95 backdrop-blur-xl border border-white/[0.08] shadow-2xl shadow-black/40';
+const MENU_SURFACE_STYLE: React.CSSProperties = {
+  minWidth: 180,
+  padding: 4,
+  background: 'var(--color-surface)',
+  border: '1px solid var(--color-border)',
+  borderRadius: 8,
+  boxShadow: 'var(--shadow-deep)',
+  color: 'var(--color-foreground)',
+};
 const MENU_ITEM_BASE =
-  'w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-sm text-white transition-colors duration-150';
-const MENU_ITEM_HOVER = 'hover:bg-white/[0.08]';
+  'w-full flex items-center gap-2.5 px-3 py-2 rounded text-left text-sm transition-colors duration-150';
+const MENU_ITEM_HOVER = 'hover:bg-[color:var(--color-surface-warm)]';
 
 // Submenu of meal types — used by both "Move to" and "Copy to". Picks a
 // destination meal and fires `onPick`. Auto-flips to the left when there
@@ -877,9 +861,8 @@ function MealSubmenu({ icon: Icon, label, currentMeal, onPick }: MealSubmenuProp
       </button>
       {open && (
         <div
-          className={`absolute top-0 ${
-            flip ? 'right-full mr-1' : 'left-full ml-1'
-          } ${MENU_SURFACE_CLASS}`}
+          className={`absolute top-0 ${flip ? 'right-full mr-1' : 'left-full ml-1'}`}
+          style={MENU_SURFACE_STYLE}
         >
           {MEAL_TYPES.map((m) => (
             <button
@@ -941,8 +924,13 @@ function EntryActionMenu({ anchor, currentMeal, onEdit, onMove, onCopy, onDelete
   return createPortal(
     <div
       ref={ref}
-      style={{ position: 'fixed', left: Math.max(8, x), top: Math.max(8, y), zIndex: 50 }}
-      className={MENU_SURFACE_CLASS}
+      style={{
+        position: 'fixed',
+        left: Math.max(8, x),
+        top: Math.max(8, y),
+        zIndex: 50,
+        ...MENU_SURFACE_STYLE,
+      }}
       onClick={(e) => e.stopPropagation()}
     >
       <button
@@ -1378,29 +1366,63 @@ export default function JournalPage() {
   const isToday = dateStr === toISODate(new Date());
 
   return (
-    <div className="space-y-6 animate-fade-in w-full max-w-full overflow-x-hidden px-3 sm:px-4">
+    <main
+      className="page-mount w-full max-w-full overflow-x-hidden"
+      style={{
+        maxWidth: 1120,
+        margin: '0 auto',
+        padding: '24px 16px 80px',
+      }}
+    >
       {/* Header */}
-      <div className="flex items-center justify-between w-full">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Food Journal</h1>
-      </div>
-
-      {/* Date Navigation */}
-      <GlassCard padding={false}>
-        <div className="flex items-center justify-between px-5 py-4">
-          <button
-            onClick={handlePrevDay}
-            className="p-2 rounded-xl text-white/60 hover:text-white hover:bg-white/10 transition-all duration-200"
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          marginBottom: 18,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <GlassButton variant="outline" size="sm" onClick={handlePrevDay}>
+            <ChevronLeft style={{ width: 14, height: 14 }} />
+          </GlassButton>
+          <GlassButton
+            variant="outline"
+            size="sm"
+            onClick={handleNextDay}
+            disabled={isToday}
           >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-
-          <div className="relative">
+            <ChevronRight style={{ width: 14, height: 14 }} />
+          </GlassButton>
+          <div style={{ position: 'relative' }}>
             <button
               onClick={() => setShowDateInput(true)}
-              className="flex items-center gap-2 text-white font-semibold hover:text-indigo-300 transition-colors duration-200"
+              className="cursor-pointer"
+              style={{
+                margin: '0 4px',
+                fontSize: 22,
+                fontWeight: 700,
+                letterSpacing: '-0.4px',
+                background: 'transparent',
+                border: 0,
+                color: 'var(--color-foreground)',
+                fontFamily: 'inherit',
+                padding: 0,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
             >
               {formatDateLabel(currentDate)}
-              <Pencil className="w-3.5 h-3.5 text-white/40" />
+              <Pencil
+                style={{
+                  width: 12,
+                  height: 12,
+                  color: 'var(--color-muted-foreground)',
+                }}
+              />
             </button>
             {showDateInput && (
               <input
@@ -1409,130 +1431,152 @@ export default function JournalPage() {
                 value={dateStr}
                 onChange={handleDateChange}
                 onBlur={() => setShowDateInput(false)}
-                className="absolute opacity-0 w-0 h-0"
+                style={{
+                  position: 'absolute',
+                  opacity: 0,
+                  width: 0,
+                  height: 0,
+                }}
               />
             )}
           </div>
-
-          <button
-            onClick={handleNextDay}
-            disabled={isToday}
-            className="p-2 rounded-xl text-white/60 hover:text-white hover:bg-white/10 transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            <ChevronRight className="w-5 h-5" />
-          </button>
         </div>
-      </GlassCard>
+      </div>
+      <div
+        style={{
+          color: 'var(--color-muted-foreground)',
+          marginTop: -10,
+          marginBottom: 18,
+          fontSize: 14,
+        }}
+      >
+        Logged across the day. Tap any entry to edit.
+      </div>
 
       {/* Daily Totals */}
-      <GlassCard>
+      <GlassCard className="mt-2">
         {(() => {
-        const caloriesOver = totalCalories > goals.calories;
-        const caloriesOverBy = Math.round(totalCalories - goals.calories);
-        return (
-        <>
-        <div className="flex items-center gap-6">
-          {/* Calories ring */}
-          <div className="relative shrink-0">
-            <ProgressRing
-              value={totalCalories}
-              max={goals.calories}
-              size={72}
-              stroke={6}
-              color={caloriesOver ? '#ef4444' : '#6366f1'}
-            />
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-sm font-bold leading-tight">{Math.round(totalCalories)}</span>
-              <span className="text-[10px] text-gray-400 dark:text-white/40">kcal</span>
-            </div>
-          </div>
-
-          <div className="flex-1 space-y-3">
-            {/* Calories */}
-            <div>
-              <div className="flex items-end justify-between mb-1">
-                <span className="text-sm text-gray-500 dark:text-white/60">Calories</span>
-                <span className="text-base font-bold">
-                  {Math.round(totalCalories)} <span className="text-gray-400 dark:text-white/40 font-normal">/ {goals.calories}</span>
-                  {caloriesOver && (
-                    <span className="ml-1.5 text-red-500 dark:text-red-400 font-semibold text-sm">
-                      +{caloriesOverBy} over
-                    </span>
-                  )}
-                </span>
-              </div>
-              <div className="h-1.5 rounded-full bg-black/10 dark:bg-white/10 overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all duration-500 ${
-                    caloriesOver
-                      ? 'bg-gradient-to-r from-red-500 to-rose-500'
-                      : 'bg-gradient-to-r from-indigo-500 to-blue-500'
-                  }`}
-                  style={{ width: `${Math.min((totalCalories / goals.calories) * 100, 100)}%` }}
+          const caloriesOver = totalCalories > goals.calories;
+          const remaining = Math.max(goals.calories - Math.round(totalCalories), 0);
+          const proteinLeft = Math.max(
+            0,
+            Math.round((goals.protein - totalProtein) * 10) / 10
+          );
+          return (
+            <>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'auto 1fr',
+                  gap: 24,
+                  alignItems: 'center',
+                }}
+              >
+                <CalorieRing
+                  value={Math.round(totalCalories)}
+                  target={goals.calories}
+                  size={132}
+                  stroke={11}
                 />
-              </div>
-            </div>
-
-            {/* Protein */}
-            <div>
-              <div className="flex items-end justify-between mb-1">
-                <span className="text-sm text-gray-500 dark:text-white/60">Protein</span>
-                <span className="text-base font-bold">
-                  {Math.round(totalProtein * 10) / 10}g <span className="text-gray-400 dark:text-white/40 font-normal">/ {goals.protein}g</span>
-                </span>
-              </div>
-              <div className="h-1.5 rounded-full bg-black/10 dark:bg-white/10 overflow-hidden">
                 <div
-                  className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-500"
-                  style={{ width: `${Math.min((totalProtein / goals.protein) * 100, 100)}%` }}
-                />
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 14,
+                  }}
+                >
+                  <MacroBar
+                    label="Protein"
+                    value={Math.round(totalProtein * 10) / 10}
+                    target={goals.protein}
+                    unit="g"
+                    tone={totalProtein >= goals.protein ? 'success' : 'primary'}
+                  />
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: 14,
+                      paddingTop: 12,
+                      borderTop: '1px solid var(--color-border)',
+                    }}
+                  >
+                    <div style={{ flex: 1 }}>
+                      <MicroLabel>Remaining</MicroLabel>
+                      <div
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontWeight: 700,
+                          fontSize: 18,
+                          color: caloriesOver
+                            ? 'var(--color-critical)'
+                            : 'var(--color-foreground)',
+                          marginTop: 2,
+                        }}
+                      >
+                        {caloriesOver
+                          ? `+${Math.abs(remaining - 0).toLocaleString()} over`
+                          : `${remaining.toLocaleString()} kcal`}
+                      </div>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <MicroLabel>Protein left</MicroLabel>
+                      <div
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontWeight: 700,
+                          fontSize: 18,
+                          color:
+                            totalProtein >= goals.protein
+                              ? 'var(--color-success)'
+                              : 'var(--color-foreground)',
+                          marginTop: 2,
+                        }}
+                      >
+                        {totalProtein >= goals.protein
+                          ? '✓ Goal met'
+                          : `${proteinLeft}g`}
+                      </div>
+                    </div>
+                    <div style={{ flex: 1, alignSelf: 'center' }}>
+                      <GlassButton
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setGoalsModalOpen(true)}
+                      >
+                        Edit goals
+                      </GlassButton>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Remaining + Edit Goals */}
-        <div className="mt-4 pt-4 border-t border-black/[0.06] dark:border-white/10 flex gap-4 text-sm items-center">
-          <div className="flex-1 text-center">
-            <p className="text-gray-400 dark:text-white/40 text-xs mb-0.5">Remaining</p>
-            <p className={`font-semibold ${totalCalories > goals.calories ? 'text-red-500 dark:text-red-400' : ''}`}>
-              {Math.max(goals.calories - Math.round(totalCalories), 0)} kcal
-            </p>
-          </div>
-          <div className="w-px bg-black/[0.06] dark:bg-white/10 self-stretch" />
-          <div className="flex-1 text-center">
-            <p className="text-gray-400 dark:text-white/40 text-xs mb-0.5">Protein left</p>
-            <p className={`font-semibold ${totalProtein >= goals.protein ? 'text-emerald-500 dark:text-emerald-400' : ''}`}>
-              {totalProtein >= goals.protein ? '✓ Goal met' : `${Math.round((goals.protein - totalProtein) * 10) / 10}g`}
-            </p>
-          </div>
-          <div className="w-px bg-black/[0.06] dark:bg-white/10 self-stretch" />
-          <div className="flex-1 text-center">
-            <button
-              onClick={() => setGoalsModalOpen(true)}
-              className="text-xs text-[#2E8B57] hover:text-[#61bc84] font-medium transition-colors duration-200"
-            >
-              ✏ Edit Goals
-            </button>
-          </div>
-        </div>
-        </>
-        );
+            </>
+          );
         })()}
       </GlassCard>
 
       {/* Error */}
       {error && (
-        <div className="px-4 py-3 rounded-2xl bg-red-500/10 border border-red-400/20 text-red-400 text-sm">
+        <div
+          style={{
+            marginTop: 16,
+            padding: '10px 14px',
+            borderRadius: 6,
+            background: 'rgba(201,28,43,0.10)',
+            border: '1px solid rgba(201,28,43,0.25)',
+            color: 'var(--color-critical)',
+            fontSize: 13,
+          }}
+        >
           {error}
         </div>
       )}
 
       {/* Meals */}
+      <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
       {loading ? (
         <JournalSkeleton />
       ) : (
-        <div className="space-y-4">
+        <>
           {MEAL_TYPES.map((mealType) => (
             <MealSection
               key={mealType}
@@ -1549,8 +1593,9 @@ export default function JournalPage() {
               onDragEndEntry={() => setDraggingActive(false)}
             />
           ))}
-        </div>
+        </>
       )}
+      </div>
 
       {/* Add Food Modal — rendered at page level so it escapes the card overflow */}
       <AddFoodModal
@@ -1576,6 +1621,6 @@ export default function JournalPage() {
         goals={goals}
         onSave={handleSaveGoals}
       />
-    </div>
+    </main>
   );
 }

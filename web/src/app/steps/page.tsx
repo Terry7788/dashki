@@ -12,7 +12,7 @@ import {
   Cell,
 } from 'recharts';
 import { ChevronLeft, ChevronRight, Pencil, Trash2, Check, X } from 'lucide-react';
-import { GlassCard, GlassButton, GlassInput } from '@/components/ui';
+import { GlassCard, GlassButton, GlassInput, MicroLabel, MonoNum, ProgressBar } from '@/components/ui';
 import {
   getSteps,
   getGoals,
@@ -92,6 +92,7 @@ function ProgressRing({
   const progress = Math.min(steps / goal, 1);
   const offset = circumference - progress * circumference;
   const pct = Math.round(progress * 100);
+  const hit = steps >= goal;
 
   return (
     <div className="flex flex-col items-center justify-center">
@@ -101,22 +102,20 @@ function ProgressRing({
           height={radius * 2}
           className="-rotate-90"
         >
-          {/* Track */}
           <circle
             cx={radius}
             cy={radius}
             r={normalizedRadius}
             fill="none"
-            stroke="rgba(255,255,255,0.08)"
+            stroke="var(--color-surface-warm)"
             strokeWidth={stroke}
           />
-          {/* Progress */}
           <circle
             cx={radius}
             cy={radius}
             r={normalizedRadius}
             fill="none"
-            stroke="#818cf8"
+            stroke={hit ? 'var(--color-success)' : 'var(--color-primary)'}
             strokeWidth={stroke}
             strokeLinecap="round"
             strokeDasharray={circumference}
@@ -124,16 +123,29 @@ function ProgressRing({
             style={{ transition: 'stroke-dashoffset 0.6s ease-in-out' }}
           />
         </svg>
-        {/* Center text */}
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-white text-2xl font-bold leading-tight">
+          <MonoNum size={28} style={{ letterSpacing: '-0.8px' }}>
             {steps.toLocaleString()}
+          </MonoNum>
+          <span style={{ color: 'var(--color-muted-foreground)', fontSize: 11, marginTop: 2 }}>
+            steps
           </span>
-          <span className="text-white/50 text-xs mt-0.5">steps</span>
-          <span className="text-indigo-400 text-sm font-semibold mt-1">{pct}%</span>
+          <span
+            style={{
+              color: hit ? 'var(--color-success)' : 'var(--color-primary)',
+              fontSize: 13,
+              fontWeight: 700,
+              marginTop: 4,
+              fontFamily: 'var(--font-mono)',
+            }}
+          >
+            {pct}%
+          </span>
         </div>
       </div>
-      <p className="text-white/40 text-xs mt-3">Goal: {goal.toLocaleString()} steps</p>
+      <p style={{ color: 'var(--color-muted-foreground)', fontSize: 11, marginTop: 12 }}>
+        Goal: {goal.toLocaleString()} steps
+      </p>
     </div>
   );
 }
@@ -419,15 +431,67 @@ export default function StepsPage() {
   };
 
   return (
-    <div className="px-4 md:px-6 py-8 max-w-2xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-white">Steps</h1>
-        <button
-          onClick={() => { setEditingGoal(true); setGoalInput(String(goal)); }}
-          className="text-indigo-400 text-xs hover:text-indigo-300 underline transition-colors"
+    <main
+      className="page-mount"
+      style={{
+        maxWidth: 1120,
+        margin: '0 auto',
+        padding: '24px 16px 80px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 16,
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: 12,
+        }}
+      >
+        <div>
+          <h1
+            style={{
+              fontSize: 22,
+              fontWeight: 700,
+              letterSpacing: '-0.4px',
+              margin: 0,
+              color: 'var(--color-foreground)',
+            }}
+          >
+            Steps
+          </h1>
+          <div
+            style={{
+              color: 'var(--color-muted-foreground)',
+              marginTop: 4,
+              fontSize: 14,
+            }}
+          >
+            Daily steps. Your goal is{' '}
+            <span
+              style={{
+                fontFamily: 'var(--font-mono)',
+                color: 'var(--color-foreground)',
+                fontWeight: 600,
+              }}
+            >
+              {goal.toLocaleString()}
+            </span>
+            .
+          </div>
+        </div>
+        <GlassButton
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setEditingGoal(true);
+            setGoalInput(String(goal));
+          }}
         >
-          Change Goal
-        </button>
+          Change goal
+        </GlassButton>
       </div>
 
       {/* ── Date Navigation (matches Journal page pattern) ─────────────── */}
@@ -799,14 +863,14 @@ export default function StepsPage() {
                     key={`cell-${index}`}
                     fill={
                       entry.isSelected
-                        ? '#a78bfa'            // selected day — brighter indigo
+                        ? 'var(--color-primary-hover)'
                         : entry.isToday
-                        ? '#818cf8'            // today (when not selected)
+                        ? 'var(--color-primary)'
                         : entry.steps >= goal
-                        ? '#34d399'            // over goal
-                        : 'rgba(129,140,248,0.35)'
+                        ? 'var(--color-success)'
+                        : 'rgba(0,117,222,0.35)'
                     }
-                    stroke={entry.isSelected ? '#ffffff' : undefined}
+                    stroke={entry.isSelected ? 'var(--color-foreground)' : undefined}
                     strokeWidth={entry.isSelected ? 1.5 : 0}
                   />
                 ))}
@@ -816,19 +880,19 @@ export default function StepsPage() {
         )}
         <div className="flex gap-4 mt-3 justify-end flex-wrap">
           <div className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-violet-400" />
-            <span className="text-white/40 text-xs">Selected</span>
+            <div style={{ width: 10, height: 10, borderRadius: 9999, background: 'var(--color-primary-hover)' }} />
+            <span style={{ fontSize: 11, color: 'var(--color-muted-foreground)' }}>Selected</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-indigo-400" />
-            <span className="text-white/40 text-xs">Today</span>
+            <div style={{ width: 10, height: 10, borderRadius: 9999, background: 'var(--color-primary)' }} />
+            <span style={{ fontSize: 11, color: 'var(--color-muted-foreground)' }}>Today</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
-            <span className="text-white/40 text-xs">Goal met</span>
+            <div style={{ width: 10, height: 10, borderRadius: 9999, background: 'var(--color-success)' }} />
+            <span style={{ fontSize: 11, color: 'var(--color-muted-foreground)' }}>Goal met</span>
           </div>
         </div>
       </GlassCard>
-    </div>
+    </main>
   );
 }

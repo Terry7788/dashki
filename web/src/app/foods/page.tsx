@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, Pencil, Trash2, Search, Leaf, BookOpen, X, ChevronDown } from 'lucide-react';
-import { GlassCard, GlassButton, GlassInput, GlassModal } from '@/components/ui';
+import { GlassCard, GlassButton, GlassInput, GlassModal, Pill, MicroLabel } from '@/components/ui';
 import { getFoods, createFood, updateFood, deleteFood, addJournalEntry } from '@/lib/api';
 import type { Food, MealType } from '@/lib/types';
 import { useSocketEvent } from '@/lib/useSocketEvent';
@@ -763,17 +763,58 @@ export default function FoodsPage() {
   }
 
   return (
-    <div className="px-3 sm:px-4 max-w-4xl mx-auto space-y-4 sm:space-y-6 animate-fade-in w-full max-w-full overflow-hidden">
+    <main
+      className="page-mount w-full overflow-hidden"
+      style={{
+        maxWidth: 1120,
+        margin: '0 auto',
+        padding: '24px 16px 80px',
+      }}
+    >
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">Food Database</h1>
-        <GlassButton variant="primary" onClick={handleOpenAdd} className="w-full sm:w-auto">
-          <span className="flex items-center justify-center gap-2"><Plus className="w-4 h-4" /> Add Food</span>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          marginBottom: 4,
+        }}
+      >
+        <h1
+          style={{
+            fontSize: 22,
+            fontWeight: 700,
+            letterSpacing: '-0.4px',
+            margin: 0,
+            color: 'var(--color-foreground)',
+          }}
+        >
+          Foods
+        </h1>
+        <GlassButton variant="primary" size="sm" onClick={handleOpenAdd}>
+          <Plus style={{ width: 14, height: 14, strokeWidth: 2.25 }} />
+          New food
         </GlassButton>
+      </div>
+      <div
+        style={{
+          color: 'var(--color-muted-foreground)',
+          marginTop: 4,
+          marginBottom: 18,
+          fontSize: 14,
+        }}
+      >
+        Your private food database.{' '}
+        {!loading && foods.length > 0 && (
+          <span style={{ fontFamily: 'var(--font-mono)' }}>
+            {filteredFoods.length} of {foods.length}
+          </span>
+        )}
       </div>
 
       {/* Search */}
-      <div className="relative">
+      <div className="relative" style={{ marginTop: 4 }}>
         <Search className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-white/40 pointer-events-none" />
         <input
           type="text"
@@ -793,19 +834,25 @@ export default function FoodsPage() {
         )}
       </div>
 
-      {/* Stats bar */}
-      {!loading && foods.length > 0 && (
-        <p className="text-xs sm:text-sm text-gray-400 dark:text-white/40">
-          {filteredFoods.length} of {foods.length} food{foods.length !== 1 ? 's' : ''}
-        </p>
-      )}
-
       {/* Error */}
       {error && (
-        <div className="px-4 py-3 rounded-2xl bg-red-500/10 border border-red-400/20 text-red-400 text-sm">{error}</div>
+        <div
+          style={{
+            marginTop: 16,
+            padding: '10px 14px',
+            borderRadius: 6,
+            background: 'rgba(201,28,43,0.10)',
+            border: '1px solid rgba(201,28,43,0.25)',
+            color: 'var(--color-critical)',
+            fontSize: 13,
+          }}
+        >
+          {error}
+        </div>
       )}
 
       {/* List */}
+      <div style={{ marginTop: 16 }}>
       {loading ? (
         <FoodSkeleton />
       ) : filteredFoods.length === 0 ? (
@@ -838,6 +885,7 @@ export default function FoodsPage() {
           ))}
         </div>
       )}
+      </div>
 
       {/* Modals */}
       <FoodModal
@@ -859,6 +907,6 @@ export default function FoodsPage() {
         onClose={() => setJournalFood(null)}
         onAdd={handleAddToJournal}
       />
-    </div>
+    </main>
   );
 }

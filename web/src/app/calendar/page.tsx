@@ -331,10 +331,38 @@ export default function CalendarPage() {
   }
 
   return (
-    <div className="px-4 py-8 animate-fade-in">
-      <div className="max-w-5xl mx-auto">
-        {/* Page title */}
-        <h1 className="text-3xl font-bold text-white tracking-tight mb-6">Calendar</h1>
+    <main
+      className="page-mount"
+      style={{
+        maxWidth: 1280,
+        margin: '0 auto',
+        padding: '24px 16px 80px',
+      }}
+    >
+      <div>
+        <div>
+          <h1
+            style={{
+              fontSize: 22,
+              fontWeight: 700,
+              letterSpacing: '-0.4px',
+              margin: 0,
+              color: 'var(--color-foreground)',
+            }}
+          >
+            Calendar
+          </h1>
+          <div
+            style={{
+              color: 'var(--color-muted-foreground)',
+              marginTop: 4,
+              marginBottom: 18,
+              fontSize: 14,
+            }}
+          >
+            Meals, weigh-ins, and movement at a glance.
+          </div>
+        </div>
 
         <div className="flex flex-col lg:flex-row gap-6">
           {/* ── Left: Calendar Grid ── */}
@@ -438,6 +466,6 @@ export default function CalendarPage() {
           </div>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

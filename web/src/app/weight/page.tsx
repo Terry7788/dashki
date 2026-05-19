@@ -12,7 +12,7 @@ import {
   Label,
   ResponsiveContainer,
 } from 'recharts';
-import { GlassCard, GlassButton, GlassInput } from '@/components/ui';
+import { GlassCard, GlassButton, GlassInput, MicroLabel, MonoNum, Pill } from '@/components/ui';
 import { getWeightEntries, addWeightEntry, getGoals, getWeightJourney } from '@/lib/api';
 import type { WeightEntry, WeightJourney } from '@/lib/types';
 import { JourneyCard } from '@/components/JourneyCard';
@@ -82,9 +82,13 @@ function CustomTooltip({ active, payload, label }: any) {
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <GlassCard className="flex-1 min-w-0">
-      <p className="text-white/50 text-xs font-medium mb-1">{label}</p>
-      <p className="text-white text-2xl font-bold">{value}</p>
+    <GlassCard className="flex-1 min-w-0" padding={false}>
+      <div style={{ padding: 16 }}>
+        <MicroLabel>{label}</MicroLabel>
+        <div style={{ marginTop: 6 }}>
+          <MonoNum size={28}>{value}</MonoNum>
+        </div>
+      </div>
     </GlassCard>
   );
 }
@@ -298,8 +302,63 @@ export default function WeightPage() {
   }, [entries, goalWeight]);
 
   return (
-    <div className="px-4 md:px-6 py-8 max-w-4xl mx-auto space-y-6">
-      <h1 className="text-3xl font-bold text-white">Weight</h1>
+    <main
+      className="page-mount"
+      style={{
+        maxWidth: 1120,
+        margin: '0 auto',
+        padding: '24px 16px 80px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 16,
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: 12,
+        }}
+      >
+        <div>
+          <h1
+            style={{
+              fontSize: 22,
+              fontWeight: 700,
+              letterSpacing: '-0.4px',
+              margin: 0,
+              color: 'var(--color-foreground)',
+            }}
+          >
+            Weight
+          </h1>
+          <div
+            style={{
+              color: 'var(--color-muted-foreground)',
+              marginTop: 4,
+              fontSize: 14,
+            }}
+          >
+            Trend over time.{' '}
+            {goalWeight !== null && (
+              <span>
+                Your goal is{' '}
+                <span
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    color: 'var(--color-foreground)',
+                    fontWeight: 600,
+                  }}
+                >
+                  {goalWeight.toFixed(1)} kg
+                </span>
+                .
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
 
       {/* ── Stats row ── */}
       {loading ? (
@@ -329,33 +388,74 @@ export default function WeightPage() {
 
       {/* ── Chart ── */}
       <GlassCard>
-        <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h2 className="text-white font-semibold">Weight Over Time</h2>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: 16,
+            flexWrap: 'wrap',
+            gap: 12,
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              flexWrap: 'wrap',
+            }}
+          >
+            <h2
+              style={{
+                margin: 0,
+                fontSize: 15,
+                fontWeight: 700,
+                letterSpacing: '-0.25px',
+              }}
+            >
+              Weight over time
+            </h2>
             {goalWeight !== null && (
-              <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-red-500/10 border border-red-400/30">
-                <Target className="w-3 h-3 text-red-400" />
-                <span className="text-xs text-red-300 font-medium">
-                  Goal {goalWeight.toFixed(1)} kg
-                </span>
+              <Pill tone="critical">
+                <Target style={{ width: 11, height: 11 }} />
+                Goal {goalWeight.toFixed(1)} kg
                 {goalProximity && goalProximity.direction !== 'on' && (
-                  <span className="text-[10px] text-red-300/60">
-                    · {goalProximity.diff.toFixed(1)} kg {goalProximity.direction}
+                  <span style={{ opacity: 0.7 }}>
+                    {' '}
+                    · {goalProximity.diff.toFixed(1)} kg{' '}
+                    {goalProximity.direction}
                   </span>
                 )}
-              </div>
+              </Pill>
             )}
           </div>
-          <div className="flex gap-1.5">
+          <div style={{ display: 'flex', gap: 4 }}>
             {ranges.map((r) => (
               <button
                 key={r.value}
                 onClick={() => setRange(r.value)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all duration-200 ${
-                  range === r.value
-                    ? 'bg-indigo-500 text-white'
-                    : 'bg-white/10 text-white/60 hover:bg-white/20 hover:text-white'
-                }`}
+                className="cursor-pointer"
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: 4,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  background:
+                    range === r.value
+                      ? 'var(--color-foreground)'
+                      : 'transparent',
+                  color:
+                    range === r.value
+                      ? 'var(--color-background)'
+                      : 'var(--color-muted-foreground)',
+                  border: `1px solid ${
+                    range === r.value
+                      ? 'var(--color-foreground)'
+                      : 'var(--color-border)'
+                  }`,
+                  fontFamily: 'inherit',
+                }}
               >
                 {r.label}
               </button>
@@ -413,10 +513,10 @@ export default function WeightPage() {
               <Line
                 type="monotone"
                 dataKey="weight"
-                stroke="#818cf8"
+                stroke="var(--color-primary)"
                 strokeWidth={2.5}
-                dot={{ fill: '#818cf8', r: 4, strokeWidth: 0 }}
-                activeDot={{ r: 6, fill: '#818cf8', stroke: 'rgba(129,140,248,0.3)', strokeWidth: 4 }}
+                dot={{ fill: 'var(--color-primary)', r: 4, strokeWidth: 0 }}
+                activeDot={{ r: 6, fill: 'var(--color-primary)', stroke: 'rgba(0,117,222,0.25)', strokeWidth: 4 }}
                 isAnimationActive={false}
               />
               {/* Projected trajectory — dashed continuation of the line at the
@@ -425,12 +525,12 @@ export default function WeightPage() {
               <Line
                 type="linear"
                 dataKey="projected"
-                stroke="#818cf8"
+                stroke="var(--color-primary)"
                 strokeOpacity={0.6}
                 strokeWidth={2}
                 strokeDasharray="5 4"
                 dot={false}
-                activeDot={{ r: 5, fill: '#818cf8', fillOpacity: 0.6, stroke: 'rgba(129,140,248,0.2)', strokeWidth: 4 }}
+                activeDot={{ r: 5, fill: 'var(--color-primary)', fillOpacity: 0.6, stroke: 'rgba(0,117,222,0.18)', strokeWidth: 4 }}
                 isAnimationActive={false}
               />
             </LineChart>
@@ -475,7 +575,7 @@ export default function WeightPage() {
       {/* ── Recent entries ── */}
       {recentEntries.length > 0 && (
         <GlassCard>
-          <h2 className="text-white font-semibold mb-4">Recent Entries</h2>
+          <h2 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 700, letterSpacing: '-0.25px' }}>Recent entries</h2>
           <div className="space-y-2">
             {recentEntries.map((entry) => (
               <div
@@ -498,6 +598,6 @@ export default function WeightPage() {
           </div>
         </GlassCard>
       )}
-    </div>
+    </main>
   );
 }
