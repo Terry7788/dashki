@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Loader2, Clock, Search, Copy, MoreHorizontal, Move, Sunrise, Sun, Cookie, Moon, X, Apple } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Loader2, Clock, Search, Copy, MoreHorizontal, Move, Sunrise, Sun, Cookie, Moon, X, Apple, Sparkles } from 'lucide-react';
 import { GlassCard, GlassButton, GlassInput, GlassModal, CalorieRing, MacroBar, Pill, MicroLabel, MonoNum, EmptyState, CardShell } from '@/components/ui';
 import {
   FOOD_TAGS,
@@ -20,6 +20,7 @@ import {
   getSavedMeals,
   getGoals,
   updateGoals,
+  estimateFood,
 } from '@/lib/api';
 import type { JournalEntry, MealType, Food, SavedMeal, Unit } from '@/lib/types';
 import { useSocketEvent } from '@/lib/useSocketEvent';
@@ -771,6 +772,10 @@ function AddFoodModal({ isOpen, onClose, mealType: initialMealType, date, onAdde
   const [quickName, setQuickName] = useState('');
   const [quickCalories, setQuickCalories] = useState('');
   const [quickProtein, setQuickProtein] = useState('');
+  // AI estimate state for Quick Add
+  const [aiEstimating, setAiEstimating] = useState(false);
+  const [aiError, setAiError] = useState('');
+  const [aiResult, setAiResult] = useState<{ portion: string; reasoning: string } | null>(null);
 
   // Lifted from FoodPicker so the sticky bottom bar (rendered as the modal's
   // footer) can show the running total + Add button across the whole panel
@@ -858,6 +863,22 @@ function AddFoodModal({ isOpen, onClose, mealType: initialMealType, date, onAdde
     }
   }
 
+  async function handleAiGuess() {
+    if (!quickName.trim() || aiEstimating) return;
+    setAiEstimating(true);
+    setAiError('');
+    try {
+      const r = await estimateFood(quickName.trim());
+      setQuickCalories(String(r.calories));
+      setQuickProtein(String(r.protein));
+      setAiResult({ portion: r.portion, reasoning: r.reasoning });
+    } catch (e: unknown) {
+      setAiError(e instanceof Error ? e.message : 'Could not estimate this food');
+    } finally {
+      setAiEstimating(false);
+    }
+  }
+
   async function handleQuickAdd() {
     const cal = parseFloat(quickCalories);
     const pro = parseFloat(quickProtein) || 0;
@@ -878,6 +899,8 @@ function AddFoodModal({ isOpen, onClose, mealType: initialMealType, date, onAdde
       setQuickName('');
       setQuickCalories('');
       setQuickProtein('');
+      setAiResult(null);
+      setAiError('');
       onClose();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to add entry');
@@ -1072,15 +1095,121 @@ function AddFoodModal({ isOpen, onClose, mealType: initialMealType, date, onAdde
 
         {tab === 'quick' && (
           <div className="space-y-4">
-            <p className="text-xs text-white/40">
+            <p
+              style={{
+                fontSize: 12,
+                color: 'var(--color-muted-foreground)',
+                margin: 0,
+              }}
+            >
               Log calories without adding to your food database — great for one-off items.
+              Describe a portion (&ldquo;2 slices of pizza&rdquo;) or let AI assume a typical serving.
             </p>
             <GlassInput
               label="Food name"
-              placeholder="e.g. Slice of birthday cake"
+              placeholder="e.g. 2 slices of pepperoni pizza"
               value={quickName}
-              onChange={(e) => setQuickName(e.target.value)}
+              onChange={(e) => {
+                setQuickName(e.target.value);
+                if (aiResult) setAiResult(null);
+                if (aiError) setAiError('');
+              }}
             />
+            <button
+              type="button"
+              onClick={handleAiGuess}
+              disabled={!quickName.trim() || aiEstimating}
+              className="cursor-pointer w-full"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                padding: '10px 14px',
+                background: 'var(--color-surface-warm)',
+                border: '1px dashed var(--color-border)',
+                borderRadius: 6,
+                color: 'var(--color-foreground)',
+                fontSize: 13,
+                fontWeight: 600,
+                fontFamily: 'inherit',
+                opacity: !quickName.trim() || aiEstimating ? 0.55 : 1,
+              }}
+            >
+              {aiEstimating ? (
+                <>
+                  <Loader2 className="animate-spin" style={{ width: 14, height: 14 }} />
+                  <span>AI is estimating…</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles style={{ width: 14, height: 14, color: 'var(--color-primary)' }} />
+                  <span>Let AI guess calories &amp; protein</span>
+                </>
+              )}
+            </button>
+            {aiError && (
+              <div
+                style={{
+                  fontSize: 12,
+                  color: 'var(--color-critical)',
+                  background: 'rgba(201,28,43,0.10)',
+                  border: '1px solid rgba(201,28,43,0.25)',
+                  padding: '8px 10px',
+                  borderRadius: 4,
+                }}
+              >
+                {aiError}
+              </div>
+            )}
+            {aiResult && !aiError && (
+              <div
+                style={{
+                  background: 'var(--color-surface-warm)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 6,
+                  padding: '10px 12px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4,
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    color: 'var(--color-muted-foreground)',
+                  }}
+                >
+                  <Sparkles style={{ width: 11, height: 11, color: 'var(--color-primary)' }} />
+                  AI estimate · {aiResult.portion}
+                </div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: 'var(--color-foreground)',
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {aiResult.reasoning}
+                </div>
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: 'var(--color-muted-foreground)',
+                    fontStyle: 'italic',
+                    marginTop: 2,
+                  }}
+                >
+                  Edit the fields below if anything looks off.
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <GlassInput
                 label="Calories (kcal)"

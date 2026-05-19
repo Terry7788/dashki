@@ -19,6 +19,7 @@ import goalsRouter from './routes/goals';
 import preferencesRouter from './routes/preferences';
 import migrationRouter from './routes/migration';
 import botRouter from './routes/bot';
+import aiRouter from './routes/ai';
 
 // ─── App Setup ────────────────────────────────────────────────────────────────
 
@@ -124,6 +125,7 @@ app.use('/api/goals', goalsRouter);
 app.use('/api/preferences', preferencesRouter);
 app.use('/api/migration', migrationRouter);
 app.use('/api/bot', botRouter);
+app.use('/api/ai', aiRouter);
 
 // ─── Voice Parsing ────────────────────────────────────────────────────────────
 

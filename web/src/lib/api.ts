@@ -331,3 +331,19 @@ export function updatePreferences(
     body: JSON.stringify(data),
   });
 }
+
+// ─── AI helpers ──────────────────────────────────────────────────────────────
+
+export interface FoodEstimate {
+  calories: number;
+  protein: number;
+  portion: string;
+  reasoning: string;
+}
+
+export function estimateFood(name: string): Promise<FoodEstimate> {
+  return request<FoodEstimate>('/api/ai/estimate-food', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  });
+}
