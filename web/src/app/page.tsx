@@ -1,131 +1,217 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { Scale, Footprints, Flame, Dumbbell, Plus } from 'lucide-react';
-import GlassCard from '@/components/ui/GlassCard';
-import GlassButton from '@/components/ui/GlassButton';
-import GlassModal from '@/components/ui/GlassModal';
-import GlassInput from '@/components/ui/GlassInput';
-import { getJournalSummary, getSteps, getWeightEntries, addWeightEntry, createStepLog, getGoals, getPreferences } from '@/lib/api';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import {
+  Plus,
+  Scale,
+  Footprints,
+  Utensils,
+  Calendar as CalendarIcon,
+  Search,
+} from 'lucide-react';
+import {
+  GlassCard,
+  GlassButton,
+  GlassModal,
+  GlassInput,
+  CardShell,
+  Pill,
+  MicroLabel,
+  MonoNum,
+  ProgressBar,
+  CalorieRing,
+  MacroBar,
+  Sparkline,
+} from '@/components/ui';
+import {
+  getJournalSummary,
+  getJournalEntries,
+  getSteps,
+  getWeightEntries,
+  addWeightEntry,
+  addJournalEntry,
+  createStepLog,
+  getGoals,
+  getPreferences,
+} from '@/lib/api';
 import { useSocketEvent } from '@/lib/useSocketEvent';
-import type { DailySummary, StepEntry, WeightEntry, Goals } from '@/lib/types';
+import type {
+  DailySummary,
+  StepEntry,
+  WeightEntry,
+  Goals,
+  JournalEntry,
+  MealType,
+  Food,
+  Unit,
+} from '@/lib/types';
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+const BASE_URL =
+  (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000').replace(/\/$/, '');
+
+function defaultMealForNow(): MealType {
+  const h = new Date().getHours();
+  if (h < 11) return 'breakfast';
+  if (h < 15) return 'lunch';
+  if (h < 17) return 'snack';
+  return 'dinner';
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
 function getGreeting(): string {
   const hour = new Date().getHours();
+  if (hour < 5) return 'Late night';
   if (hour < 12) return 'Good morning';
   if (hour < 18) return 'Good afternoon';
   return 'Good evening';
 }
 
 function todayISO(): string {
-  // Use en-CA locale for YYYY-MM-DD in local time (not UTC like toISOString())
   return new Date().toLocaleString('en-CA').split(',')[0];
 }
 
-// ─── Skeleton ────────────────────────────────────────────────────────────────
-
-function StatSkeleton() {
-  return (
-    <div className="backdrop-blur-xl bg-white/[0.04] border border-white/[0.08] rounded-3xl shadow-2xl p-6">
-      <div className="skeleton h-4 w-24 mb-4" />
-      <div className="skeleton h-10 w-20 mb-2" />
-      <div className="skeleton h-3 w-16" />
-    </div>
-  );
+function formatToday(): string {
+  return new Date().toLocaleDateString('en-AU', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
 }
 
-// ─── Stat Card ───────────────────────────────────────────────────────────────
-
-interface StatCardProps {
-  icon: React.ElementType;
-  label: string;
-  value: string | number;
-  unit?: string;
-  iconColor: string;
-  iconBg: string;
+// Look back N days for the small weight-trend sparkline.
+function weightSparkData(entries: WeightEntry[], n = 12): number[] {
+  return [...entries]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-n)
+    .map((e) => e.weight_kg);
 }
 
-function StatCard({ icon: Icon, label, value, unit, iconColor, iconBg }: StatCardProps) {
-  return (
-    <GlassCard>
-      <div className="flex items-start justify-between mb-4">
-        <div className={`w-11 h-11 rounded-2xl ${iconBg} flex items-center justify-center`}>
-          <Icon className={`w-5 h-5 ${iconColor}`} />
-        </div>
-      </div>
-      <div className="flex items-baseline gap-1">
-        <span className="text-3xl font-bold text-white">{value}</span>
-        {unit && <span className="text-sm text-white/50">{unit}</span>}
-      </div>
-      <p className="text-sm text-white/60 mt-1">{label}</p>
-    </GlassCard>
-  );
-}
+const DEFAULT_GOALS: Goals = {
+  id: 0,
+  calories: 2000,
+  protein: 150,
+  carbs: null,
+  fat: null,
+  steps: 10000,
+  weight_kg: null,
+  weight_journey_start_date: null,
+  tdee_calories: null,
+  updated_at: '',
+};
 
-// ─── Progress Ring ────────────────────────────────────────────────────────────
+const MEALS: { name: string; type: MealType }[] = [
+  { name: 'Breakfast', type: 'breakfast' },
+  { name: 'Lunch', type: 'lunch' },
+  { name: 'Snack', type: 'snack' },
+  { name: 'Dinner', type: 'dinner' },
+];
 
-function ProgressRing({ value, max, size = 64, stroke = 5, color = '#6366f1' }: {
-  value: number; max: number; size?: number; stroke?: number; color?: string;
-}) {
-  const r = (size - stroke * 2) / 2;
-  const circ = 2 * Math.PI * r;
-  const pct = Math.min(value / max, 1);
-  const offset = circ * (1 - pct);
-  return (
-    <svg width={size} height={size} className="rotate-[-90deg]">
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth={stroke} />
-      <circle
-        cx={size / 2} cy={size / 2} r={r} fill="none"
-        stroke={color} strokeWidth={stroke}
-        strokeDasharray={circ} strokeDashoffset={offset}
-        strokeLinecap="round"
-        style={{ transition: 'stroke-dashoffset 0.5s ease' }}
-      />
-    </svg>
-  );
-}
+const VARIANT_KEY = 'dashki-dashboard-variant';
+type Variant = 'today' | 'week';
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+// =============================================================
+//  Page
+// =============================================================
 
 export default function DashboardPage() {
   const today = todayISO();
-
+  const [variant, setVariant] = useState<Variant>('today');
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<DailySummary | null>(null);
   const [steps, setSteps] = useState<StepEntry | null>(null);
-  const [latestWeight, setLatestWeight] = useState<WeightEntry | null>(null);
-  const [goals, setGoals] = useState<Goals>({ id: 0, calories: 2000, protein: 150, carbs: null, fat: null, steps: 10000, weight_kg: null, weight_journey_start_date: null, tdee_calories: null, updated_at: '' });
-
-  // Display name (read-only on dashboard; edited in /settings)
+  const [weightHistory, setWeightHistory] = useState<WeightEntry[]>([]);
+  const [goals, setGoals] = useState<Goals>(DEFAULT_GOALS);
   const [displayName, setDisplayName] = useState<string | null>(null);
+  const [weekJournal, setWeekJournal] = useState<
+    { date: string; cal: number; protein: number; partial?: boolean }[]
+  >([]);
+  const [weekSteps, setWeekSteps] = useState<{ date: string; steps: number }[]>(
+    []
+  );
 
-  // Modal state
+  // Modals
   const [weightModal, setWeightModal] = useState(false);
   const [stepsModal, setStepsModal] = useState(false);
   const [weightInput, setWeightInput] = useState('');
   const [stepsInput, setStepsInput] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // Restore dashboard variant choice on mount.
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(VARIANT_KEY);
+      if (v === 'week' || v === 'today') setVariant(v);
+    } catch {
+      /* localStorage may be unavailable */
+    }
+  }, []);
+
+  function chooseVariant(v: Variant) {
+    setVariant(v);
+    try {
+      localStorage.setItem(VARIANT_KEY, v);
+    } catch {
+      /* ignore */
+    }
+  }
+
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [summaryData, stepsData, weightData, goalsData] = await Promise.allSettled([
+      // Last 7 days inclusive of today, oldest first.
+      const week = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date();
+        d.setDate(d.getDate() - (6 - i));
+        return d.toLocaleString('en-CA').split(',')[0];
+      });
+      const earliest = week[0];
+
+      const [
+        summaryData,
+        stepsTodayData,
+        weekStepsData,
+        weekJournalData,
+        weightData,
+        goalsData,
+      ] = await Promise.allSettled([
         getJournalSummary(today),
         getSteps({ date: today }),
-        getWeightEntries({ limit: 1 }),
+        getSteps({ startDate: earliest, endDate: today }),
+        getJournalEntries({ startDate: earliest, endDate: today }),
+        getWeightEntries({ limit: 60 }),
         getGoals(),
       ]);
-
       if (summaryData.status === 'fulfilled') setSummary(summaryData.value);
-      if (stepsData.status === 'fulfilled') {
-        const arr = stepsData.value;
+      if (stepsTodayData.status === 'fulfilled') {
+        const arr = stepsTodayData.value;
         setSteps(arr.length > 0 ? arr[0] : null);
       }
+      if (weekStepsData.status === 'fulfilled') {
+        const byDate = new Map<string, number>();
+        for (const s of weekStepsData.value) byDate.set(s.date, s.steps);
+        setWeekSteps(week.map((d) => ({ date: d, steps: byDate.get(d) ?? 0 })));
+      }
+      if (weekJournalData.status === 'fulfilled') {
+        const byDate = new Map<string, { cal: number; protein: number }>();
+        for (const e of weekJournalData.value) {
+          const cur = byDate.get(e.date) ?? { cal: 0, protein: 0 };
+          cur.cal += e.calories_snapshot ?? 0;
+          cur.protein += e.protein_snapshot ?? 0;
+          byDate.set(e.date, cur);
+        }
+        setWeekJournal(
+          week.map((d) => ({
+            date: d,
+            cal: byDate.get(d)?.cal ?? 0,
+            protein: byDate.get(d)?.protein ?? 0,
+            partial: d === today,
+          }))
+        );
+      }
       if (weightData.status === 'fulfilled') {
-        const arr = weightData.value;
-        setLatestWeight(arr.length > 0 ? arr[0] : null);
+        setWeightHistory(weightData.value ?? []);
       }
       if (goalsData.status === 'fulfilled') setGoals(goalsData.value);
     } finally {
@@ -138,19 +224,19 @@ export default function DashboardPage() {
   }, [fetchAll]);
 
   useSocketEvent('journal-entry-created', fetchAll);
+  useSocketEvent('journal-entry-updated', fetchAll);
   useSocketEvent('journal-entry-deleted', fetchAll);
   useSocketEvent('steps-updated', fetchAll);
   useSocketEvent('weight-updated', fetchAll);
   useSocketEvent('weight-deleted', fetchAll);
   useSocketEvent('goals-updated', fetchAll);
 
-  // Display name — fetch on load, refetch when prefs are updated in /settings
   const fetchPreferences = useCallback(async () => {
     try {
       const prefs = await getPreferences();
       setDisplayName(prefs.display_name);
-    } catch (_) {
-      // silent — falls back to generic greeting
+    } catch {
+      /* silent */
     }
   }, []);
   useEffect(() => {
@@ -162,8 +248,7 @@ export default function DashboardPage() {
     if (!weightInput) return;
     setSaving(true);
     try {
-      const entry = await addWeightEntry({ date: today, weight_kg: parseFloat(weightInput) });
-      setLatestWeight(entry);
+      await addWeightEntry({ date: today, weight_kg: parseFloat(weightInput) });
       setWeightModal(false);
       setWeightInput('');
     } finally {
@@ -177,8 +262,6 @@ export default function DashboardPage() {
     if (isNaN(val) || val <= 0) return;
     setSaving(true);
     try {
-      // Creates a new log entry for today. Socket emits 'steps-updated' which
-      // triggers fetchAll to refresh the aggregate shown in the stat card.
       await createStepLog({ date: today, steps: val });
       setStepsModal(false);
       setStepsInput('');
@@ -187,219 +270,119 @@ export default function DashboardPage() {
     }
   }
 
+  const calories = summary ? Math.round(summary.calories) : 0;
+  const protein = summary ? Math.round(summary.protein) : 0;
+  const todaySteps = steps?.steps ?? 0;
+  const lastWeight = weightHistory[0] ?? null; // API returns newest first
+  const prevWeight = weightHistory[7] ?? weightHistory[weightHistory.length - 1] ?? null;
+
   return (
-    <div>
+    <main
+      className="page-mount"
+      style={{
+        maxWidth: 1120,
+        margin: '0 auto',
+        padding: '24px 16px 80px',
+      }}
+    >
+      <GreetingHeader
+        name={displayName ?? 'there'}
+        onLogFood={() => {
+          /* journal page handles food entry */
+          window.location.href = '/journal';
+        }}
+        onWeighIn={() => setWeightModal(true)}
+      />
 
-      {/* ── Greeting ─────────────────────────────────────────── */}
+      {/* Variant switcher */}
       <div
-        className="mb-8 animate-fade-in-up"
-        style={{ animationDelay: '0ms' }}
+        style={{
+          marginTop: 18,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+        }}
       >
-        <h1 className="text-3xl font-bold text-white">
-          {displayName ? `${getGreeting()}, ${displayName} 👋` : `${getGreeting()} 👋`}
-        </h1>
-        <p className="text-white/50 mt-1 text-sm">
-          {new Date().toLocaleDateString('en-AU', { weekday: 'long', month: 'long', day: 'numeric' })}
-        </p>
-      </div>
-
-      {/* ── Two-column layout on large screens ───────────────── */}
-      <div className="lg:grid lg:grid-cols-3 xl:grid-cols-[2fr_1fr] lg:gap-6 xl:gap-8 space-y-6 lg:space-y-0">
-
-        {/* ── LEFT COLUMN (lg: 2/3 width) ─────────────────────── */}
-        <div className="lg:col-span-2 xl:col-span-1 space-y-6">
-
-          {/* Stats — 2 cols mobile, 4 cols xl */}
-          <div
-            className="animate-fade-in-up"
-            style={{ animationDelay: '100ms' }}
-          >
-            <h2 className="text-xs font-semibold text-white/40 uppercase tracking-widest mb-4">
-              Today&rsquo;s Summary
-            </h2>
-            <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-              {loading ? (
-                <>
-                  <StatSkeleton />
-                  <StatSkeleton />
-                  <StatSkeleton />
-                  <StatSkeleton />
-                </>
-              ) : (
-                <>
-                  <StatCard
-                    icon={Flame}
-                    label="Calories Today"
-                    value={summary ? Math.round(summary.calories) : 0}
-                    unit="kcal"
-                    iconColor="text-orange-300"
-                    iconBg="bg-orange-500/20"
-                  />
-                  <StatCard
-                    icon={Dumbbell}
-                    label="Protein Today"
-                    value={summary ? Math.round(summary.protein) : 0}
-                    unit="g"
-                    iconColor="text-[#61bc84]"
-                    iconBg="bg-[#2E8B57]/20"
-                  />
-                  <StatCard
-                    icon={Footprints}
-                    label="Steps Today"
-                    value={steps ? steps.steps.toLocaleString() : 0}
-                    iconColor="text-[#61bc84]"
-                    iconBg="bg-[#2E8B57]/20"
-                  />
-                  <StatCard
-                    icon={Scale}
-                    label="Latest Weight"
-                    value={latestWeight ? latestWeight.weight_kg.toFixed(1) : '—'}
-                    unit={latestWeight ? 'kg' : ''}
-                    iconColor="text-[#61bc84]"
-                    iconBg="bg-[#2E8B57]/20"
-                  />
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Today's Journal / Food log preview */}
-          <div
-            className="animate-fade-in-up"
-            style={{ animationDelay: '200ms' }}
-          >
-            <h2 className="text-xs font-semibold text-white/40 uppercase tracking-widest mb-4">
-              Today&rsquo;s Journal
-            </h2>
-            <GlassCard>
-              {loading ? (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-4">
-                    <div className="skeleton w-16 h-16 rounded-full shrink-0" />
-                    <div className="flex-1 space-y-3">
-                      <div className="skeleton h-4 w-3/4" />
-                      <div className="skeleton h-1.5 w-full rounded-full" />
-                      <div className="skeleton h-4 w-1/2" />
-                      <div className="skeleton h-1.5 w-full rounded-full" />
-                    </div>
-                  </div>
-                </div>
-              ) : summary ? (() => {
-                const caloriesOver = summary.calories > goals.calories;
-                const caloriesOverBy = Math.round(summary.calories - goals.calories);
-                return (
-                <div className="flex items-center gap-5">
-                  {/* Calories ring */}
-                  <div className="relative shrink-0">
-                    <ProgressRing
-                      value={summary.calories}
-                      max={goals.calories}
-                      size={68}
-                      stroke={6}
-                      color={caloriesOver ? '#ef4444' : '#6366f1'}
-                    />
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className="text-xs font-bold leading-tight">{Math.round(summary.calories)}</span>
-                      <span className="text-[9px] text-white/40">kcal</span>
-                    </div>
-                  </div>
-                  <div className="flex-1 space-y-3">
-                    {/* Calories bar */}
-                    <div>
-                      <div className="flex items-end justify-between mb-1">
-                        <span className="text-sm text-white/60">Calories</span>
-                        <span className="text-sm font-bold text-white">
-                          {Math.round(summary.calories)} <span className="text-white/40 font-normal">/ {goals.calories}</span>
-                          {caloriesOver && (
-                            <span className="ml-1.5 text-red-400 font-semibold">
-                              +{caloriesOverBy} over
-                            </span>
-                          )}
-                        </span>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all duration-500 ${
-                            caloriesOver
-                              ? 'bg-gradient-to-r from-red-500 to-rose-500'
-                              : 'bg-gradient-to-r from-indigo-500 to-blue-500'
-                          }`}
-                          style={{ width: `${Math.min((summary.calories / goals.calories) * 100, 100)}%` }}
-                        />
-                      </div>
-                    </div>
-                    {/* Protein bar */}
-                    <div>
-                      <div className="flex items-end justify-between mb-1">
-                        <span className="text-sm text-white/60">Protein</span>
-                        <span className="text-sm font-bold text-white">
-                          {Math.round(summary.protein)}g <span className="text-white/40 font-normal">/ {goals.protein}g</span>
-                        </span>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
-                        <div
-                          className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-500"
-                          style={{ width: `${Math.min((summary.protein / goals.protein) * 100, 100)}%` }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                );
-              })() : (
-                <p className="text-white/40 text-sm text-center py-2">
-                  No food logged today yet.
-                </p>
-              )}
-            </GlassCard>
-          </div>
-
-        </div>
-
-        {/* ── RIGHT COLUMN (lg: 1/3 width) ────────────────────── */}
-        <div className="lg:col-span-1 space-y-6">
-
-          {/* Quick Actions */}
-          <div
-            className="animate-fade-in-up"
-            style={{ animationDelay: '250ms' }}
-          >
-            <h2 className="text-xs font-semibold text-white/40 uppercase tracking-widest mb-4">
-              Quick Actions
-            </h2>
-            <GlassCard>
-              <div className="flex flex-col gap-3">
-                <GlassButton
-                  variant="primary"
-                  onClick={() => setWeightModal(true)}
-                  className="w-full justify-center"
-                >
-                  <span className="flex items-center gap-2">
-                    <Plus className="w-4 h-4" />
-                    Log Weight
-                  </span>
-                </GlassButton>
-                <GlassButton
-                  variant="default"
-                  onClick={() => setStepsModal(true)}
-                  className="w-full justify-center"
-                >
-                  <span className="flex items-center gap-2">
-                    <Plus className="w-4 h-4" />
-                    Add Steps
-                  </span>
-                </GlassButton>
-              </div>
-            </GlassCard>
-          </div>
-
+        <span
+          style={{
+            fontSize: 11,
+            color: 'var(--color-muted-foreground)',
+            fontWeight: 600,
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+          }}
+        >
+          Layout
+        </span>
+        <div
+          style={{
+            display: 'flex',
+            background: 'var(--color-surface-warm)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 4,
+            padding: 2,
+          }}
+        >
+          {(['today', 'week'] as const).map((v) => (
+            <button
+              key={v}
+              onClick={() => chooseVariant(v)}
+              className="cursor-pointer"
+              style={{
+                padding: '4px 12px',
+                fontSize: 12,
+                fontWeight: 600,
+                background: variant === v ? 'var(--color-surface)' : 'transparent',
+                color:
+                  variant === v
+                    ? 'var(--color-foreground)'
+                    : 'var(--color-muted-foreground)',
+                border: 0,
+                borderRadius: 3,
+                textTransform: 'capitalize',
+                fontFamily: 'inherit',
+                boxShadow: variant === v ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+              }}
+            >
+              {v}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* ── Log Weight Modal ──────────────────────────────────── */}
+      {variant === 'today' ? (
+        <TodayVariant
+          loading={loading}
+          summary={summary}
+          calories={calories}
+          protein={protein}
+          todaySteps={todaySteps}
+          lastWeight={lastWeight}
+          prevWeight={prevWeight}
+          weightHistory={weightHistory}
+          goals={goals}
+        />
+      ) : (
+        <WeekVariant
+          loading={loading}
+          summary={summary}
+          calories={calories}
+          protein={protein}
+          todaySteps={todaySteps}
+          weightHistory={weightHistory}
+          weekJournal={weekJournal}
+          weekSteps={weekSteps}
+          goals={goals}
+        />
+      )}
+
+      {/* Log Weight Modal */}
       <GlassModal
         isOpen={weightModal}
-        onClose={() => { setWeightModal(false); setWeightInput(''); }}
+        onClose={() => {
+          setWeightModal(false);
+          setWeightInput('');
+        }}
         title="Log Weight"
         size="sm"
       >
@@ -425,10 +408,13 @@ export default function DashboardPage() {
         </div>
       </GlassModal>
 
-      {/* ── Add Steps Modal ───────────────────────────────────── */}
+      {/* Add Steps Modal */}
       <GlassModal
         isOpen={stepsModal}
-        onClose={() => { setStepsModal(false); setStepsInput(''); }}
+        onClose={() => {
+          setStepsModal(false);
+          setStepsInput('');
+        }}
         title="Add Steps"
         size="sm"
       >
@@ -452,6 +438,1284 @@ export default function DashboardPage() {
           </GlassButton>
         </div>
       </GlassModal>
+    </main>
+  );
+}
+
+// ─── Greeting header ────────────────────────────────────────────────────────
+
+function GreetingHeader({
+  name,
+  onLogFood,
+  onWeighIn,
+}: {
+  name: string;
+  onLogFood: () => void;
+  onWeighIn: () => void;
+}) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        gap: 16,
+        flexWrap: 'wrap',
+      }}
+    >
+      <div>
+        <h1
+          style={{
+            fontSize: 28,
+            fontWeight: 700,
+            letterSpacing: '-0.7px',
+            margin: 0,
+            color: 'var(--color-foreground)',
+          }}
+        >
+          {getGreeting()}, {name}
+        </h1>
+        <div
+          style={{
+            color: 'var(--color-muted-foreground)',
+            marginTop: 4,
+            fontSize: 14,
+          }}
+        >
+          {formatToday()}
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <GlassButton variant="primary" size="sm" onClick={onLogFood}>
+          <Plus style={{ width: 14, height: 14, strokeWidth: 2.25 }} />
+          Log food
+        </GlassButton>
+        <GlassButton variant="soft" size="sm" onClick={onWeighIn}>
+          <Scale style={{ width: 14, height: 14, strokeWidth: 2.25 }} />
+          Weigh in
+        </GlassButton>
+      </div>
+    </div>
+  );
+}
+
+// =============================================================
+//  Variant: Today
+// =============================================================
+
+function TodayVariant({
+  loading,
+  summary,
+  calories,
+  protein,
+  todaySteps,
+  lastWeight,
+  prevWeight,
+  weightHistory,
+  goals,
+}: {
+  loading: boolean;
+  summary: DailySummary | null;
+  calories: number;
+  protein: number;
+  todaySteps: number;
+  lastWeight: WeightEntry | null;
+  prevWeight: WeightEntry | null;
+  weightHistory: WeightEntry[];
+  goals: Goals;
+}) {
+  const entries = summary?.entries ?? [];
+  const weightDelta =
+    lastWeight && prevWeight
+      ? Number((lastWeight.weight_kg - prevWeight.weight_kg).toFixed(1))
+      : null;
+
+  const groups = useMemo(
+    () =>
+      MEALS.map((m) => ({
+        ...m,
+        entries: entries.filter((e) => e.meal_type === m.type),
+      })),
+    [entries]
+  );
+
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gap: 16,
+        gridTemplateColumns: '2fr 1fr',
+        marginTop: 24,
+      }}
+      className="dashboard-grid"
+    >
+      {/* LEFT — Today */}
+      <GlassCard padding={false} className="p-6">
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'baseline',
+            justifyContent: 'space-between',
+            marginBottom: 18,
+          }}
+        >
+          <h2
+            style={{
+              margin: 0,
+              fontSize: 15,
+              fontWeight: 700,
+              letterSpacing: '-0.25px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <Utensils
+              style={{
+                width: 14,
+                height: 14,
+                strokeWidth: 2.25,
+                color: 'var(--color-muted-foreground)',
+              }}
+            />
+            Today&rsquo;s nutrition
+          </h2>
+          <span style={{ color: 'var(--color-muted-foreground)', fontSize: 12 }}>
+            {summary ? `${entries.length} entries` : ''}
+          </span>
+        </div>
+
+        {loading ? (
+          <div className="skeleton" style={{ height: 200, borderRadius: 8 }} />
+        ) : (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'auto 1fr',
+              gap: 24,
+              alignItems: 'center',
+            }}
+          >
+            <CalorieRing value={calories} target={goals.calories} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <MacroBar label="Protein" value={protein} target={goals.protein} />
+              <MacroBar
+                label="Steps"
+                value={todaySteps}
+                target={goals.steps}
+                unit=""
+                tone="success"
+              />
+              {lastWeight && (
+                <MacroBar
+                  label="Weight"
+                  value={lastWeight.weight_kg}
+                  target={goals.weight_kg ?? lastWeight.weight_kg}
+                  unit=" kg"
+                />
+              )}
+            </div>
+          </div>
+        )}
+
+        <div
+          style={{
+            borderTop: '1px solid var(--color-border)',
+            marginTop: 20,
+            paddingTop: 18,
+          }}
+        >
+          <MicroLabel style={{ marginBottom: 10 }}>
+            Meals · {entries.length} entries
+          </MicroLabel>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {groups.map((g) => (
+              <MealStrip key={g.type} name={g.name} entries={g.entries} />
+            ))}
+          </div>
+        </div>
+      </GlassCard>
+
+      {/* RIGHT — side rail */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <GlassCard padding={false} className="p-4">
+          <MicroLabel>
+            <Scale
+              style={{
+                width: 12,
+                height: 12,
+                strokeWidth: 2.25,
+                marginRight: 4,
+                verticalAlign: '-2px',
+              }}
+            />
+            Weight
+          </MicroLabel>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'baseline',
+              gap: 8,
+              marginTop: 6,
+            }}
+          >
+            {lastWeight ? (
+              <>
+                <MonoNum size={32}>{lastWeight.weight_kg.toFixed(1)}</MonoNum>
+                <span
+                  style={{
+                    color: 'var(--color-muted-foreground)',
+                    fontSize: 12,
+                  }}
+                >
+                  kg
+                </span>
+                {weightDelta !== null && weightDelta !== 0 && (
+                  <Pill
+                    tone={weightDelta < 0 ? 'success' : 'warning'}
+                    style={{ marginLeft: 'auto' }}
+                  >
+                    {weightDelta > 0 ? '+' : ''}
+                    {weightDelta} kg
+                  </Pill>
+                )}
+              </>
+            ) : (
+              <span
+                style={{
+                  color: 'var(--color-muted-foreground)',
+                  fontSize: 13,
+                }}
+              >
+                Not logged yet
+              </span>
+            )}
+          </div>
+          {weightHistory.length > 1 && (
+            <Sparkline
+              data={weightSparkData(weightHistory)}
+              stroke="var(--color-primary)"
+              height={36}
+            />
+          )}
+          {goals.weight_kg && lastWeight && (
+            <div
+              style={{
+                fontSize: 11,
+                color: 'var(--color-muted-foreground)',
+                marginTop: 6,
+              }}
+            >
+              {(lastWeight.weight_kg - goals.weight_kg).toFixed(1)} kg from your{' '}
+              {goals.weight_kg} kg goal
+            </div>
+          )}
+        </GlassCard>
+
+        <GlassCard padding={false} className="p-4">
+          <MicroLabel>
+            <Footprints
+              style={{
+                width: 12,
+                height: 12,
+                strokeWidth: 2.25,
+                marginRight: 4,
+                verticalAlign: '-2px',
+              }}
+            />
+            Steps today
+          </MicroLabel>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'baseline',
+              gap: 8,
+              marginTop: 6,
+            }}
+          >
+            <MonoNum size={32}>{todaySteps.toLocaleString()}</MonoNum>
+            <span
+              style={{
+                color: 'var(--color-muted-foreground)',
+                fontSize: 12,
+              }}
+            >
+              of {goals.steps.toLocaleString()}
+            </span>
+          </div>
+          <div style={{ marginTop: 10 }}>
+            <ProgressBar
+              value={todaySteps}
+              max={goals.steps}
+              tone={todaySteps >= goals.steps ? 'success' : 'primary'}
+            />
+          </div>
+        </GlassCard>
+
+        <CardShell
+          title="Today's protein"
+          icon={
+            <Utensils
+              style={{ width: 14, height: 14, strokeWidth: 2.25 }}
+            />
+          }
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'baseline',
+              gap: 8,
+            }}
+          >
+            <MonoNum size={28}>{protein}</MonoNum>
+            <span
+              style={{
+                color: 'var(--color-muted-foreground)',
+                fontSize: 12,
+              }}
+            >
+              of {goals.protein}g · {Math.round((protein / goals.protein) * 100)}%
+            </span>
+          </div>
+          <div style={{ marginTop: 10 }}>
+            <ProgressBar
+              value={protein}
+              max={goals.protein}
+              tone={protein >= goals.protein ? 'success' : 'primary'}
+            />
+          </div>
+        </CardShell>
+      </div>
+
+      <style jsx>{`
+        @media (max-width: 900px) {
+          .dashboard-grid {
+            grid-template-columns: minmax(0, 1fr) !important;
+          }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function MealStrip({ name, entries }: { name: string; entries: JournalEntry[] }) {
+  if (entries.length === 0) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '8px 12px',
+          borderRadius: 8,
+          background: 'var(--color-surface-warm)',
+        }}
+      >
+        <span
+          style={{
+            fontSize: 13,
+            fontWeight: 600,
+            color: 'var(--color-muted-foreground)',
+          }}
+        >
+          {name}
+        </span>
+        <a
+          href="/journal"
+          style={{
+            color: 'var(--color-link)',
+            fontSize: 12,
+            fontWeight: 600,
+            textDecoration: 'none',
+          }}
+        >
+          Log {name.toLowerCase()}
+        </a>
+      </div>
+    );
+  }
+  const totalCal = entries.reduce((a, e) => a + (e.calories_snapshot ?? 0), 0);
+  return (
+    <div
+      style={{
+        padding: '10px 12px',
+        borderRadius: 8,
+        background: 'var(--color-surface-warm)',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'baseline',
+          marginBottom: 6,
+        }}
+      >
+        <span style={{ fontSize: 13, fontWeight: 600 }}>{name}</span>
+        <span
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            color: 'var(--color-muted-foreground)',
+          }}
+        >
+          <span style={{ color: 'var(--color-foreground)', fontWeight: 600 }}>
+            {Math.round(totalCal)}
+          </span>{' '}
+          kcal
+        </span>
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {entries.slice(0, 6).map((e, i) => (
+          <span
+            key={e.id}
+            style={{
+              fontSize: 12,
+              color: 'var(--color-muted-foreground)',
+            }}
+          >
+            {e.food_name_snapshot}
+            {i < entries.slice(0, 6).length - 1 ? '  ·' : ''}
+          </span>
+        ))}
+        {entries.length > 6 && (
+          <span
+            style={{
+              fontSize: 12,
+              color: 'var(--color-muted-foreground)',
+              fontStyle: 'italic',
+            }}
+          >
+            +{entries.length - 6} more
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// =============================================================
+//  Variant: Week
+// =============================================================
+
+function WeekVariant({
+  loading,
+  summary,
+  calories,
+  protein,
+  todaySteps,
+  weightHistory,
+  weekJournal,
+  weekSteps,
+  goals,
+}: {
+  loading: boolean;
+  summary: DailySummary | null;
+  calories: number;
+  protein: number;
+  todaySteps: number;
+  weightHistory: WeightEntry[];
+  weekJournal: { date: string; cal: number; protein: number; partial?: boolean }[];
+  weekSteps: { date: string; steps: number }[];
+  goals: Goals;
+}) {
+  const todayEntries = summary?.entries ?? [];
+  const today = todayISO();
+
+  // Selected day — drives the right-column panel. Default = today.
+  const [selectedDate, setSelectedDate] = useState<string>(today);
+
+  // Reset selection when the week-window changes underneath us
+  // (e.g. after socket-driven refetch).
+  useEffect(() => {
+    if (!weekJournal.find((d) => d.date === selectedDate)) {
+      setSelectedDate(today);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekJournal, today]);
+
+  // Per-day journal entries (fetched on demand for non-today days).
+  const [dayEntries, setDayEntries] = useState<JournalEntry[]>([]);
+  const [dayLoading, setDayLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (selectedDate === today) {
+      setDayEntries(todayEntries);
+      return;
+    }
+    setDayLoading(true);
+    getJournalEntries({ date: selectedDate })
+      .then((arr) => {
+        if (!cancelled) setDayEntries(arr);
+      })
+      .catch(() => {
+        if (!cancelled) setDayEntries([]);
+      })
+      .finally(() => {
+        if (!cancelled) setDayLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDate, today, todayEntries]);
+
+  // 7-day average (excludes today's partial)
+  const avg7 = useMemo(() => {
+    const past = weekJournal.filter((d) => !d.partial && d.cal > 0);
+    if (past.length === 0) return null;
+    return Math.round(past.reduce((a, d) => a + d.cal, 0) / past.length);
+  }, [weekJournal]);
+
+  // Stats for the currently selected day
+  const selectedJournal = weekJournal.find((d) => d.date === selectedDate);
+  const selectedSteps = weekSteps.find((d) => d.date === selectedDate);
+  const selectedCal = selectedJournal?.cal ?? 0;
+  const selectedProtein = selectedJournal?.protein ?? 0;
+  const selectedStepCount = selectedSteps?.steps ?? 0;
+
+  // Weight: most-recent (60d limit) — show last 30 in sparkline
+  const weight30 = useMemo(() => {
+    return [...weightHistory]
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(-30);
+  }, [weightHistory]);
+
+  // Week window label (oldest → newest)
+  const weekRangeLabel = useMemo(() => {
+    if (weekJournal.length < 2) return '';
+    const start = new Date(weekJournal[0].date + 'T00:00:00');
+    const end = new Date(weekJournal[weekJournal.length - 1].date + 'T00:00:00');
+    const fmt = (d: Date) =>
+      d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+    return `${fmt(start)} – ${fmt(end)}`;
+  }, [weekJournal]);
+
+  return (
+    <div
+      style={{
+        marginTop: 24,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 16,
+      }}
+    >
+      {/* This week — vertical DayStack viz with steps row beneath */}
+      <CardShell
+        title="This week"
+        icon={<CalendarIcon style={{ width: 14, height: 14, strokeWidth: 2.25 }} />}
+        hint={
+          weekRangeLabel ? (
+            <span style={{ color: 'var(--color-muted-foreground)', fontSize: 12 }}>
+              {weekRangeLabel}
+              {avg7 != null && (
+                <>
+                  {' '}
+                  · 7-day average{' '}
+                  <span
+                    style={{
+                      fontFamily: 'var(--font-mono)',
+                      color: 'var(--color-foreground)',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {avg7.toLocaleString()} kcal
+                  </span>
+                </>
+              )}
+            </span>
+          ) : undefined
+        }
+      >
+        {loading || weekJournal.length === 0 ? (
+          <div className="skeleton" style={{ height: 180, borderRadius: 8 }} />
+        ) : (
+          <>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(7, 1fr)',
+                gap: 8,
+              }}
+            >
+              {weekJournal.map((d) => (
+                <DayStack
+                  key={d.date}
+                  day={d}
+                  isToday={d.date === today}
+                  isSelected={d.date === selectedDate}
+                  goal={goals.calories}
+                  onSelect={() => setSelectedDate(d.date)}
+                />
+              ))}
+            </div>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(7, 1fr)',
+                gap: 8,
+                marginTop: 8,
+              }}
+            >
+              {weekSteps.map((d) => (
+                <div
+                  key={d.date}
+                  style={{ textAlign: 'center', paddingTop: 4 }}
+                >
+                  <Footprints
+                    style={{
+                      width: 11,
+                      height: 11,
+                      strokeWidth: 2,
+                      color: 'var(--color-muted-foreground)',
+                      display: 'inline-block',
+                    }}
+                  />
+                  <div
+                    style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 10,
+                      color: 'var(--color-muted-foreground)',
+                      marginTop: 2,
+                    }}
+                  >
+                    {(d.steps / 1000).toFixed(1)}k
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </CardShell>
+
+      {/* Today + side rail */}
+      <div
+        style={{
+          display: 'grid',
+          gap: 16,
+          gridTemplateColumns: '1.4fr 1fr',
+        }}
+        className="week-grid"
+      >
+        <CardShell
+          title={
+            selectedDate === today
+              ? 'Today'
+              : new Date(selectedDate + 'T00:00:00').toLocaleDateString(
+                  'en-AU',
+                  { weekday: 'long', day: 'numeric', month: 'short' }
+                )
+          }
+          icon={<Utensils style={{ width: 14, height: 14, strokeWidth: 2.25 }} />}
+          hint={
+            <Pill tone="medium">
+              {goals.calories
+                ? `${Math.round((selectedCal / goals.calories) * 100)}% to goal`
+                : ''}
+            </Pill>
+          }
+        >
+          {/* Fixed-height inner body so the card doesn't shrink when there's
+              no data for a different day. */}
+          <div style={{ minHeight: 320, display: 'flex', flexDirection: 'column' }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr 1fr',
+                gap: 14,
+              }}
+            >
+              <BigTile
+                label="Calories"
+                value={Math.round(selectedCal)}
+                target={goals.calories}
+                unit=" kcal"
+              />
+              <BigTile
+                label="Protein"
+                value={Math.round(selectedProtein)}
+                target={goals.protein}
+                unit=" g"
+              />
+              <BigTile
+                label="Steps"
+                value={selectedStepCount}
+                target={goals.steps}
+                unit=""
+              />
+            </div>
+
+            {loading || dayLoading ? (
+              <div
+                className="skeleton"
+                style={{ flex: 1, minHeight: 140, borderRadius: 8, marginTop: 16 }}
+              />
+            ) : dayEntries.length === 0 ? (
+              <div
+                style={{
+                  background: 'var(--color-surface-warm)',
+                  border: '1px dashed var(--color-border)',
+                  borderRadius: 12,
+                  padding: '20px 16px',
+                  textAlign: 'center',
+                  color: 'var(--color-muted-foreground)',
+                  fontSize: 13,
+                  marginTop: 16,
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                {selectedDate === today
+                  ? 'No food logged yet today.'
+                  : 'Nothing logged on this day.'}{' '}
+                <a
+                  href="/journal"
+                  style={{ color: 'var(--color-link)', marginLeft: 4 }}
+                >
+                  Open journal
+                </a>
+              </div>
+            ) : (
+              <div
+                style={{
+                  marginTop: 16,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  flex: 1,
+                }}
+              >
+                {dayEntries.slice(0, 10).map((e) => (
+                  <div
+                    key={e.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      fontSize: 13,
+                      padding: '6px 0',
+                      borderBottom: '1px solid var(--color-border)',
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 11,
+                        color: 'var(--color-muted-foreground)',
+                        width: 38,
+                      }}
+                    >
+                      {(e.logged_at || '').slice(11, 16)}
+                    </span>
+                    <Pill
+                      tone={
+                        e.meal_type === 'breakfast'
+                          ? 'warning'
+                          : e.meal_type === 'lunch'
+                          ? 'success'
+                          : e.meal_type === 'snack'
+                          ? 'teal'
+                          : 'primary'
+                      }
+                      upper
+                    >
+                      {e.meal_type}
+                    </Pill>
+                    <span
+                      style={{
+                        flex: 1,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {e.food_name_snapshot}
+                    </span>
+                    <span
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 11,
+                        color: 'var(--color-muted-foreground)',
+                      }}
+                    >
+                      <span
+                        style={{
+                          color: 'var(--color-foreground)',
+                          fontWeight: 600,
+                        }}
+                      >
+                        {Math.round(e.calories_snapshot)}
+                      </span>{' '}
+                      kcal
+                    </span>
+                  </div>
+                ))}
+                {dayEntries.length > 10 && (
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: 'var(--color-muted-foreground)',
+                      marginTop: 6,
+                    }}
+                  >
+                    +{dayEntries.length - 10} more ·{' '}
+                    <a href="/journal" style={{ color: 'var(--color-link)' }}>
+                      open journal
+                    </a>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </CardShell>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <GlassCard padding={false} className="p-4">
+            <MicroLabel>Weight trend · 30 days</MicroLabel>
+            {weight30.length > 0 ? (
+              <>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'baseline',
+                    gap: 8,
+                    marginTop: 6,
+                  }}
+                >
+                  <MonoNum size={28}>
+                    {weight30[weight30.length - 1].weight_kg.toFixed(1)}
+                  </MonoNum>
+                  <span
+                    style={{
+                      color: 'var(--color-muted-foreground)',
+                      fontSize: 12,
+                    }}
+                  >
+                    kg
+                  </span>
+                  {weight30.length > 1 && (
+                    <Pill
+                      tone={
+                        weight30[weight30.length - 1].weight_kg <
+                        weight30[0].weight_kg
+                          ? 'success'
+                          : 'warning'
+                      }
+                      style={{ marginLeft: 'auto' }}
+                    >
+                      {(
+                        weight30[weight30.length - 1].weight_kg -
+                        weight30[0].weight_kg
+                      ).toFixed(1)}{' '}
+                      kg
+                    </Pill>
+                  )}
+                </div>
+                <Sparkline
+                  data={weight30.map((w) => w.weight_kg)}
+                  stroke="var(--color-primary)"
+                  height={48}
+                  fill
+                />
+              </>
+            ) : (
+              <div
+                style={{
+                  marginTop: 6,
+                  fontSize: 13,
+                  color: 'var(--color-muted-foreground)',
+                }}
+              >
+                Log a weight to see your trend.
+              </div>
+            )}
+          </GlassCard>
+
+          <QuickAddFoodPanel />
+        </div>
+      </div>
+
+      <style jsx>{`
+        @media (max-width: 900px) {
+          :global(.week-grid) {
+            grid-template-columns: minmax(0, 1fr) !important;
+          }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+// ─── Quick add food panel (shared on the dashboard's side rail) ──────────────
+
+function QuickAddFoodPanel() {
+  const [q, setQ] = useState('');
+  const [foods, setFoods] = useState<Food[]>([]);
+  const [adding, setAdding] = useState<number | null>(null);
+  const [justAdded, setJustAdded] = useState<number | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const url = q.trim()
+          ? BASE_URL + '/api/foods?search=' + encodeURIComponent(q.trim())
+          : BASE_URL + '/api/foods';
+        const res = await fetch(url);
+        if (res.ok) setFoods((await res.json()) as Food[]);
+      } catch {
+        /* ignore */
+      }
+    }, 250);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [q]);
+
+  async function addOne(food: Food) {
+    setAdding(food.id);
+    try {
+      const units = food.units ?? [
+        { unit: 'serving' as Unit, label: 'serving', default: true },
+      ];
+      const def = units.find((u) => u.default) ?? units[0];
+      const startQty =
+        def.unit === 'serving'
+          ? 1
+          : (food.base_amount ?? food.baseAmount ?? 100);
+      const today = new Date().toLocaleString('en-CA').split(',')[0];
+      await addJournalEntry({
+        date: today,
+        meal_type: defaultMealForNow(),
+        food_id: food.id,
+        food_name_snapshot: food.name,
+        quantity: startQty,
+        unit: def.unit,
+      });
+      setJustAdded(food.id);
+      setTimeout(() => setJustAdded(null), 1400);
+    } catch {
+      /* swallow */
+    } finally {
+      setAdding(null);
+    }
+  }
+
+  const visible = foods.slice(0, 6);
+  const mealLabel = {
+    breakfast: 'Breakfast',
+    lunch: 'Lunch',
+    snack: 'Snack',
+    dinner: 'Dinner',
+  }[defaultMealForNow()];
+
+  return (
+    <CardShell
+      title="Quick add"
+      icon={<Search style={{ width: 14, height: 14, strokeWidth: 2.25 }} />}
+      hint={
+        <span style={{ fontSize: 11, color: 'var(--color-muted-foreground)' }}>
+          → {mealLabel}
+        </span>
+      }
+    >
+      <div style={{ minHeight: 280, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ position: 'relative', marginBottom: 10 }}>
+          <Search
+            style={{
+              position: 'absolute',
+              left: 10,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              width: 14,
+              height: 14,
+              color: 'var(--color-placeholder)',
+            }}
+          />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Find a food…"
+            style={{
+              width: '100%',
+              padding: '8px 10px 8px 32px',
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 4,
+              color: 'var(--color-foreground)',
+              fontFamily: 'inherit',
+              fontSize: 14,
+            }}
+          />
+        </div>
+        <ul
+          style={{
+            listStyle: 'none',
+            padding: 0,
+            margin: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+            flex: 1,
+          }}
+        >
+          {visible.length === 0 ? (
+            <li
+              style={{
+                fontSize: 12,
+                color: 'var(--color-muted-foreground)',
+                textAlign: 'center',
+                padding: '12px 0',
+              }}
+            >
+              {q.trim() ? 'No foods match.' : 'Loading…'}
+            </li>
+          ) : (
+            visible.map((f) => {
+              const cal = f.calories ?? f.calories_per_100g ?? 0;
+              const isAdding = adding === f.id;
+              const isAdded = justAdded === f.id;
+              return (
+                <li
+                  key={f.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '6px 8px',
+                    borderRadius: 4,
+                    fontSize: 13,
+                  }}
+                >
+                  <span
+                    style={{
+                      flex: 1,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {f.name}
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 11,
+                      color: 'var(--color-muted-foreground)',
+                    }}
+                  >
+                    {cal} kcal
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => addOne(f)}
+                    disabled={adding !== null}
+                    className="cursor-pointer"
+                    style={{
+                      background: isAdded
+                        ? 'var(--color-success)'
+                        : 'var(--color-soft)',
+                      border: 0,
+                      borderRadius: 4,
+                      padding: '3px 6px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      color: isAdded
+                        ? 'var(--color-primary-foreground)'
+                        : 'var(--color-foreground)',
+                      opacity: isAdding ? 0.5 : 1,
+                      transition: 'background 160ms',
+                    }}
+                    aria-label={isAdded ? 'Added' : 'Add to journal'}
+                  >
+                    {isAdded ? (
+                      <span style={{ fontSize: 11, fontWeight: 700 }}>✓</span>
+                    ) : (
+                      <Plus
+                        style={{ width: 12, height: 12, strokeWidth: 2.25 }}
+                      />
+                    )}
+                  </button>
+                </li>
+              );
+            })
+          )}
+        </ul>
+      </div>
+    </CardShell>
+  );
+}
+
+// ─── DayStack — vertical bar showing one day's calorie load vs goal ──────────
+
+function DayStack({
+  day,
+  isToday,
+  isSelected,
+  goal,
+  onSelect,
+}: {
+  day: { date: string; cal: number; protein: number; partial?: boolean };
+  isToday: boolean;
+  isSelected: boolean;
+  goal: number;
+  onSelect: () => void;
+}) {
+  const pct = goal > 0 ? Math.min(1, day.cal / goal) : 0;
+  const d = new Date(day.date + 'T00:00:00');
+  const fill = day.partial
+    ? 'var(--color-warning)'
+    : pct >= 0.95
+    ? 'var(--color-success)'
+    : 'var(--color-primary)';
+  const borderColor = isSelected
+    ? 'var(--color-primary)'
+    : isToday
+    ? 'var(--color-primary)'
+    : 'var(--color-border)';
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className="cursor-pointer"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 6,
+        background: 'transparent',
+        border: 0,
+        padding: 0,
+        fontFamily: 'inherit',
+      }}
+    >
+      <div
+        style={{
+          fontSize: 11,
+          color: isSelected
+            ? 'var(--color-primary)'
+            : 'var(--color-muted-foreground)',
+          fontWeight: isToday || isSelected ? 700 : 500,
+        }}
+      >
+        {d.toLocaleDateString('en-AU', { weekday: 'short' })}
+      </div>
+      <div
+        style={{
+          position: 'relative',
+          width: '100%',
+          height: 120,
+          borderRadius: 8,
+          background: isSelected
+            ? 'var(--color-badge-bg)'
+            : 'var(--color-surface-warm)',
+          overflow: 'hidden',
+          border: '1px solid ' + borderColor,
+          boxShadow: isSelected
+            ? '0 0 0 1px var(--color-primary)'
+            : 'none',
+          transition: 'background 120ms, box-shadow 120ms',
+        }}
+      >
+        <div
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: `${pct * 100}%`,
+            background: fill,
+            opacity: 0.85,
+            transition: 'height 240ms ease-out',
+          }}
+        />
+        <div
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            top: 4,
+            height: 1,
+            borderTop: '1px dashed var(--color-warm-gray-300)',
+          }}
+        />
+      </div>
+      <div
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11,
+          fontWeight: 600,
+          color:
+            isToday || isSelected
+              ? 'var(--color-primary)'
+              : 'var(--color-foreground)',
+        }}
+      >
+        {day.cal === 0 ? '—' : (day.cal / 1000).toFixed(1) + 'k'}
+      </div>
+      <div
+        style={{
+          fontSize: 10,
+          color: 'var(--color-muted-foreground)',
+          marginTop: -3,
+        }}
+      >
+        {day.protein > 0 ? `${Math.round(day.protein)}g` : ''}
+      </div>
+    </button>
+  );
+}
+
+function BigTile({
+  label,
+  value,
+  target,
+  unit = '',
+}: {
+  label: string;
+  value: number;
+  target: number;
+  unit?: string;
+}) {
+  return (
+    <div
+      style={{
+        padding: 14,
+        background: 'var(--color-surface-warm)',
+        borderRadius: 8,
+        border: '1px solid var(--color-border)',
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: 110,
+      }}
+    >
+      <MicroLabel>{label}</MicroLabel>
+      {/* Big value on its own line so the target never wraps mid-row.
+          This keeps every tile the same shape on narrow screens. */}
+      <div style={{ marginTop: 6 }}>
+        <MonoNum size={26}>{value.toLocaleString()}</MonoNum>
+      </div>
+      <div
+        style={{
+          fontSize: 11,
+          color: 'var(--color-muted-foreground)',
+          fontFamily: 'var(--font-mono)',
+          marginTop: 2,
+        }}
+      >
+        / {target.toLocaleString()}
+        {unit}
+      </div>
+      <div style={{ marginTop: 'auto', paddingTop: 8 }}>
+        <ProgressBar
+          value={value}
+          max={target}
+          tone={value >= target ? 'success' : 'primary'}
+          height={4}
+        />
+      </div>
     </div>
   );
 }

@@ -11,8 +11,28 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts';
-import { ChevronLeft, ChevronRight, Pencil, Trash2, Check, X } from 'lucide-react';
-import { GlassCard, GlassButton, GlassInput } from '@/components/ui';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Pencil,
+  Trash2,
+  Check,
+  X,
+  Plus,
+  Footprints,
+  List,
+  Calculator,
+  Calendar as CalendarIcon,
+} from 'lucide-react';
+import {
+  GlassButton,
+  GlassInput,
+  GlassModal,
+  CardShell,
+  MicroLabel,
+  MonoNum,
+  ProgressBar,
+} from '@/components/ui';
 import {
   getSteps,
   getGoals,
@@ -22,21 +42,12 @@ import {
   updateStepLog,
   deleteStepLog,
 } from '@/lib/api';
-import type { StepEntry, StepLogEntry, Goals } from '@/lib/types';
+import type { StepEntry, StepLogEntry } from '@/lib/types';
 import { useSocketEvent } from '@/lib/useSocketEvent';
 
-// ─── Step Calculator State ──────────────────────────────────────────────────
-
-interface CalculatorState {
-  time: string;
-  speed: string;
-  height: string;
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function todayISO(): string {
-  // Use en-CA locale for YYYY-MM-DD in local time (not UTC like toISOString())
   return new Date().toLocaleString('en-CA').split(',')[0];
 }
 
@@ -46,7 +57,7 @@ function subtractDays(days: number): string {
   return d.toLocaleString('en-CA').split(',')[0];
 }
 
-function formatDayLabel(iso: string): string {
+function formatDayShort(iso: string): string {
   return new Date(iso + 'T00:00:00').toLocaleDateString('en-AU', {
     weekday: 'short',
   });
@@ -54,17 +65,20 @@ function formatDayLabel(iso: string): string {
 
 function formatDateFull(iso: string): string {
   return new Date(iso + 'T00:00:00').toLocaleDateString('en-AU', {
-    weekday: 'short', day: 'numeric', month: 'short',
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
   });
 }
 
-function formatDateNavLabel(iso: string): string {
+function formatNavLabel(iso: string): string {
   const today = todayISO();
   if (iso === today) return 'Today';
-  const yesterday = subtractDays(1);
-  if (iso === yesterday) return 'Yesterday';
+  if (iso === subtractDays(1)) return 'Yesterday';
   return new Date(iso + 'T00:00:00').toLocaleDateString('en-AU', {
-    weekday: 'short', day: 'numeric', month: 'short',
+    weekday: 'long',
+    day: 'numeric',
+    month: 'short',
   });
 }
 
@@ -74,167 +88,847 @@ function addDays(iso: string, days: number): string {
   return d.toLocaleString('en-CA').split(',')[0];
 }
 
+function formatLogTime(iso: string): string {
+  try {
+    return new Date(iso).toLocaleTimeString('en-AU', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+  } catch {
+    return iso;
+  }
+}
+
 const DEFAULT_GOAL = 10000;
 
-// ─── Progress Ring ────────────────────────────────────────────────────────────
+const QUICK_TIMES = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60];
 
-function ProgressRing({
-  steps,
+type Range = '7d' | '14d' | '30d';
+const RANGE_DAYS: Record<Range, number> = { '7d': 7, '14d': 14, '30d': 30 };
+
+// ─── Step calculator ─────────────────────────────────────────────────────────
+
+function StepCalculator({
   goal,
+  onLog,
 }: {
-  steps: number;
   goal: number;
+  onLog: (steps: number, note: string) => Promise<void>;
 }) {
-  const radius = 90;
-  const stroke = 12;
-  const normalizedRadius = radius - stroke / 2;
-  const circumference = 2 * Math.PI * normalizedRadius;
-  const progress = Math.min(steps / goal, 1);
-  const offset = circumference - progress * circumference;
-  const pct = Math.round(progress * 100);
+  const [time, setTime] = useState('');
+  const [speed, setSpeed] = useState('5.0');
+  const [height, setHeight] = useState('183');
+  const [saving, setSaving] = useState(false);
+
+  const calculated = useMemo(() => {
+    const t = parseFloat(time),
+      s = parseFloat(speed),
+      h = parseFloat(height);
+    if (!(t > 0) || !(s > 0) || !(h > 0)) return 0;
+    const distanceM = s * (t / 60) * 1000;
+    const stepLengthM = (0.415 * h) / 100;
+    return Math.round(distanceM / stepLengthM);
+  }, [time, speed, height]);
+
+  const goalPct =
+    calculated > 0 ? Math.min(100, Math.round((calculated / goal) * 100)) : 0;
+
+  function reset() {
+    setTime('');
+    setSpeed('5.0');
+    setHeight('183');
+  }
+
+  async function handleLog() {
+    if (calculated <= 0) return;
+    setSaving(true);
+    try {
+      await onLog(calculated, `Calculator: ${time}min @ ${speed}km/h`);
+      reset();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const heightPx = height ? (0.415 * parseFloat(height) || 0).toFixed(1) : '—';
 
   return (
-    <div className="flex flex-col items-center justify-center">
-      <div className="relative" style={{ width: radius * 2, height: radius * 2 }}>
-        <svg
-          width={radius * 2}
-          height={radius * 2}
-          className="-rotate-90"
+    <CardShell
+      title="Step calculator"
+      icon={<Calculator style={{ width: 14, height: 14, strokeWidth: 2.25 }} />}
+      hint={
+        <span style={{ fontSize: 12, color: 'var(--color-muted-foreground)' }}>
+          Estimate from a walk you didn&rsquo;t track
+        </span>
+      }
+    >
+      <div
+        className="calc-grid"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1.4fr 1fr',
+          gap: 24,
+        }}
+      >
+        {/* LEFT — inputs */}
+        <div>
+          <div
+            style={{
+              fontSize: 10,
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em',
+              color: 'var(--color-muted-foreground)',
+              marginBottom: 8,
+            }}
+          >
+            Quick time
+          </div>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(6, 1fr)',
+              gap: 6,
+              marginBottom: 18,
+            }}
+          >
+            {QUICK_TIMES.map((m) => {
+              const active = time === String(m);
+              return (
+                <button
+                  key={m}
+                  onClick={() => setTime(String(m))}
+                  className="cursor-pointer"
+                  style={{
+                    padding: '8px 0',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    fontFamily: 'var(--font-mono)',
+                    background: active
+                      ? 'var(--color-primary)'
+                      : 'var(--color-surface)',
+                    color: active
+                      ? 'var(--color-primary-foreground)'
+                      : 'var(--color-muted-foreground)',
+                    border:
+                      '1px solid ' +
+                      (active
+                        ? 'var(--color-primary)'
+                        : 'var(--color-border)'),
+                    borderRadius: 4,
+                  }}
+                >
+                  {m}m
+                </button>
+              );
+            })}
+          </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr 1fr',
+              gap: 12,
+            }}
+          >
+            <CalcField
+              label="Walking time"
+              suffix="min"
+              value={time}
+              onChange={setTime}
+              placeholder="e.g. 30"
+              step={0.5}
+            />
+            <CalcField
+              label="Speed"
+              suffix="km/h"
+              value={speed}
+              onChange={setSpeed}
+              step={0.1}
+            />
+            <CalcField
+              label="Your height"
+              suffix="cm"
+              value={height}
+              onChange={setHeight}
+              step={0.5}
+            />
+          </div>
+          <div
+            style={{
+              fontSize: 11,
+              color: 'var(--color-muted-foreground)',
+              marginTop: 10,
+              lineHeight: 1.5,
+            }}
+          >
+            Step length = 0.415 × height.{' '}
+            <span
+              style={{
+                fontFamily: 'var(--font-mono)',
+                color: 'var(--color-foreground)',
+                fontWeight: 600,
+              }}
+            >
+              {heightPx} cm
+            </span>{' '}
+            per step at your height.
+          </div>
+        </div>
+
+        {/* RIGHT — result */}
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            background:
+              calculated > 0
+                ? 'var(--color-badge-bg)'
+                : 'var(--color-surface-warm)',
+            border:
+              '1px solid ' +
+              (calculated > 0
+                ? 'var(--color-primary)'
+                : 'var(--color-border)'),
+            borderRadius: 10,
+            padding: 18,
+            transition: 'background 160ms, border-color 160ms',
+          }}
         >
-          {/* Track */}
-          <circle
-            cx={radius}
-            cy={radius}
-            r={normalizedRadius}
-            fill="none"
-            stroke="rgba(255,255,255,0.08)"
-            strokeWidth={stroke}
-          />
-          {/* Progress */}
-          <circle
-            cx={radius}
-            cy={radius}
-            r={normalizedRadius}
-            fill="none"
-            stroke="#818cf8"
-            strokeWidth={stroke}
-            strokeLinecap="round"
-            strokeDasharray={circumference}
-            strokeDashoffset={offset}
-            style={{ transition: 'stroke-dashoffset 0.6s ease-in-out' }}
-          />
-        </svg>
-        {/* Center text */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-white text-2xl font-bold leading-tight">
-            {steps.toLocaleString()}
-          </span>
-          <span className="text-white/50 text-xs mt-0.5">steps</span>
-          <span className="text-indigo-400 text-sm font-semibold mt-1">{pct}%</span>
+          <MicroLabel>Estimated steps</MicroLabel>
+          <div
+            style={{
+              flex: 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '8px 0',
+            }}
+          >
+            {calculated > 0 ? (
+              <MonoNum
+                size={42}
+                color="var(--color-primary)"
+                style={{ letterSpacing: '-1.2px' }}
+              >
+                {calculated.toLocaleString()}
+              </MonoNum>
+            ) : (
+              <span
+                style={{
+                  fontSize: 13,
+                  color: 'var(--color-muted-foreground)',
+                  textAlign: 'center',
+                  lineHeight: 1.5,
+                }}
+              >
+                Pick a time and a speed.
+              </span>
+            )}
+          </div>
+          {calculated > 0 ? (
+            <>
+              <div
+                style={{
+                  fontSize: 12,
+                  color: 'var(--color-muted-foreground)',
+                  marginBottom: 10,
+                  textAlign: 'center',
+                }}
+              >
+                Walking {time} min at {speed} km/h ·{' '}
+                <span
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    color: 'var(--color-foreground)',
+                    fontWeight: 600,
+                  }}
+                >
+                  {goalPct}%
+                </span>{' '}
+                of today&rsquo;s goal
+              </div>
+              <ProgressBar
+                value={calculated}
+                max={goal}
+                tone={calculated >= goal ? 'success' : 'primary'}
+              />
+              <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+                <GlassButton
+                  variant="outline"
+                  size="sm"
+                  onClick={reset}
+                  className="flex-1"
+                >
+                  Reset
+                </GlassButton>
+                <GlassButton
+                  variant="primary"
+                  size="sm"
+                  onClick={handleLog}
+                  disabled={saving}
+                  className="flex-1"
+                >
+                  <Plus style={{ width: 13, height: 13, strokeWidth: 2.25 }} />
+                  {saving ? 'Logging…' : 'Log to today'}
+                </GlassButton>
+              </div>
+            </>
+          ) : (
+            <GlassButton
+              variant="outline"
+              size="sm"
+              onClick={reset}
+              disabled
+              className="flex-1"
+            >
+              Reset
+            </GlassButton>
+          )}
         </div>
       </div>
-      <p className="text-white/40 text-xs mt-3">Goal: {goal.toLocaleString()} steps</p>
+
+      <style jsx>{`
+        @media (max-width: 900px) {
+          :global(.calc-grid) {
+            grid-template-columns: minmax(0, 1fr) !important;
+          }
+        }
+      `}</style>
+    </CardShell>
+  );
+}
+
+function CalcField({
+  label,
+  suffix,
+  value,
+  onChange,
+  placeholder,
+  step = 1,
+}: {
+  label: string;
+  suffix: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  step?: number;
+}) {
+  return (
+    <div>
+      <div
+        style={{
+          fontSize: 10,
+          fontWeight: 600,
+          textTransform: 'uppercase',
+          letterSpacing: '0.06em',
+          color: 'var(--color-muted-foreground)',
+          marginBottom: 4,
+        }}
+      >
+        {label}
+      </div>
+      <div style={{ position: 'relative' }}>
+        <input
+          type="number"
+          inputMode="decimal"
+          step={step}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          style={{
+            width: '100%',
+            padding: '8px 40px 8px 10px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 14,
+            fontWeight: 600,
+            textAlign: 'right',
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 4,
+            color: 'var(--color-foreground)',
+          }}
+        />
+        <span
+          style={{
+            position: 'absolute',
+            right: 10,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            fontSize: 11,
+            color: 'var(--color-muted-foreground)',
+          }}
+        >
+          {suffix}
+        </span>
+      </div>
     </div>
   );
 }
 
-// ─── Custom Bar Tooltip ───────────────────────────────────────────────────────
+// ─── Hero stat tile ──────────────────────────────────────────────────────────
+
+function HeroStat({
+  label,
+  value,
+  unit,
+  hint,
+  tone = 'neutral',
+}: {
+  label: string;
+  value: string | number;
+  unit?: string;
+  hint?: string;
+  tone?: 'neutral' | 'success' | 'warning' | 'primary';
+}) {
+  const color =
+    tone === 'success'
+      ? 'var(--color-success)'
+      : tone === 'warning'
+      ? 'var(--color-warning)'
+      : tone === 'primary'
+      ? 'var(--color-primary)'
+      : 'var(--color-foreground)';
+  return (
+    <div
+      style={{
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 12,
+        boxShadow: 'var(--shadow-card)',
+        padding: 18,
+      }}
+    >
+      <MicroLabel>{label}</MicroLabel>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: 4,
+          marginTop: 6,
+        }}
+      >
+        <MonoNum size={28} color={color}>
+          {value}
+        </MonoNum>
+        {unit && (
+          <span style={{ fontSize: 13, color: 'var(--color-muted-foreground)' }}>
+            {unit}
+          </span>
+        )}
+      </div>
+      {hint && (
+        <div
+          style={{
+            fontSize: 11,
+            color: 'var(--color-muted-foreground)',
+            marginTop: 4,
+          }}
+        >
+          {hint}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function BarTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="backdrop-blur-xl bg-black/70 border border-white/15 rounded-2xl px-4 py-3 shadow-xl">
-      <p className="text-white/60 text-xs mb-1">{label}</p>
-      <p className="text-indigo-300 font-semibold text-sm">
+    <div
+      style={{
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 6,
+        padding: '8px 12px',
+        boxShadow: 'var(--shadow-deep)',
+      }}
+    >
+      <div
+        style={{
+          fontSize: 11,
+          color: 'var(--color-muted-foreground)',
+          marginBottom: 2,
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 13,
+          fontWeight: 700,
+          color: 'var(--color-primary)',
+        }}
+      >
         {payload[0].value.toLocaleString()} steps
-      </p>
+      </div>
     </div>
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// ─── Log steps modal ─────────────────────────────────────────────────────────
+
+function LogStepsModal({
+  isOpen,
+  onClose,
+  date,
+  goal,
+  dayTotal,
+  onLogged,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  date: string;
+  goal: number;
+  dayTotal: number;
+  onLogged: () => void;
+}) {
+  const [steps, setSteps] = useState('');
+  const [logDate, setLogDate] = useState(date);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setLogDate(date);
+      setSteps('');
+      setError('');
+      setPickerOpen(false);
+    }
+  }, [isOpen, date]);
+
+  async function handleLog() {
+    const v = parseInt(steps, 10);
+    if (isNaN(v) || v <= 0) return;
+    setSaving(true);
+    setError('');
+    try {
+      await createStepLog({ date: logDate, steps: v });
+      onLogged();
+      onClose();
+    } catch (e: any) {
+      setError(e.message || 'Failed to log steps');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const today = todayISO();
+  const yesterday = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return d.toLocaleString('en-CA').split(',')[0];
+  })();
+
+  const stepsNum = parseInt(steps, 10);
+  const projected =
+    !isNaN(stepsNum) && stepsNum > 0 ? dayTotal + stepsNum : dayTotal;
+  const pct = goal > 0 ? Math.min(1, projected / goal) : 0;
+  const pctLabel = Math.round(pct * 100);
+  const remaining = Math.max(0, goal - projected);
+
+  const subtitle = new Date(logDate + 'T00:00:00').toLocaleDateString('en-AU', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+
+  return (
+    <GlassModal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Log steps"
+      subtitle={subtitle}
+      size="sm"
+      footer={
+        <>
+          <GlassButton variant="ghost" size="sm" onClick={onClose} disabled={saving}>
+            Cancel
+          </GlassButton>
+          <GlassButton
+            variant="primary"
+            size="sm"
+            onClick={handleLog}
+            disabled={saving || !steps}
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </GlassButton>
+        </>
+      }
+    >
+      <div style={{ padding: 4 }}>
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: 'var(--color-muted-foreground)',
+            marginBottom: 6,
+          }}
+        >
+          Step count
+        </div>
+        <div style={{ position: 'relative', marginBottom: 14 }}>
+          <input
+            type="number"
+            inputMode="numeric"
+            min={1}
+            step={100}
+            value={steps}
+            onChange={(e) => setSteps(e.target.value)}
+            placeholder="—"
+            style={{
+              width: '100%',
+              padding: '16px 16px',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 32,
+              fontWeight: 700,
+              letterSpacing: '-1px',
+              textAlign: 'right',
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 8,
+              color: 'var(--color-foreground)',
+            }}
+            autoFocus
+          />
+        </div>
+
+        {/* Goal progress preview */}
+        <div
+          style={{
+            padding: 12,
+            background: 'var(--color-surface-warm)',
+            borderRadius: 8,
+            marginBottom: 14,
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'baseline',
+              marginBottom: 6,
+            }}
+          >
+            <MicroLabel>vs goal</MicroLabel>
+            <span
+              style={{
+                fontSize: 11,
+                color: 'var(--color-muted-foreground)',
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontWeight: 600,
+                  color: 'var(--color-foreground)',
+                }}
+              >
+                {pctLabel}%
+              </span>{' '}
+              of {goal.toLocaleString()}
+            </span>
+          </div>
+          <div
+            style={{
+              height: 6,
+              borderRadius: 9999,
+              background: 'var(--color-surface)',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                height: '100%',
+                width: pctLabel + '%',
+                background:
+                  pct >= 1 ? 'var(--color-success)' : 'var(--color-primary)',
+                borderRadius: 9999,
+                transition: 'width 240ms ease-out',
+              }}
+            />
+          </div>
+          <div
+            style={{
+              fontSize: 11,
+              color: 'var(--color-muted-foreground)',
+              marginTop: 6,
+            }}
+          >
+            {pct >= 1 ? (
+              <>Goal reached — nice.</>
+            ) : (
+              <>
+                <span
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    color: 'var(--color-foreground)',
+                    fontWeight: 600,
+                  }}
+                >
+                  {remaining.toLocaleString()}
+                </span>{' '}
+                steps to go today.
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Date */}
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: 'var(--color-muted-foreground)',
+            marginBottom: 6,
+          }}
+        >
+          Date
+        </div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {[
+            { label: 'Today', value: today },
+            { label: 'Yesterday', value: yesterday },
+          ].map((d) => {
+            const active = logDate === d.value;
+            return (
+              <button
+                key={d.value}
+                type="button"
+                onClick={() => {
+                  setLogDate(d.value);
+                  setPickerOpen(false);
+                }}
+                className="cursor-pointer"
+                style={{
+                  flex: 1,
+                  padding: '8px 12px',
+                  fontSize: 13,
+                  fontWeight: active ? 600 : 500,
+                  background: active
+                    ? 'var(--color-primary)'
+                    : 'var(--color-surface)',
+                  color: active
+                    ? 'var(--color-primary-foreground)'
+                    : 'var(--color-muted-foreground)',
+                  border: active ? '0' : '1px solid var(--color-border)',
+                  borderRadius: 6,
+                  fontFamily: 'inherit',
+                }}
+              >
+                {d.label}
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => setPickerOpen((o) => !o)}
+            className="cursor-pointer"
+            style={{
+              padding: '8px 12px',
+              fontSize: 13,
+              fontWeight: 500,
+              background:
+                logDate !== today && logDate !== yesterday
+                  ? 'var(--color-primary)'
+                  : 'var(--color-surface)',
+              color:
+                logDate !== today && logDate !== yesterday
+                  ? 'var(--color-primary-foreground)'
+                  : 'var(--color-muted-foreground)',
+              border:
+                logDate !== today && logDate !== yesterday
+                  ? '0'
+                  : '1px solid var(--color-border)',
+              borderRadius: 6,
+              fontFamily: 'inherit',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
+            <CalendarIcon style={{ width: 12, height: 12, strokeWidth: 2 }} />
+            Pick
+          </button>
+        </div>
+        {pickerOpen && (
+          <input
+            type="date"
+            value={logDate}
+            max={today}
+            onChange={(e) => setLogDate(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 4,
+              color: 'var(--color-foreground)',
+              fontFamily: 'inherit',
+              fontSize: 14,
+              marginTop: 8,
+            }}
+            autoFocus
+          />
+        )}
+
+        {error && (
+          <p
+            style={{
+              marginTop: 12,
+              fontSize: 13,
+              color: 'var(--color-critical)',
+              background: 'rgba(201,28,43,0.10)',
+              border: '1px solid rgba(201,28,43,0.25)',
+              padding: '8px 12px',
+              borderRadius: 4,
+            }}
+          >
+            {error}
+          </p>
+        )}
+      </div>
+    </GlassModal>
+  );
+}
+
+// ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function StepsPage() {
   const [entries, setEntries] = useState<StepEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // The whole page is contextualised to this date, matching the Journal pattern.
-  // Start on today; ChevronLeft/Right + the inline date picker change it.
   const [selectedDate, setSelectedDate] = useState(todayISO());
   const [showDateInput, setShowDateInput] = useState(false);
   const dateInputRef = useRef<HTMLInputElement>(null);
-
-  const [stepsInput, setStepsInput] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [savingCalc, setSavingCalc] = useState(false);
-
-  // Individual log entries for the selected day (multiple rows — edit/delete)
+  const [range, setRange] = useState<Range>('14d');
+  const [goal, setGoal] = useState<number>(DEFAULT_GOAL);
   const [logs, setLogs] = useState<StepLogEntry[]>([]);
   const [logsLoading, setLogsLoading] = useState(true);
   const [editingLogId, setEditingLogId] = useState<number | null>(null);
   const [editingDraft, setEditingDraft] = useState('');
   const [editingSaving, setEditingSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [logOpen, setLogOpen] = useState(false);
 
-  // Goal state (from API)
-  const [goal, setGoal] = useState<number>(DEFAULT_GOAL);
-  const [goalsLoading, setGoalsLoading] = useState(true);
-  const [editingGoal, setEditingGoal] = useState(false);
-  const [goalInput, setGoalInput] = useState('');
-
-  // Step Calculator state
-  const [calc, setCalc] = useState<CalculatorState>({
-    time: '',
-    speed: '5.0',
-    height: '183',
-  });
-  const [calculatedSteps, setCalculatedSteps] = useState(0);
-
-  // Step calculator logic (same formula as Calorie Assistant)
+  // Load goals
   useEffect(() => {
-    const timeNum = parseFloat(calc.time);
-    const speedNum = parseFloat(calc.speed);
-    const heightNum = parseFloat(calc.height);
-
-    if (timeNum > 0 && speedNum > 0 && heightNum > 0) {
-      const timeInHours = timeNum / 60;
-      const distanceKm = speedNum * timeInHours;
-      const distanceM = distanceKm * 1000;
-      const stepLengthCm = 0.415 * heightNum;
-      const stepLengthM = stepLengthCm / 100;
-      const steps = distanceM / stepLengthM;
-      setCalculatedSteps(Math.round(steps));
-    } else {
-      setCalculatedSteps(0);
-    }
-  }, [calc]);
-
-  // Load goals from API
-  useEffect(() => {
-    async function loadGoals() {
-      try {
-        const data = await getGoals();
-        if (data.steps) {
-          setGoal(data.steps);
-        }
-      } catch (e) {
-        console.error('Failed to load goals:', e);
-      } finally {
-        setGoalsLoading(false);
-      }
-    }
-    loadGoals();
+    getGoals()
+      .then((g) => {
+        if (g.steps) setGoal(g.steps);
+      })
+      .catch(() => {});
   }, []);
 
   const today = todayISO();
   const isSelectedToday = selectedDate === today;
-  // Load enough history to cover: selected day + the last 7 days for the chart.
-  // If the user navigates far back in time we just extend the range.
-  const rangeStart = useMemo(() => {
-    const weekStart = subtractDays(6);
-    return selectedDate < weekStart ? selectedDate : weekStart;
-  }, [selectedDate]);
+
+  // Load enough history to cover today + the chart's range.
+  const rangeStart = useMemo(() => subtractDays(30), []);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -248,33 +942,84 @@ export default function StepsPage() {
     setLoading(false);
   }, [rangeStart]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
   useSocketEvent('steps-updated', loadData);
 
-  // Selected date's steps (drives the big ring and the Update Steps form)
+  const loadLogs = useCallback(async () => {
+    setLogsLoading(true);
+    try {
+      setLogs(await getStepLogs(selectedDate));
+    } catch {
+      setLogs([]);
+    }
+    setLogsLoading(false);
+  }, [selectedDate]);
+
+  useEffect(() => {
+    loadLogs();
+  }, [loadLogs]);
+  useSocketEvent('steps-updated', loadLogs);
+
+  useEffect(() => {
+    if (showDateInput && dateInputRef.current) {
+      dateInputRef.current.focus();
+      dateInputRef.current.showPicker?.();
+    }
+  }, [showDateInput]);
+
+  // Derived stats
+  const todayEntry = useMemo(
+    () => entries.find((e) => e.date === today),
+    [entries, today]
+  );
+  const todaySteps = todayEntry?.steps ?? 0;
   const selectedEntry = useMemo(
     () => entries.find((e) => e.date === selectedDate),
     [entries, selectedDate]
   );
-  const selectedSteps = selectedEntry?.steps ?? 0;
 
-  // Weekly bar chart — last 7 days relative to TODAY (always). Highlight the
-  // selected day if it falls in range.
-  const weekData = useMemo(() => {
-    return Array.from({ length: 7 }, (_, i) => {
-      const iso = subtractDays(6 - i);
-      const entry = entries.find((e) => e.date === iso);
-      return {
-        day: formatDayLabel(iso),
-        date: iso,
-        steps: entry?.steps ?? 0,
-        isToday: iso === today,
-        isSelected: iso === selectedDate,
-      };
-    });
-  }, [entries, today, selectedDate]);
+  const last7 = useMemo(
+    () =>
+      Array.from({ length: 7 }, (_, i) => {
+        const iso = subtractDays(6 - i);
+        return entries.find((e) => e.date === iso)?.steps ?? 0;
+      }),
+    [entries]
+  );
+  const avg7 =
+    last7.reduce((a, s) => a + s, 0) / Math.max(1, last7.filter((s) => s > 0).length);
+  const hitDays = last7.filter((s) => s >= goal).length;
+  const best = useMemo(
+    () => entries.reduce((m, s) => (s.steps > (m?.steps ?? 0) ? s : m), entries[0] ?? null),
+    [entries]
+  );
 
-  // Date navigation helpers
+  // Range data for the bar chart (relative to today)
+  const days = RANGE_DAYS[range];
+  const chartData = useMemo(
+    () =>
+      Array.from({ length: days }, (_, i) => {
+        const iso = subtractDays(days - 1 - i);
+        const entry = entries.find((e) => e.date === iso);
+        return {
+          day: days <= 14 ? formatDayShort(iso) : new Date(iso + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }),
+          date: iso,
+          steps: entry?.steps ?? 0,
+          isToday: iso === today,
+        };
+      }),
+    [entries, days, today]
+  );
+
+  // Last N days list (newest first)
+  const recent = useMemo(() => {
+    return [...entries]
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, 14);
+  }, [entries]);
+
   function handlePrevDay() {
     setSelectedDate((d) => addDays(d, -1));
   }
@@ -286,92 +1031,30 @@ export default function StepsPage() {
     if (e.target.value) setSelectedDate(e.target.value);
     setShowDateInput(false);
   }
-  useEffect(() => {
-    if (showDateInput && dateInputRef.current) {
-      dateInputRef.current.focus();
-      dateInputRef.current.showPicker?.();
-    }
-  }, [showDateInput]);
 
-  // ── Fetch today's log entries whenever the selected day changes ──────────
-  const loadLogs = useCallback(async () => {
-    setLogsLoading(true);
-    try {
-      const data = await getStepLogs(selectedDate);
-      setLogs(data);
-    } catch (e: any) {
-      console.error('Failed to load step logs', e);
-      setLogs([]);
-    }
-    setLogsLoading(false);
-  }, [selectedDate]);
-
-  useEffect(() => { loadLogs(); }, [loadLogs]);
-  useSocketEvent('steps-updated', loadLogs);
-
-  // Both "add" paths now create a NEW log entry rather than overwriting the
-  // day's total. Backend POST /api/steps/logs inserts the row, then emits
-  // 'steps-updated' which triggers loadData + loadLogs to refresh.
-  async function addLogForSelectedDate(stepsToAdd: number, note?: string) {
-    const entry = await createStepLog({
-      date: selectedDate,
-      steps: stepsToAdd,
-      note,
-    });
-    // Optimistically append so the list updates without waiting for the socket
-    setLogs((prev) => [...prev, entry]);
+  async function handleCalcLog(stepsToAdd: number, note: string) {
+    await createStepLog({ date: selectedDate, steps: stepsToAdd, note });
   }
 
-  const handleUpdateSteps = async () => {
-    const val = parseInt(stepsInput, 10);
-    if (isNaN(val) || val <= 0) return;
-    setError(null);
-    setSaving(true);
-    try {
-      await addLogForSelectedDate(val);
-      setStepsInput('');
-    } catch (e: any) {
-      setError(e.message || 'Failed to add steps');
-    }
-    setSaving(false);
-  };
-
-  const handleLogCalculator = async () => {
-    if (calculatedSteps <= 0) return;
-    setError(null);
-    setSavingCalc(true);
-    try {
-      await addLogForSelectedDate(calculatedSteps,
-        `Calculator: ${calc.time}min @ ${calc.speed}km/h`);
-      setCalc({ time: '', speed: '5.0', height: '183' });
-    } catch (e: any) {
-      setError(e.message || 'Failed to log steps');
-    }
-    setSavingCalc(false);
-  };
-
-  // ── Log entry CRUD handlers ──────────────────────────────────────────────
   function startEditingLog(log: StepLogEntry) {
     setEditingLogId(log.id);
     setEditingDraft(String(log.steps));
   }
-
   function cancelEditingLog() {
     setEditingLogId(null);
     setEditingDraft('');
   }
-
   async function commitEditingLog() {
     if (editingLogId === null) return;
-    const val = parseInt(editingDraft, 10);
-    if (isNaN(val) || val <= 0) {
+    const v = parseInt(editingDraft, 10);
+    if (isNaN(v) || v <= 0) {
       setError('Steps must be a positive whole number');
       return;
     }
     setError(null);
     setEditingSaving(true);
     try {
-      const updated = await updateStepLog(editingLogId, { steps: val });
+      const updated = await updateStepLog(editingLogId, { steps: v });
       setLogs((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
       cancelEditingLog();
     } catch (e: any) {
@@ -379,7 +1062,6 @@ export default function StepsPage() {
     }
     setEditingSaving(false);
   }
-
   async function handleDeleteLog(id: number) {
     setError(null);
     setDeletingId(id);
@@ -392,62 +1074,187 @@ export default function StepsPage() {
     setDeletingId(null);
   }
 
-  function formatLogTime(iso: string): string {
-    // iso is "YYYY-MM-DDTHH:MM:SS" in local time (no tz suffix)
-    try {
-      const d = new Date(iso);
-      return d.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true });
-    } catch {
-      return iso;
-    }
-  }
+  // ─── Render ────────────────────────────────────────────────────────────────
 
-  const handleSaveGoal = async () => {
-    const val = parseInt(goalInput, 10);
-    if (!isNaN(val) && val > 0) {
-      try {
-        const updated = await updateGoals({ steps: val });
-        setGoal(updated.steps);
-      } catch (e) {
-        console.error('Failed to save goal:', e);
-        // Fallback to local state
-        setGoal(val);
-      }
-    }
-    setEditingGoal(false);
-    setGoalInput('');
-  };
+  const dailyTotal = logs.reduce((a, l) => a + l.steps, 0) || selectedEntry?.steps || 0;
 
   return (
-    <div className="px-4 md:px-6 py-8 max-w-2xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-white">Steps</h1>
-        <button
-          onClick={() => { setEditingGoal(true); setGoalInput(String(goal)); }}
-          className="text-indigo-400 text-xs hover:text-indigo-300 underline transition-colors"
-        >
-          Change Goal
-        </button>
+    <main
+      className="page-mount"
+      style={{
+        maxWidth: 1120,
+        margin: '0 auto',
+        padding: '24px 16px 80px',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: 12,
+        }}
+      >
+        <div>
+          <h1
+            style={{
+              fontSize: 22,
+              fontWeight: 700,
+              letterSpacing: '-0.4px',
+              margin: 0,
+              color: 'var(--color-foreground)',
+            }}
+          >
+            Steps
+          </h1>
+          <div
+            style={{
+              color: 'var(--color-muted-foreground)',
+              marginTop: 4,
+              fontSize: 14,
+            }}
+          >
+            Daily steps. Your goal is{' '}
+            <span
+              style={{
+                fontFamily: 'var(--font-mono)',
+                color: 'var(--color-foreground)',
+                fontWeight: 600,
+              }}
+            >
+              {goal.toLocaleString()}
+            </span>
+            .
+          </div>
+        </div>
+        <GlassButton variant="primary" size="sm" onClick={() => setLogOpen(true)}>
+          <Plus style={{ width: 14, height: 14, strokeWidth: 2.25 }} />
+          Log steps
+        </GlassButton>
       </div>
 
-      {/* ── Date Navigation (matches Journal page pattern) ─────────────── */}
-      <GlassCard padding={false}>
-        <div className="flex items-center justify-between px-5 py-4">
-          <button
-            onClick={handlePrevDay}
-            aria-label="Previous day"
-            className="p-2 rounded-xl text-white/60 hover:text-white hover:bg-white/10 transition-all duration-200"
-          >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
+      {error && (
+        <div
+          style={{
+            marginTop: 16,
+            padding: '10px 14px',
+            borderRadius: 6,
+            background: 'rgba(201,28,43,0.10)',
+            border: '1px solid rgba(201,28,43,0.25)',
+            color: 'var(--color-critical)',
+            fontSize: 13,
+          }}
+        >
+          {error}
+        </div>
+      )}
 
-          <div className="relative">
+      {/* Hero stats */}
+      <div
+        className="steps-hero"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr 1fr 1fr',
+          gap: 12,
+          marginTop: 24,
+        }}
+      >
+        {loading ? (
+          Array.from({ length: 4 }).map((_, i) => (
+            <div
+              key={i}
+              className="skeleton"
+              style={{ height: 86, borderRadius: 12 }}
+            />
+          ))
+        ) : (
+          <>
+            <HeroStat
+              label="Today (so far)"
+              value={todaySteps.toLocaleString()}
+              unit="steps"
+              hint={Math.round((todaySteps / goal) * 100) + '% of goal'}
+              tone={todaySteps >= goal ? 'success' : 'primary'}
+            />
+            <HeroStat
+              label="7-day average"
+              value={Math.round(avg7).toLocaleString()}
+              hint="steps per day"
+            />
+            <HeroStat
+              label="Goal hit"
+              value={`${hitDays}/7`}
+              hint="this week"
+              tone={hitDays >= 5 ? 'success' : 'warning'}
+            />
+            <HeroStat
+              label="Best day"
+              value={best ? best.steps.toLocaleString() : '—'}
+              hint={best ? formatDateFull(best.date) : ''}
+            />
+          </>
+        )}
+      </div>
+
+      {/* Step calculator */}
+      <div style={{ marginTop: 16 }}>
+        <StepCalculator goal={goal} onLog={handleCalcLog} />
+      </div>
+
+      {/* Date nav + day total */}
+      <div
+        style={{
+          marginTop: 16,
+          padding: '14px 16px',
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border)',
+          borderRadius: 12,
+          boxShadow: 'var(--shadow-card)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <GlassButton variant="outline" size="sm" onClick={handlePrevDay}>
+            <ChevronLeft style={{ width: 14, height: 14 }} />
+          </GlassButton>
+          <GlassButton
+            variant="outline"
+            size="sm"
+            onClick={handleNextDay}
+            disabled={isSelectedToday}
+          >
+            <ChevronRight style={{ width: 14, height: 14 }} />
+          </GlassButton>
+          <div style={{ position: 'relative' }}>
             <button
               onClick={() => setShowDateInput(true)}
-              className="flex items-center gap-2 text-white font-semibold hover:text-indigo-300 transition-colors duration-200"
+              className="cursor-pointer"
+              style={{
+                margin: '0 4px',
+                fontSize: 16,
+                fontWeight: 700,
+                letterSpacing: '-0.25px',
+                background: 'transparent',
+                border: 0,
+                color: 'var(--color-foreground)',
+                fontFamily: 'inherit',
+                padding: 0,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
             >
-              {formatDateNavLabel(selectedDate)}
-              <Pencil className="w-3.5 h-3.5 text-white/40" />
+              {formatNavLabel(selectedDate)}
+              <Pencil
+                style={{
+                  width: 12,
+                  height: 12,
+                  color: 'var(--color-muted-foreground)',
+                }}
+              />
             </button>
             {showDateInput && (
               <input
@@ -457,378 +1264,498 @@ export default function StepsPage() {
                 max={today}
                 onChange={handleDateChange}
                 onBlur={() => setShowDateInput(false)}
-                className="absolute opacity-0 w-0 h-0"
+                style={{
+                  position: 'absolute',
+                  opacity: 0,
+                  width: 0,
+                  height: 0,
+                }}
               />
             )}
           </div>
-
-          <button
-            onClick={handleNextDay}
-            disabled={isSelectedToday}
-            aria-label="Next day"
-            className="p-2 rounded-xl text-white/60 hover:text-white hover:bg-white/10 transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            <ChevronRight className="w-5 h-5" />
-          </button>
         </div>
-      </GlassCard>
-
-      {/* Goal Edit Inline */}
-      {editingGoal && (
-        <GlassCard className="animate-slide-up">
-          <p className="text-white/60 text-sm mb-3">Daily step goal</p>
-          <div className="flex gap-3 items-end">
-            <GlassInput
-              label="Goal (steps)"
-              type="number"
-              inputMode="numeric"
-              min={100}
-              step={500}
-              value={goalInput}
-              onChange={(e) => setGoalInput(e.target.value)}
-              className="flex-1"
-            />
-            <GlassButton variant="primary" onClick={handleSaveGoal}>
-              Save
-            </GlassButton>
-            <GlassButton onClick={() => setEditingGoal(false)}>
-              Cancel
-            </GlassButton>
-          </div>
-        </GlassCard>
-      )}
-
-      {/* ── Step Calculator ── */}
-      <GlassCard>
-        <h2 className="text-white font-semibold mb-4">Calculate Steps</h2>
-        
-        {/* Quick Time Buttons */}
-        <div className="mb-4">
-          <p className="text-white/50 text-xs mb-2">Quick Time</p>
-          <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-            {[5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60].map((minutes) => (
-              <button
-                key={minutes}
-                onClick={() => setCalc((prev) => ({ ...prev, time: String(minutes) }))}
-                className={`px-2 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                  calc.time === String(minutes)
-                    ? 'bg-indigo-500 text-white'
-                    : 'bg-white/5 text-white/60 hover:bg-white/10'
-                }`}
-              >
-                {minutes}m
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Input Fields */}
-        <div className="space-y-4">
-          <GlassInput
-            label="Walking Time (minutes)"
-            type="number"
-            inputMode="decimal"
-            placeholder="Enter time in minutes"
-            value={calc.time}
-            onChange={(e) => setCalc((prev) => ({ ...prev, time: e.target.value }))}
-            min={0}
-            step={0.5}
-          />
-          <GlassInput
-            label="Walking Speed (km/h)"
-            type="number"
-            inputMode="decimal"
-            placeholder="Enter speed"
-            value={calc.speed}
-            onChange={(e) => setCalc((prev) => ({ ...prev, speed: e.target.value }))}
-            min={0}
-            step={0.1}
-          />
-          <GlassInput
-            label="Height (cm)"
-            type="number"
-            inputMode="decimal"
-            placeholder="Enter height"
-            value={calc.height}
-            onChange={(e) => setCalc((prev) => ({ ...prev, height: e.target.value }))}
-            min={0}
-            step={0.5}
-          />
-        </div>
-
-        {/* Calculated Result */}
-        {calculatedSteps > 0 && (
-          <div className="mt-4 p-4 bg-indigo-500/20 rounded-xl border border-indigo-500/30">
-            <p className="text-white/60 text-xs mb-1 text-center">Estimated Steps</p>
-            <p className="text-white text-2xl font-bold text-center">
-              {calculatedSteps.toLocaleString()}
-            </p>
-            <p className="text-white/40 text-xs text-center mt-1">
-              Walking {calc.time} min at {calc.speed} km/h
-            </p>
-          </div>
-        )}
-
-        {/* Action Buttons */}
-        <div className="flex gap-3 mt-4">
-          <GlassButton
-            variant="primary"
-            onClick={() => {
-              setCalc({ time: '', speed: '5.0', height: '183' });
-            }}
-            className="flex-1"
-          >
-            Reset
-          </GlassButton>
-          {calculatedSteps > 0 && (
-            <GlassButton
-              variant="primary"
-              onClick={handleLogCalculator}
-              disabled={savingCalc}
-              className="flex-1"
-            >
-              {savingCalc
-                ? 'Adding…'
-                : `Log to ${formatDateNavLabel(selectedDate)}`}
-            </GlassButton>
-          )}
-        </div>
-      </GlassCard>
-
-      {/* ── Progress Ring ── */}
-      <GlassCard>
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="skeleton w-44 h-44 rounded-full" />
-          </div>
-        ) : (
-          <div className="flex flex-col items-center py-4">
-            <ProgressRing steps={selectedSteps} goal={goal} />
-            <p className="text-white/40 text-xs mt-4">
-              {selectedDate} · {formatDateFull(selectedDate)}
-            </p>
-          </div>
-        )}
-      </GlassCard>
-
-      {/* ── Log Steps Form ── */}
-      <GlassCard>
-        <h2 className="text-white font-semibold mb-2">
-          Add entry for {formatDateNavLabel(selectedDate)}
-        </h2>
-        <p className="text-white/40 text-xs mb-4">
-          Creates a new entry for this day. The day's total is the sum of all
-          entries — edit or delete any of them below.
-        </p>
-        <div className="flex gap-3 items-end">
-          <GlassInput
-            label="Steps"
-            type="number"
-            inputMode="numeric"
-            min={1}
-            step={100}
-            placeholder="e.g. 3000"
-            value={stepsInput}
-            onChange={(e) => setStepsInput(e.target.value)}
-            className="flex-1"
-          />
-          <GlassButton
-            variant="primary"
-            onClick={handleUpdateSteps}
-            disabled={saving || !stepsInput}
-            className="flex-shrink-0"
-          >
-            {saving ? 'Adding…' : 'Add Entry'}
-          </GlassButton>
-        </div>
-        {error && <p className="text-red-400 text-sm mt-3">{error}</p>}
-      </GlassCard>
-
-      {/* ── Entries List ── */}
-      <GlassCard>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-white font-semibold">
-            Entries for {formatDateNavLabel(selectedDate)}
-          </h2>
-          <span className="text-white/40 text-xs">
-            {logs.length} {logs.length === 1 ? 'entry' : 'entries'}
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+          <MonoNum size={20}>{dailyTotal.toLocaleString()}</MonoNum>
+          <span style={{ fontSize: 12, color: 'var(--color-muted-foreground)' }}>
+            steps
           </span>
         </div>
+      </div>
 
-        {logsLoading ? (
-          <div className="space-y-2">
-            {[1, 2].map((i) => <div key={i} className="skeleton h-12 rounded-xl" />)}
-          </div>
-        ) : logs.length === 0 ? (
-          <p className="text-white/40 text-sm text-center py-4">
-            No entries yet for this day.
-          </p>
-        ) : (
-          <ul className="divide-y divide-white/[0.06]">
-            {logs.map((log) => {
-              const isEditing = editingLogId === log.id;
-              return (
-                <li
-                  key={log.id}
-                  className="group flex items-center gap-3 py-2.5 first:pt-0 last:pb-0"
+      {/* Chart + recent list */}
+      <div
+        className="steps-grid"
+        style={{
+          marginTop: 16,
+          display: 'grid',
+          gridTemplateColumns: '2fr 1fr',
+          gap: 16,
+        }}
+      >
+        <CardShell
+          title="Daily steps"
+          icon={<Footprints style={{ width: 14, height: 14, strokeWidth: 2.25 }} />}
+          hint={
+            <div style={{ display: 'flex', gap: 4 }}>
+              {(['7d', '14d', '30d'] as const).map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setRange(r)}
+                  className="cursor-pointer"
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: 4,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    background:
+                      range === r
+                        ? 'var(--color-foreground)'
+                        : 'transparent',
+                    color:
+                      range === r
+                        ? 'var(--color-background)'
+                        : 'var(--color-muted-foreground)',
+                    border:
+                      '1px solid ' +
+                      (range === r
+                        ? 'var(--color-foreground)'
+                        : 'var(--color-border)'),
+                    fontFamily: 'inherit',
+                  }}
                 >
-                  {/* Time */}
-                  <span className="text-xs text-white/40 tabular-nums w-16 shrink-0">
-                    {formatLogTime(log.logged_at)}
-                  </span>
-
-                  {/* Steps value (editable) */}
-                  <div className="flex-1 min-w-0">
-                    {isEditing ? (
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          inputMode="numeric"
-                          min={1}
-                          step={100}
-                          value={editingDraft}
-                          onChange={(e) => setEditingDraft(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') commitEditingLog();
-                            if (e.key === 'Escape') cancelEditingLog();
-                          }}
-                          autoFocus
-                          className="w-24 px-2 py-1 rounded-lg bg-white/[0.08] border border-indigo-400/60 text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400/50"
-                        />
-                        <span className="text-white/40 text-xs">steps</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="text-white font-semibold">
-                          {log.steps.toLocaleString()}
-                        </span>
-                        <span className="text-white/40 text-xs">steps</span>
-                        {log.note && (
-                          <span className="text-white/30 text-xs truncate ml-2">
-                            — {log.note}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Action buttons */}
-                  <div className="flex items-center gap-1 shrink-0">
-                    {isEditing ? (
-                      <>
-                        <button
-                          onClick={commitEditingLog}
-                          disabled={editingSaving}
-                          aria-label="Save"
-                          className="p-1.5 rounded-lg text-emerald-400 hover:bg-emerald-400/10 transition-colors disabled:opacity-50"
-                        >
-                          <Check className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={cancelEditingLog}
-                          disabled={editingSaving}
-                          aria-label="Cancel"
-                          className="p-1.5 rounded-lg text-white/40 hover:bg-white/5 transition-colors"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          onClick={() => startEditingLog(log)}
-                          aria-label="Edit"
-                          className="p-1.5 rounded-lg text-white/30 hover:text-indigo-300 hover:bg-indigo-400/10 transition-colors opacity-0 group-hover:opacity-100"
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteLog(log.id)}
-                          disabled={deletingId === log.id}
-                          aria-label="Delete"
-                          className="p-1.5 rounded-lg text-white/30 hover:text-red-400 hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </GlassCard>
-
-      {/* ── Weekly Bar Chart ── */}
-      <GlassCard>
-        <h2 className="text-white font-semibold mb-4">Last 7 Days</h2>
-        {loading ? (
-          <div className="skeleton h-48 rounded-2xl" />
-        ) : (
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={weekData} margin={{ top: 4, right: 8, bottom: 4, left: -16 }}>
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="rgba(255,255,255,0.1)"
-                vertical={false}
-              />
-              <XAxis
-                dataKey="day"
-                tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 11 }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <YAxis
-                tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 11 }}
-                axisLine={false}
-                tickLine={false}
-                tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v)}
-              />
-              <Tooltip content={<BarTooltip />} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
-              <Bar
-                dataKey="steps"
-                radius={[6, 6, 0, 0]}
-                onClick={(entry: any) => {
-                  if (entry?.date) setSelectedDate(entry.date);
+                  {r}
+                </button>
+              ))}
+            </div>
+          }
+        >
+          {loading ? (
+            <div className="skeleton" style={{ height: 220, borderRadius: 8 }} />
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={chartData} margin={{ top: 8, right: 12, bottom: 4, left: -16 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                <XAxis
+                  dataKey="day"
+                  tick={{ fill: 'var(--color-muted-foreground)', fontSize: 10 }}
+                  axisLine={false}
+                  tickLine={false}
+                  interval="preserveStartEnd"
+                />
+                <YAxis
+                  tick={{ fill: 'var(--color-muted-foreground)', fontSize: 10 }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(v) =>
+                    v >= 1000 ? (v / 1000).toFixed(1) + 'k' : String(v)
+                  }
+                />
+                <Tooltip
+                  content={<BarTooltip />}
+                  cursor={{ fill: 'var(--color-surface-warm)' }}
+                />
+                <Bar
+                  dataKey="steps"
+                  radius={[3, 3, 0, 0]}
+                  onClick={(entry: any) => {
+                    if (entry?.date) setSelectedDate(entry.date);
+                  }}
+                  style={{ cursor: 'pointer' }}
+                >
+                  {chartData.map((entry, index) => (
+                    <Cell
+                      key={'cell-' + index}
+                      fill={
+                        entry.isToday
+                          ? 'var(--color-primary-hover)'
+                          : entry.steps >= goal
+                          ? 'var(--color-success)'
+                          : 'var(--color-primary)'
+                      }
+                      opacity={entry.steps > 0 ? 1 : 0.3}
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+          <div
+            style={{
+              display: 'flex',
+              gap: 14,
+              marginTop: 12,
+              paddingTop: 12,
+              borderTop: '1px solid var(--color-border)',
+              fontSize: 11,
+              color: 'var(--color-muted-foreground)',
+              flexWrap: 'wrap',
+            }}
+          >
+            <span>
+              <span
+                style={{
+                  display: 'inline-block',
+                  width: 8,
+                  height: 8,
+                  background: 'var(--color-primary)',
+                  borderRadius: 2,
+                  marginRight: 6,
+                  verticalAlign: 'middle',
                 }}
-                style={{ cursor: 'pointer' }}
-              >
-                {weekData.map((entry, index) => (
-                  <Cell
-                    key={`cell-${index}`}
-                    fill={
-                      entry.isSelected
-                        ? '#a78bfa'            // selected day — brighter indigo
-                        : entry.isToday
-                        ? '#818cf8'            // today (when not selected)
-                        : entry.steps >= goal
-                        ? '#34d399'            // over goal
-                        : 'rgba(129,140,248,0.35)'
-                    }
-                    stroke={entry.isSelected ? '#ffffff' : undefined}
-                    strokeWidth={entry.isSelected ? 1.5 : 0}
-                  />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        )}
-        <div className="flex gap-4 mt-3 justify-end flex-wrap">
-          <div className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-violet-400" />
-            <span className="text-white/40 text-xs">Selected</span>
+              />
+              Under goal
+            </span>
+            <span>
+              <span
+                style={{
+                  display: 'inline-block',
+                  width: 8,
+                  height: 8,
+                  background: 'var(--color-success)',
+                  borderRadius: 2,
+                  marginRight: 6,
+                  verticalAlign: 'middle',
+                }}
+              />
+              Goal reached
+            </span>
+            <span>
+              <span
+                style={{
+                  display: 'inline-block',
+                  width: 8,
+                  height: 8,
+                  background: 'var(--color-primary-hover)',
+                  borderRadius: 2,
+                  marginRight: 6,
+                  verticalAlign: 'middle',
+                }}
+              />
+              Today
+            </span>
           </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-indigo-400" />
-            <span className="text-white/40 text-xs">Today</span>
+        </CardShell>
+
+        <CardShell
+          title="Last 14 days"
+          icon={<List style={{ width: 14, height: 14, strokeWidth: 2.25 }} />}
+        >
+          <div style={{ minHeight: 280, display: 'flex', flexDirection: 'column' }}>
+          {loading ? (
+            <div className="skeleton" style={{ height: 200, borderRadius: 8 }} />
+          ) : recent.length === 0 ? (
+            <div
+              style={{
+                fontSize: 13,
+                color: 'var(--color-muted-foreground)',
+                textAlign: 'center',
+                padding: '16px 0',
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              Nothing logged yet.
+            </div>
+          ) : (
+            <ul
+              style={{
+                listStyle: 'none',
+                padding: 0,
+                margin: 0,
+                maxHeight: 280,
+                overflowY: 'auto',
+              }}
+            >
+              {recent.map((s) => {
+                const pct = Math.min(1, s.steps / goal);
+                const isToday = s.date === today;
+                return (
+                  <li
+                    key={s.date}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '6px 0',
+                      borderBottom: '1px solid var(--color-border)',
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 11,
+                        color: 'var(--color-muted-foreground)',
+                        width: 42,
+                        fontWeight: isToday ? 700 : 500,
+                      }}
+                    >
+                      {isToday ? 'Today' : formatDayShort(s.date)}
+                    </span>
+                    <div
+                      style={{
+                        flex: 1,
+                        height: 6,
+                        borderRadius: 9999,
+                        background: 'var(--color-surface-warm)',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      <div
+                        style={{
+                          height: '100%',
+                          width: pct * 100 + '%',
+                          background:
+                            pct >= 1
+                              ? 'var(--color-success)'
+                              : 'var(--color-primary)',
+                          borderRadius: 9999,
+                        }}
+                      />
+                    </div>
+                    <MonoNum size={12}>
+                      {(s.steps / 1000).toFixed(1)}k
+                    </MonoNum>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
           </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
-            <span className="text-white/40 text-xs">Goal met</span>
-          </div>
-        </div>
-      </GlassCard>
-    </div>
+        </CardShell>
+      </div>
+
+      {/* Today's individual log entries */}
+      <div style={{ marginTop: 16 }}>
+        <CardShell
+          title={'Entries for ' + formatNavLabel(selectedDate)}
+          hint={
+            <span style={{ fontSize: 12, color: 'var(--color-muted-foreground)' }}>
+              {logs.length} {logs.length === 1 ? 'entry' : 'entries'}
+            </span>
+          }
+        >
+          {logsLoading ? (
+            <div
+              className="skeleton"
+              style={{ height: 64, borderRadius: 8 }}
+            />
+          ) : logs.length === 0 ? (
+            <div
+              style={{
+                fontSize: 13,
+                color: 'var(--color-muted-foreground)',
+                textAlign: 'center',
+                padding: '16px 0',
+              }}
+            >
+              No entries yet for this day.
+            </div>
+          ) : (
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+              {logs.map((log) => {
+                const isEditing = editingLogId === log.id;
+                return (
+                  <li
+                    key={log.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '8px 0',
+                      borderBottom: '1px solid var(--color-border)',
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 11,
+                        color: 'var(--color-muted-foreground)',
+                        width: 64,
+                      }}
+                    >
+                      {formatLogTime(log.logged_at)}
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      {isEditing ? (
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                          }}
+                        >
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            min={1}
+                            step={100}
+                            value={editingDraft}
+                            onChange={(e) =>
+                              setEditingDraft(e.target.value)
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') commitEditingLog();
+                              if (e.key === 'Escape') cancelEditingLog();
+                            }}
+                            autoFocus
+                            style={{
+                              width: 100,
+                              padding: '4px 8px',
+                              fontFamily: 'var(--font-mono)',
+                              fontSize: 14,
+                              fontWeight: 600,
+                              background: 'var(--color-surface)',
+                              border: '1px solid var(--color-primary)',
+                              borderRadius: 4,
+                              color: 'var(--color-foreground)',
+                            }}
+                          />
+                          <span
+                            style={{
+                              fontSize: 11,
+                              color: 'var(--color-muted-foreground)',
+                            }}
+                          >
+                            steps
+                          </span>
+                        </div>
+                      ) : (
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'baseline',
+                            gap: 6,
+                          }}
+                        >
+                          <MonoNum size={14}>
+                            {log.steps.toLocaleString()}
+                          </MonoNum>
+                          <span
+                            style={{
+                              fontSize: 11,
+                              color: 'var(--color-muted-foreground)',
+                            }}
+                          >
+                            steps
+                          </span>
+                          {log.note && (
+                            <span
+                              style={{
+                                fontSize: 11,
+                                color: 'var(--color-muted-foreground)',
+                                marginLeft: 8,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              — {log.note}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      {isEditing ? (
+                        <>
+                          <button
+                            onClick={commitEditingLog}
+                            disabled={editingSaving}
+                            className="cursor-pointer"
+                            style={{
+                              background: 'transparent',
+                              border: 0,
+                              color: 'var(--color-success)',
+                              padding: 4,
+                              borderRadius: 4,
+                            }}
+                          >
+                            <Check style={{ width: 14, height: 14 }} />
+                          </button>
+                          <button
+                            onClick={cancelEditingLog}
+                            className="cursor-pointer"
+                            style={{
+                              background: 'transparent',
+                              border: 0,
+                              color: 'var(--color-muted-foreground)',
+                              padding: 4,
+                              borderRadius: 4,
+                            }}
+                          >
+                            <X style={{ width: 14, height: 14 }} />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => startEditingLog(log)}
+                            className="cursor-pointer"
+                            style={{
+                              background: 'transparent',
+                              border: 0,
+                              color: 'var(--color-muted-foreground)',
+                              padding: 4,
+                              borderRadius: 4,
+                            }}
+                            aria-label="Edit"
+                          >
+                            <Pencil
+                              style={{ width: 13, height: 13, strokeWidth: 1.75 }}
+                            />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteLog(log.id)}
+                            disabled={deletingId === log.id}
+                            className="cursor-pointer"
+                            style={{
+                              background: 'transparent',
+                              border: 0,
+                              color: 'var(--color-muted-foreground)',
+                              padding: 4,
+                              borderRadius: 4,
+                            }}
+                            aria-label="Delete"
+                          >
+                            <Trash2
+                              style={{ width: 13, height: 13, strokeWidth: 1.75 }}
+                            />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </CardShell>
+      </div>
+
+      <style jsx>{`
+        @media (max-width: 900px) {
+          :global(.steps-hero) {
+            grid-template-columns: 1fr 1fr !important;
+          }
+          :global(.steps-grid) {
+            grid-template-columns: minmax(0, 1fr) !important;
+          }
+        }
+      `}</style>
+
+      <LogStepsModal
+        isOpen={logOpen}
+        onClose={() => setLogOpen(false)}
+        date={selectedDate}
+        goal={goal}
+        dayTotal={dailyTotal}
+        onLogged={() => {
+          loadData();
+          loadLogs();
+        }}
+      />
+    </main>
   );
 }

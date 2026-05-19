@@ -1,9 +1,17 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Loader2, Clock, Search, Copy, MoreHorizontal, Move } from 'lucide-react';
-import { GlassCard, GlassButton, GlassInput, GlassModal } from '@/components/ui';
+import { ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Loader2, Clock, Search, Copy, MoreHorizontal, Move, Sunrise, Sun, Cookie, Moon, X, Apple } from 'lucide-react';
+import { GlassCard, GlassButton, GlassInput, GlassModal, CalorieRing, MacroBar, Pill, MicroLabel, MonoNum, EmptyState, CardShell } from '@/components/ui';
+import {
+  FOOD_TAGS,
+  TAG_TONES,
+  TAG_ICONS,
+  inferTag,
+  unitLabel,
+} from '@/lib/foodTags';
+import type { FoodTag } from '@/lib/foodTags';
 import {
   getJournalEntries,
   addJournalEntry,
@@ -15,6 +23,7 @@ import {
 } from '@/lib/api';
 import type { JournalEntry, MealType, Food, SavedMeal, Unit } from '@/lib/types';
 import { useSocketEvent } from '@/lib/useSocketEvent';
+import { useIsNarrow } from '@/lib/useIsNarrow';
 import { QuantityInput } from '@/components/QuantityInput';
 import { nutritionFor, formatQuantity } from '@/lib/nutrition';
 
@@ -22,7 +31,7 @@ import { nutritionFor, formatQuantity } from '@/lib/nutrition';
 
 const DEFAULT_GOALS = { calories: 2000, protein: 150 };
 
-const MEAL_TYPES: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
+const MEAL_TYPES: MealType[] = ['breakfast', 'lunch', 'snack', 'dinner'];
 const MEAL_LABELS: Record<MealType, string> = {
   breakfast: 'Breakfast',
   lunch: 'Lunch',
@@ -45,31 +54,9 @@ function formatDateLabel(d: Date): string {
   const key = toISODate(d);
   if (key === today) return 'Today';
   if (key === yesterday) return 'Yesterday';
-  return d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
+  return d.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short' });
 }
 
-// ─── Progress Ring ────────────────────────────────────────────────────────────
-
-function ProgressRing({ value, max, size = 64, stroke = 5, color = '#6366f1' }: {
-  value: number; max: number; size?: number; stroke?: number; color?: string;
-}) {
-  const r = (size - stroke * 2) / 2;
-  const circ = 2 * Math.PI * r;
-  const pct = Math.min(value / max, 1);
-  const offset = circ * (1 - pct);
-  return (
-    <svg width={size} height={size} className="rotate-[-90deg]">
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth={stroke} />
-      <circle
-        cx={size / 2} cy={size / 2} r={r} fill="none"
-        stroke={color} strokeWidth={stroke}
-        strokeDasharray={circ} strokeDashoffset={offset}
-        strokeLinecap="round"
-        style={{ transition: 'stroke-dashoffset 0.5s ease' }}
-      />
-    </svg>
-  );
-}
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 
@@ -101,14 +88,17 @@ interface FoodPickerProps {
   setSelectedFoods: (next: SelectedFood[]) => void;
 }
 
+
 function FoodPicker({ selectedFoods, setSelectedFoods }: FoodPickerProps) {
+  const isNarrow = useIsNarrow();
   const [query, setQuery] = useState('');
+  const [tag, setTag] = useState<FoodTag | 'All'>('All');
   const [foods, setFoods] = useState<Food[]>([]);
   const [loading, setLoading] = useState(false);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Load all foods on mount, then filter by search
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
@@ -119,151 +109,640 @@ function FoodPicker({ selectedFoods, setSelectedFoods }: FoodPickerProps) {
           : `${BASE_URL}/api/foods`;
         const res = await fetch(url);
         if (res.ok) setFoods(await res.json());
-      } catch { /* ignore */ } finally {
+      } catch {
+        /* ignore */
+      } finally {
         setLoading(false);
       }
-    }, 300);
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+    }, 250);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
   }, [query]);
 
-  // Auto-focus the search input on mount, but only on devices with a real
-  // hover capability (keyboards). Touch devices skip this so opening the
-  // modal doesn't immediately pop the on-screen keyboard.
+  // Auto-focus the search input on mount on devices with hover (keyboards).
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const isHoverCapable = window.matchMedia('(hover: hover)').matches;
     if (isHoverCapable && searchInputRef.current) {
-      // Delay slightly so the modal scale-in animation finishes first.
       const t = setTimeout(() => searchInputRef.current?.focus(), 150);
       return () => clearTimeout(t);
     }
   }, []);
 
+  // Apply tag filter client-side (search already done by the API).
+  const visible = useMemo(
+    () => (tag === 'All' ? foods : foods.filter((f) => inferTag(f) === tag)),
+    [foods, tag]
+  );
+
   function toggleFood(food: Food) {
     const existing = selectedFoods.find((sf) => sf.food.id === food.id);
     if (existing) {
       setSelectedFoods(selectedFoods.filter((sf) => sf.food.id !== food.id));
+      if (expandedId === food.id) setExpandedId(null);
     } else {
-      // Pick the food's default unit + sensible starting quantity
-      const units = food.units ?? [{ unit: 'serving' as Unit, label: 'serving', default: true }];
+      const units = food.units ?? [
+        { unit: 'serving' as Unit, label: 'serving', default: true },
+      ];
       const def = units.find((u) => u.default) ?? units[0];
       const startQty =
-        def.unit === 'serving' ? 1 :
-        (food.base_amount ?? food.baseAmount ?? 100);
-      setSelectedFoods([...selectedFoods, { food, quantity: startQty, unit: def.unit }]);
+        def.unit === 'serving'
+          ? 1
+          : food.base_amount ?? food.baseAmount ?? 100;
+      setSelectedFoods([
+        ...selectedFoods,
+        { food, quantity: startQty, unit: def.unit },
+      ]);
+      // Auto-expand the quantity editor so the user can tweak immediately.
+      setExpandedId(food.id);
     }
   }
 
-  function setQuantityForFood(foodId: number, next: { quantity: number; unit: Unit }) {
+  function setQuantityForFood(
+    foodId: number,
+    next: { quantity: number; unit: Unit }
+  ) {
     const clamped = { quantity: Math.max(0, next.quantity), unit: next.unit };
-    setSelectedFoods(selectedFoods.map((sf) =>
-      sf.food.id === foodId ? { ...sf, ...clamped } : sf
-    ));
-  }
-
-  function getSelectedFood(foodId: number): SelectedFood | undefined {
-    return selectedFoods.find((sf) => sf.food.id === foodId);
+    setSelectedFoods(
+      selectedFoods.map((sf) =>
+        sf.food.id === foodId ? { ...sf, ...clamped } : sf
+      )
+    );
   }
 
   return (
-    <div className="space-y-3">
-      {/* Search bar — bigger, with icon prefix and clear button */}
-      <div className="relative">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 pointer-events-none" />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* Search */}
+      <div style={{ position: 'relative' }}>
+        <Search
+          style={{
+            position: 'absolute',
+            left: 10,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            width: 14,
+            height: 14,
+            color: 'var(--color-placeholder)',
+            strokeWidth: 1.75,
+          }}
+        />
         <input
           ref={searchInputRef}
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search foods…"
-          className="w-full pl-10 pr-10 py-3.5 text-base sm:text-sm bg-white/[0.06] border border-white/[0.12] rounded-2xl text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-indigo-400/40 focus:border-indigo-400/40 transition-all duration-200"
+          style={{
+            width: '100%',
+            padding: '8px 32px 8px 32px',
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 4,
+            color: 'var(--color-foreground)',
+            fontFamily: 'inherit',
+            fontSize: 14,
+          }}
         />
         {query && (
           <button
             onClick={() => setQuery('')}
-            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-white/40 hover:text-white hover:bg-white/10"
+            type="button"
+            style={{
+              position: 'absolute',
+              right: 6,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              background: 'transparent',
+              border: 0,
+              padding: 4,
+              color: 'var(--color-muted-foreground)',
+              cursor: 'pointer',
+              display: 'flex',
+            }}
             aria-label="Clear search"
           >
-            <Plus className="w-4 h-4 rotate-45" />
+            <X style={{ width: 14, height: 14 }} />
           </button>
         )}
       </div>
 
-      {/* Food list — bigger touch targets */}
-      <div className="space-y-2 pr-1">
-        {loading && <p className="text-center text-white/40 text-sm py-6">Searching…</p>}
-        {!loading && foods.length === 0 && (
-          <p className="text-center text-white/40 text-sm py-6">No foods found</p>
-        )}
-        {foods.map((food, idx) => {
-          const selected = getSelectedFood(food.id);
-          const isSelected = !!selected;
-
-          // Section dividers (recently used / all foods) — only when not searching.
-          const isFirst = idx === 0;
-          const prevWasRecent = idx > 0 ? foods[idx - 1].recently_used : false;
-          const showRecentHeader =
-            !query.trim() && isFirst && food.recently_used === true;
-          const showAllHeader =
-            !query.trim() && prevWasRecent === true && food.recently_used !== true;
-
+      {/* Tag chips */}
+      <div
+        style={{
+          display: 'flex',
+          gap: 6,
+          flexWrap: 'wrap',
+        }}
+      >
+        {FOOD_TAGS.map((t) => {
+          const active = tag === t;
           return (
-            <Fragment key={food.id}>
-              {showRecentHeader && (
-                <div className="text-[10px] font-semibold uppercase tracking-widest text-white/40 px-1 pt-1 flex items-center gap-1.5">
-                  <Clock className="w-3 h-3" />
-                  Recently used
-                </div>
-              )}
-              {showAllHeader && (
-                <div className="text-[10px] font-semibold uppercase tracking-widest text-white/40 px-1 pt-3">
-                  All foods
-                </div>
-              )}
-              <div
-                className={`rounded-2xl border transition-all duration-200 ${
-                  isSelected
-                    ? 'bg-indigo-500/20 border-indigo-400/60 shadow-sm shadow-indigo-500/10'
-                    : 'bg-white/5 hover:bg-white/10 border-white/10'
-                }`}
-              >
-                <button
-                  onClick={() => toggleFood(food)}
-                  className="w-full flex items-start justify-between gap-3 px-4 py-4 text-left"
-                >
-                  <div className="flex items-start gap-3 min-w-0 flex-1">
-                    {/* Bigger checkbox: 24px (was 20px) for easier tapping */}
-                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5 transition-colors ${
-                      isSelected ? 'border-indigo-400 bg-indigo-400' : 'border-white/30'
-                    }`}>
-                      {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-white" />}
-                    </div>
-                    <span className="text-sm font-medium text-white break-words leading-snug">
-                      {food.name}
-                    </span>
-                  </div>
-                  <div className="flex flex-col items-end shrink-0 text-xs text-white/50 leading-snug tabular-nums">
-                    <span>{food.calories ?? food.calories_per_100g ?? 0} kcal</span>
-                    <span>{food.protein ?? food.protein_per_100g ?? 0}g pro</span>
-                  </div>
-                </button>
-
-                {isSelected && (
-                  <QuantityInput
-                    food={food}
-                    quantity={selected.quantity}
-                    unit={selected.unit}
-                    onChange={(next) => setQuantityForFood(food.id, next)}
-                  />
-                )}
-              </div>
-            </Fragment>
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTag(t)}
+              className="cursor-pointer"
+              style={{
+                padding: '4px 10px',
+                borderRadius: 9999,
+                fontSize: 12,
+                fontWeight: 600,
+                background: active
+                  ? 'var(--color-foreground)'
+                  : 'var(--color-surface-warm)',
+                color: active
+                  ? 'var(--color-background)'
+                  : 'var(--color-muted-foreground)',
+                border:
+                  '1px solid ' +
+                  (active ? 'var(--color-foreground)' : 'var(--color-border)'),
+                fontFamily: 'inherit',
+              }}
+            >
+              {t}
+            </button>
           );
         })}
+      </div>
+
+      {/* Table-style list (matches Food Database page) */}
+      <div
+        style={{
+          border: '1px solid var(--color-border)',
+          borderRadius: 8,
+          overflow: 'hidden',
+          background: 'var(--color-surface)',
+        }}
+      >
+        <div
+          style={{
+            maxHeight: 'calc(100vh - 420px)',
+            minHeight: 320,
+            overflowY: 'auto',
+            overflowX: 'hidden',
+          }}
+        >
+          {loading && (
+            <div
+              style={{
+                padding: 24,
+                textAlign: 'center',
+                fontSize: 13,
+                color: 'var(--color-muted-foreground)',
+              }}
+            >
+              Searching…
+            </div>
+          )}
+          {!loading && visible.length === 0 && (
+            <div
+              style={{
+                padding: 24,
+                textAlign: 'center',
+                fontSize: 13,
+                color: 'var(--color-muted-foreground)',
+              }}
+            >
+              No foods match.
+            </div>
+          )}
+          {!loading && visible.length > 0 && !isNarrow && (
+            <table
+              style={{
+                width: '100%',
+                tableLayout: 'fixed',
+                borderCollapse: 'collapse',
+              }}
+            >
+              <colgroup>
+                <col />
+                <col style={{ width: 70 }} />
+                <col style={{ width: 80 }} />
+                <col style={{ width: 64 }} />
+                <col style={{ width: 44 }} />
+              </colgroup>
+              <thead
+                style={{
+                  position: 'sticky',
+                  top: 0,
+                  background: 'var(--color-surface)',
+                  zIndex: 1,
+                }}
+              >
+                <tr>
+                  <th style={MODAL_TH}>Food</th>
+                  <th style={{ ...MODAL_TH, textAlign: 'right' }}>Cal</th>
+                  <th style={{ ...MODAL_TH, textAlign: 'right' }}>Protein</th>
+                  <th style={MODAL_TH}>Tag</th>
+                  <th style={MODAL_TH}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((food) => {
+                  const selected = selectedFoods.find(
+                    (sf) => sf.food.id === food.id
+                  );
+                  const isSelected = !!selected;
+                  const isExpanded = expandedId === food.id;
+                  const inferred = inferTag(food);
+                  const IconCmp = inferred ? TAG_ICONS[inferred] : Apple;
+                  const cal = food.calories ?? food.calories_per_100g ?? 0;
+                  const protein = food.protein ?? food.protein_per_100g ?? 0;
+                  return (
+                    <Fragment key={food.id}>
+                      <tr
+                        style={{
+                          background: isSelected
+                            ? 'var(--color-badge-bg)'
+                            : 'transparent',
+                          cursor: 'pointer',
+                          transition: 'background 120ms',
+                        }}
+                        onClick={() => {
+                          if (isSelected) {
+                            // Toggle the inline editor for selected rows
+                            setExpandedId(isExpanded ? null : food.id);
+                          } else {
+                            toggleFood(food);
+                          }
+                        }}
+                      >
+                        <td style={{ ...MODAL_TD, overflow: 'hidden' }}>
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 10,
+                              minWidth: 0,
+                            }}
+                          >
+                            <span
+                              style={{
+                                width: 28,
+                                height: 28,
+                                borderRadius: 6,
+                                background: 'var(--color-surface-warm)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                border: '1px solid var(--color-border)',
+                                flexShrink: 0,
+                              }}
+                            >
+                              <IconCmp
+                                style={{
+                                  width: 13,
+                                  height: 13,
+                                  color: 'var(--color-muted-foreground)',
+                                }}
+                              />
+                            </span>
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <div
+                                style={{
+                                  fontSize: 14,
+                                  fontWeight: 500,
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {food.name}
+                              </div>
+                              <div
+                                style={{
+                                  fontSize: 11,
+                                  color: 'var(--color-muted-foreground)',
+                                  marginTop: 1,
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {unitLabel(food)}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{ ...MODAL_TD, textAlign: 'right' }}>
+                          <MonoNum size={13}>{cal}</MonoNum>
+                          <span
+                            style={{
+                              fontSize: 10,
+                              color: 'var(--color-muted-foreground)',
+                              marginLeft: 2,
+                            }}
+                          >
+                            kcal
+                          </span>
+                        </td>
+                        <td style={{ ...MODAL_TD, textAlign: 'right' }}>
+                          <MonoNum size={13}>{protein}</MonoNum>
+                          <span
+                            style={{
+                              fontSize: 10,
+                              color: 'var(--color-muted-foreground)',
+                              marginLeft: 2,
+                            }}
+                          >
+                            g
+                          </span>
+                        </td>
+                        <td style={MODAL_TD}>
+                          {inferred ? (
+                            <Pill tone={TAG_TONES[inferred]}>{inferred}</Pill>
+                          ) : (
+                            <span
+                              style={{
+                                fontSize: 12,
+                                color: 'var(--color-muted-foreground)',
+                              }}
+                            >
+                              —
+                            </span>
+                          )}
+                        </td>
+                        <td style={{ ...MODAL_TD, textAlign: 'right' }}>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleFood(food);
+                            }}
+                            className="cursor-pointer"
+                            style={{
+                              width: 28,
+                              height: 28,
+                              borderRadius: 9999,
+                              background: isSelected
+                                ? 'var(--color-success)'
+                                : 'var(--color-primary)',
+                              color: 'var(--color-primary-foreground)',
+                              border: 0,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontFamily: 'inherit',
+                            }}
+                            aria-label={isSelected ? 'Unstage' : 'Stage'}
+                          >
+                            {isSelected ? (
+                              <span
+                                style={{
+                                  fontSize: 13,
+                                  fontWeight: 700,
+                                }}
+                              >
+                                ✓
+                              </span>
+                            ) : (
+                              <Plus
+                                style={{
+                                  width: 14,
+                                  height: 14,
+                                  strokeWidth: 2.5,
+                                }}
+                              />
+                            )}
+                          </button>
+                        </td>
+                      </tr>
+                      {isSelected && isExpanded && selected && (
+                        <tr style={{ background: 'var(--color-surface-warm)' }}>
+                          <td
+                            colSpan={5}
+                            style={{
+                              padding: '8px 12px',
+                              borderBottom:
+                                '1px solid var(--color-border)',
+                            }}
+                          >
+                            <QuantityInput
+                              food={food}
+                              quantity={selected.quantity}
+                              unit={selected.unit}
+                              onChange={(next) =>
+                                setQuantityForFood(food.id, next)
+                              }
+                            />
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+
+          {/* Mobile card list — full food names get full width here */}
+          {!loading && visible.length > 0 && isNarrow && (
+            <ul
+              style={{
+                listStyle: 'none',
+                padding: 0,
+                margin: 0,
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+            >
+              {visible.map((food) => {
+                const selected = selectedFoods.find(
+                  (sf) => sf.food.id === food.id
+                );
+                const isSelected = !!selected;
+                const isExpanded = expandedId === food.id;
+                const inferred = inferTag(food);
+                const IconCmp = inferred ? TAG_ICONS[inferred] : Apple;
+                const cal = food.calories ?? food.calories_per_100g ?? 0;
+                const protein = food.protein ?? food.protein_per_100g ?? 0;
+                return (
+                  <li
+                    key={food.id}
+                    style={{
+                      borderBottom: '1px solid var(--color-border)',
+                      background: isSelected
+                        ? 'var(--color-badge-bg)'
+                        : 'transparent',
+                      transition: 'background 120ms',
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isSelected) {
+                          setExpandedId(isExpanded ? null : food.id);
+                        } else {
+                          toggleFood(food);
+                        }
+                      }}
+                      style={{
+                        display: 'flex',
+                        gap: 10,
+                        alignItems: 'flex-start',
+                        padding: '10px 12px',
+                        width: '100%',
+                        background: 'transparent',
+                        border: 0,
+                        textAlign: 'left',
+                        fontFamily: 'inherit',
+                        color: 'var(--color-foreground)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: 6,
+                          background: 'var(--color-surface-warm)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          border: '1px solid var(--color-border)',
+                          flexShrink: 0,
+                          marginTop: 2,
+                        }}
+                      >
+                        <IconCmp
+                          style={{
+                            width: 13,
+                            height: 13,
+                            color: 'var(--color-muted-foreground)',
+                          }}
+                        />
+                      </span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div
+                          style={{
+                            fontSize: 14,
+                            fontWeight: 500,
+                            lineHeight: 1.3,
+                            wordBreak: 'break-word',
+                          }}
+                        >
+                          {food.name}
+                        </div>
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            marginTop: 4,
+                            fontSize: 11,
+                            color: 'var(--color-muted-foreground)',
+                            flexWrap: 'wrap',
+                          }}
+                        >
+                          <span>{unitLabel(food)}</span>
+                          <span style={{ opacity: 0.4 }}>·</span>
+                          <span style={{ fontFamily: 'var(--font-mono)' }}>
+                            <span
+                              style={{
+                                color: 'var(--color-foreground)',
+                                fontWeight: 600,
+                              }}
+                            >
+                              {cal}
+                            </span>{' '}
+                            kcal
+                          </span>
+                          <span style={{ opacity: 0.4 }}>·</span>
+                          <span style={{ fontFamily: 'var(--font-mono)' }}>
+                            <span
+                              style={{
+                                color: 'var(--color-foreground)',
+                                fontWeight: 600,
+                              }}
+                            >
+                              {protein}
+                            </span>
+                            g
+                          </span>
+                          {inferred && <Pill tone={TAG_TONES[inferred]}>{inferred}</Pill>}
+                        </div>
+                      </div>
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleFood(food);
+                        }}
+                        role="button"
+                        aria-label={isSelected ? 'Unstage' : 'Stage'}
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 9999,
+                          background: isSelected
+                            ? 'var(--color-success)'
+                            : 'var(--color-primary)',
+                          color: 'var(--color-primary-foreground)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                        }}
+                      >
+                        {isSelected ? (
+                          <span style={{ fontSize: 14, fontWeight: 700 }}>✓</span>
+                        ) : (
+                          <Plus
+                            style={{
+                              width: 16,
+                              height: 16,
+                              strokeWidth: 2.5,
+                            }}
+                          />
+                        )}
+                      </span>
+                    </button>
+
+                    {isSelected && isExpanded && selected && (
+                      <div
+                        style={{
+                          padding: '8px 12px 12px',
+                          background: 'var(--color-surface-warm)',
+                          borderTop: '1px solid var(--color-border)',
+                        }}
+                      >
+                        <QuantityInput
+                          food={food}
+                          quantity={selected.quantity}
+                          unit={selected.unit}
+                          onChange={(next) =>
+                            setQuantityForFood(food.id, next)
+                          }
+                        />
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
       </div>
     </div>
   );
 }
+
+const MODAL_TH: React.CSSProperties = {
+  padding: '10px 12px',
+  textAlign: 'left',
+  fontSize: 10,
+  fontWeight: 600,
+  textTransform: 'uppercase',
+  letterSpacing: '0.06em',
+  color: 'var(--color-muted-foreground)',
+  borderBottom: '1px solid var(--color-border)',
+};
+
+const MODAL_TD: React.CSSProperties = {
+  padding: '8px 12px',
+  borderBottom: '1px solid var(--color-border)',
+  verticalAlign: 'middle',
+};
 
 // ─── Add Food Modal ────────────────────────────────────────────────────────
 
@@ -275,7 +754,12 @@ interface AddFoodModalProps {
   onAdded: (entry: JournalEntry) => void;
 }
 
-function AddFoodModal({ isOpen, onClose, mealType, date, onAdded }: AddFoodModalProps) {
+function AddFoodModal({ isOpen, onClose, mealType: initialMealType, date, onAdded }: AddFoodModalProps) {
+  const isNarrow = useIsNarrow();
+  const [mealType, setMealType] = useState<MealType>(initialMealType);
+  useEffect(() => {
+    if (isOpen) setMealType(initialMealType);
+  }, [isOpen, initialMealType]);
   const [tab, setTab] = useState<'foods' | 'meals' | 'quick'>('foods');
   const [savedMeals, setSavedMeals] = useState<SavedMeal[]>([]);
   const [loadingMeals, setLoadingMeals] = useState(false);
@@ -402,12 +886,24 @@ function AddFoodModal({ isOpen, onClose, mealType, date, onAdded }: AddFoodModal
     }
   }
 
-  const tabClass = (t: typeof tab) =>
-    `flex-1 py-3 sm:py-3.5 px-2 text-sm sm:text-base font-medium rounded-xl transition-all duration-200 flex items-center justify-center gap-2 ${
-      tab === t
-        ? 'bg-white/[0.12] text-white border border-white/20 shadow-sm'
-        : 'text-white/55 hover:text-white hover:bg-white/[0.04] border border-transparent'
-    }`;
+  // Chip-row tab button — matches the design's foreground-inverted active state.
+  function chipStyle(active: boolean): React.CSSProperties {
+    return {
+      padding: '4px 12px',
+      borderRadius: 9999,
+      fontSize: 12,
+      fontWeight: 600,
+      background: active ? 'var(--color-foreground)' : 'var(--color-surface)',
+      color: active
+        ? 'var(--color-background)'
+        : 'var(--color-muted-foreground)',
+      border:
+        '1px solid ' +
+        (active ? 'var(--color-foreground)' : 'var(--color-border)'),
+      cursor: 'pointer',
+      fontFamily: 'inherit',
+    };
+  }
 
   // Selection summary for the sticky footer
   const footerTotals = selectedFoods.reduce(
@@ -431,63 +927,140 @@ function AddFoodModal({ isOpen, onClose, mealType, date, onAdded }: AddFoodModal
   const totalCalories = footerTotals.calories;
   const totalProtein = footerTotals.protein;
 
-  // Sticky bottom bar — only meaningful for the foods tab. Meals add inline
-  // on tap; quick-add has its own button. So footer is null for those tabs
-  // and the modal renders without the bottom band.
-  const footer = tab === 'foods' && selectedFoods.length > 0
-    ? (
-      <div className="flex items-center gap-3">
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-white tabular-nums">
-            {selectedFoods.length} selected · {Math.round(totalCalories)} kcal
-          </p>
-          <p className="text-xs text-white/50 tabular-nums">
-            {totalProtein.toFixed(1)}g protein
-          </p>
+  // Leading footer slot — running total when foods are selected.
+  const leadingFooter =
+    tab === 'foods' && selectedFoods.length > 0 ? (
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 13,
+            fontWeight: 600,
+            color: 'var(--color-foreground)',
+            fontFamily: 'var(--font-mono)',
+          }}
+        >
+          {selectedFoods.length} staged · {Math.round(totalCalories)} kcal
         </div>
+        <div
+          style={{
+            fontSize: 11,
+            color: 'var(--color-muted-foreground)',
+            fontFamily: 'var(--font-mono)',
+          }}
+        >
+          {totalProtein.toFixed(1)}g protein
+        </div>
+      </div>
+    ) : null;
+
+  const footerActions =
+    tab === 'foods' ? (
+      <>
+        <GlassButton variant="ghost" size="sm" onClick={onClose}>
+          Cancel
+        </GlassButton>
         <GlassButton
           variant="primary"
+          size="sm"
           onClick={handleAddSelectedFoods}
-          disabled={saving}
+          disabled={saving || selectedFoods.length === 0}
         >
-          {saving
-            ? 'Adding…'
-            : `Add to ${MEAL_LABELS[mealType]}`}
+          {saving ? 'Adding…' : `Add to ${MEAL_LABELS[mealType]}`}
         </GlassButton>
-      </div>
-    )
-    : null;
+      </>
+    ) : tab === 'quick' ? null : (
+      <GlassButton variant="ghost" size="sm" onClick={onClose}>
+        Cancel
+      </GlassButton>
+    );
+
+  // Subtitle uses Melbourne-friendly day label so the user always sees
+  // the destination day + meal.
+  const subtitle = `Logging to ${MEAL_LABELS[mealType]} · ${formatDateLabel(
+    new Date(date + 'T00:00:00')
+  )}`;
 
   return (
     <GlassModal
       isOpen={isOpen}
       onClose={onClose}
-      title={`Add to ${MEAL_LABELS[mealType]}`}
+      title="Add food"
+      subtitle={subtitle}
       size="lg"
       mobileFullscreen
-      // Floor the modal at ~80% of the viewport on tablet+ so it doesn't
-      // visibly shrink when search filters the food list down to a couple
-      // of rows. Mobile-fullscreen handles the same goal differently
-      // (forced height) — see GlassModal.
-      minHeight="sm:min-h-[80vh]"
-      footer={footer}
+      lockTabletHeight
+      footer={footerActions}
+      leadingFooter={leadingFooter}
+      headerTrailing={
+        <div style={{ display: 'flex', gap: 0, padding: 3, background: 'var(--color-surface-warm)', border: '1px solid var(--color-border)', borderRadius: 6 }}>
+          {MEAL_TYPES.map((m) => {
+            const active = m === mealType;
+            return (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMealType(m)}
+                className="cursor-pointer"
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: 4,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  background: active ? 'var(--color-surface)' : 'transparent',
+                  color: active
+                    ? 'var(--color-foreground)'
+                    : 'var(--color-muted-foreground)',
+                  border: 0,
+                  fontFamily: 'inherit',
+                  boxShadow: active ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                }}
+              >
+                {MEAL_LABELS[m]}
+              </button>
+            );
+          })}
+        </div>
+      }
     >
       <div className="space-y-4">
-        {/* Tabs — shorter labels so they don't crowd on narrow screens */}
-        <div className="flex gap-1.5 p-1.5 rounded-2xl bg-white/[0.04] border border-white/10">
-          <button className={tabClass('foods')} onClick={() => setTab('foods')}>
-            <span aria-hidden className="text-base">🍎</span> Foods
+        {/* Chip-row tabs matching the design */}
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button
+            type="button"
+            onClick={() => setTab('foods')}
+            style={chipStyle(tab === 'foods')}
+          >
+            Foods
           </button>
-          <button className={tabClass('meals')} onClick={() => setTab('meals')}>
-            <span aria-hidden className="text-base">🍽️</span> Meals
+          <button
+            type="button"
+            onClick={() => setTab('meals')}
+            style={chipStyle(tab === 'meals')}
+          >
+            Saved meals
           </button>
-          <button className={tabClass('quick')} onClick={() => setTab('quick')}>
-            <span aria-hidden className="text-base">⚡</span> Quick
+          <button
+            type="button"
+            onClick={() => setTab('quick')}
+            style={chipStyle(tab === 'quick')}
+          >
+            Quick add
           </button>
         </div>
 
         {error && (
-          <p className="text-sm text-red-400 bg-red-500/10 border border-red-400/20 rounded-xl px-3 py-2">{error}</p>
+          <p
+            style={{
+              fontSize: 13,
+              color: 'var(--color-critical)',
+              background: 'rgba(201,28,43,0.10)',
+              border: '1px solid rgba(201,28,43,0.25)',
+              padding: '8px 12px',
+              borderRadius: 4,
+            }}
+          >
+            {error}
+          </p>
         )}
 
         {tab === 'foods' && (
@@ -544,67 +1117,457 @@ function AddFoodModal({ isOpen, onClose, mealType, date, onAdded }: AddFoodModal
         )}
 
         {tab === 'meals' && (
-          <div className="space-y-2">
-            {/* Meal search */}
-            <div className="relative">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {/* Search */}
+            <div style={{ position: 'relative' }}>
+              <Search
+                style={{
+                  position: 'absolute',
+                  left: 10,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  width: 14,
+                  height: 14,
+                  color: 'var(--color-placeholder)',
+                  strokeWidth: 1.75,
+                }}
+              />
               <input
                 type="text"
                 value={mealQuery}
                 onChange={(e) => setMealQuery(e.target.value)}
                 placeholder="Search saved meals…"
-                className="w-full pl-4 pr-9 py-2.5 text-sm bg-white/5 border border-white/10 text-white placeholder-white/30 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-400/40 focus:border-indigo-400/40 transition-all duration-200"
+                style={{
+                  width: '100%',
+                  padding: '8px 32px 8px 32px',
+                  background: 'var(--color-surface)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 4,
+                  color: 'var(--color-foreground)',
+                  fontFamily: 'inherit',
+                  fontSize: 14,
+                }}
               />
               {mealQuery && (
                 <button
                   onClick={() => setMealQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white transition-colors duration-200"
+                  type="button"
+                  style={{
+                    position: 'absolute',
+                    right: 6,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'transparent',
+                    border: 0,
+                    padding: 4,
+                    color: 'var(--color-muted-foreground)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                  }}
                   aria-label="Clear search"
                 >
-                  ×
+                  <X style={{ width: 14, height: 14 }} />
                 </button>
               )}
             </div>
-            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-            {loadingMeals && (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 text-indigo-400 animate-spin" />
-              </div>
-            )}
-            {!loadingMeals && savedMeals.length === 0 && (
-              <p className="text-center text-white/40 text-sm py-4">No saved meals yet</p>
-            )}
-            {!loadingMeals && savedMeals.length > 0 && mealQuery && savedMeals.filter((m) => m.name.toLowerCase().includes(mealQuery.toLowerCase())).length === 0 && (
-              <p className="text-center text-white/40 text-sm py-4">No meals match your search</p>
-            )}
-            {savedMeals.filter((m) => !mealQuery || m.name.toLowerCase().includes(mealQuery.toLowerCase())).map((meal) => {
-              // Calculate totals from items
-              const totals = (meal.items || []).reduce(
-                (acc, item) => {
-                  const qty = item.quantity ?? item.servings ?? 1;
-                  return {
-                    calories: acc.calories + (item.calories || 0) * qty,
-                    protein: acc.protein + (item.protein || 0) * qty,
-                  };
-                },
-                { calories: 0, protein: 0 }
-              );
-              return (
-                <button
-                  key={meal.id}
-                  onClick={() => handleAddMeal(meal)}
-                  disabled={saving}
-                  className="w-full flex items-center justify-between px-4 py-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 transition-all duration-200 text-left disabled:opacity-50"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-white">{meal.name}</p>
-                    <p className="text-xs text-white/50">
-                      {meal.items?.length ?? 0} items · {Math.round(totals.calories)} cal · {totals.protein.toFixed(1)}g protein
-                    </p>
+
+            {/* Table-style saved meal picker */}
+            <div
+              style={{
+                border: '1px solid var(--color-border)',
+                borderRadius: 8,
+                overflow: 'hidden',
+                background: 'var(--color-surface)',
+              }}
+            >
+              <div
+                style={{
+                  maxHeight: 'calc(100vh - 420px)',
+                  minHeight: 320,
+                  overflowY: 'auto',
+                  overflowX: 'hidden',
+                }}
+              >
+                {loadingMeals ? (
+                  <div
+                    style={{
+                      padding: 32,
+                      textAlign: 'center',
+                      color: 'var(--color-muted-foreground)',
+                    }}
+                  >
+                    <Loader2
+                      style={{ width: 18, height: 18, display: 'inline-block' }}
+                      className="animate-spin"
+                    />
                   </div>
-                  <Plus className="w-4 h-4 text-indigo-400 shrink-0" />
-                </button>
-              );
-            })}
+                ) : savedMeals.length === 0 ? (
+                  <div
+                    style={{
+                      padding: 24,
+                      textAlign: 'center',
+                      fontSize: 13,
+                      color: 'var(--color-muted-foreground)',
+                    }}
+                  >
+                    No saved meals yet.
+                  </div>
+                ) : (() => {
+                  const matched = savedMeals.filter(
+                    (m) =>
+                      !mealQuery ||
+                      m.name.toLowerCase().includes(mealQuery.toLowerCase())
+                  );
+                  if (matched.length === 0) {
+                    return (
+                      <div
+                        style={{
+                          padding: 24,
+                          textAlign: 'center',
+                          fontSize: 13,
+                          color: 'var(--color-muted-foreground)',
+                        }}
+                      >
+                        No meals match your search.
+                      </div>
+                    );
+                  }
+                  if (isNarrow) {
+                    return (
+                      <ul
+                        style={{
+                          listStyle: 'none',
+                          padding: 0,
+                          margin: 0,
+                          display: 'flex',
+                          flexDirection: 'column',
+                        }}
+                      >
+                        {matched.map((meal) => {
+                          const totals = (meal.items || []).reduce(
+                            (acc, item) => {
+                              const qty = item.quantity ?? item.servings ?? 1;
+                              return {
+                                calories:
+                                  acc.calories + (item.calories || 0) * qty,
+                                protein:
+                                  acc.protein + (item.protein || 0) * qty,
+                              };
+                            },
+                            { calories: 0, protein: 0 }
+                          );
+                          const count = meal.items?.length ?? 0;
+                          return (
+                            <li
+                              key={meal.id}
+                              style={{
+                                borderBottom: '1px solid var(--color-border)',
+                              }}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => !saving && handleAddMeal(meal)}
+                                disabled={saving}
+                                style={{
+                                  display: 'flex',
+                                  gap: 10,
+                                  alignItems: 'flex-start',
+                                  padding: '10px 12px',
+                                  width: '100%',
+                                  background: 'transparent',
+                                  border: 0,
+                                  textAlign: 'left',
+                                  fontFamily: 'inherit',
+                                  color: 'var(--color-foreground)',
+                                  cursor: saving ? 'wait' : 'pointer',
+                                  opacity: saving ? 0.6 : 1,
+                                }}
+                              >
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div
+                                    style={{
+                                      fontSize: 14,
+                                      fontWeight: 500,
+                                      lineHeight: 1.3,
+                                      wordBreak: 'break-word',
+                                    }}
+                                  >
+                                    {meal.name}
+                                  </div>
+                                  {meal.description && (
+                                    <div
+                                      style={{
+                                        fontSize: 11,
+                                        color:
+                                          'var(--color-muted-foreground)',
+                                        marginTop: 2,
+                                        wordBreak: 'break-word',
+                                      }}
+                                    >
+                                      {meal.description}
+                                    </div>
+                                  )}
+                                  <div
+                                    style={{
+                                      display: 'flex',
+                                      gap: 6,
+                                      marginTop: 4,
+                                      fontSize: 11,
+                                      color:
+                                        'var(--color-muted-foreground)',
+                                      flexWrap: 'wrap',
+                                      fontFamily: 'var(--font-mono)',
+                                    }}
+                                  >
+                                    <span>{count} items</span>
+                                    <span style={{ opacity: 0.4 }}>·</span>
+                                    <span>
+                                      <span
+                                        style={{
+                                          color: 'var(--color-foreground)',
+                                          fontWeight: 600,
+                                        }}
+                                      >
+                                        {Math.round(totals.calories)}
+                                      </span>{' '}
+                                      kcal
+                                    </span>
+                                    <span style={{ opacity: 0.4 }}>·</span>
+                                    <span>
+                                      <span
+                                        style={{
+                                          color: 'var(--color-foreground)',
+                                          fontWeight: 600,
+                                        }}
+                                      >
+                                        {Math.round(totals.protein)}
+                                      </span>
+                                      g
+                                    </span>
+                                  </div>
+                                </div>
+                                <span
+                                  style={{
+                                    width: 32,
+                                    height: 32,
+                                    borderRadius: 9999,
+                                    background: 'var(--color-primary)',
+                                    color: 'var(--color-primary-foreground)',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    flexShrink: 0,
+                                  }}
+                                  aria-label="Log this meal"
+                                >
+                                  <Plus
+                                    style={{
+                                      width: 16,
+                                      height: 16,
+                                      strokeWidth: 2.5,
+                                    }}
+                                  />
+                                </span>
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    );
+                  }
+                  return (
+                    <table
+                      style={{
+                        width: '100%',
+                        tableLayout: 'fixed',
+                        borderCollapse: 'collapse',
+                      }}
+                    >
+                      <colgroup>
+                        <col />
+                        <col style={{ width: 60 }} />
+                        <col style={{ width: 70 }} />
+                        <col style={{ width: 80 }} />
+                        <col style={{ width: 44 }} />
+                      </colgroup>
+                      <thead
+                        style={{
+                          position: 'sticky',
+                          top: 0,
+                          background: 'var(--color-surface)',
+                          zIndex: 1,
+                        }}
+                      >
+                        <tr>
+                          <th style={MODAL_TH}>Meal</th>
+                          <th style={{ ...MODAL_TH, textAlign: 'right' }}>
+                            Items
+                          </th>
+                          <th style={{ ...MODAL_TH, textAlign: 'right' }}>
+                            Cal
+                          </th>
+                          <th style={{ ...MODAL_TH, textAlign: 'right' }}>
+                            Protein
+                          </th>
+                          <th style={MODAL_TH}></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {matched.map((meal) => {
+                          const totals = (meal.items || []).reduce(
+                            (acc, item) => {
+                              const qty =
+                                item.quantity ?? item.servings ?? 1;
+                              return {
+                                calories:
+                                  acc.calories +
+                                  (item.calories || 0) * qty,
+                                protein:
+                                  acc.protein +
+                                  (item.protein || 0) * qty,
+                              };
+                            },
+                            { calories: 0, protein: 0 }
+                          );
+                          const count = meal.items?.length ?? 0;
+                          return (
+                            <tr
+                              key={meal.id}
+                              onClick={() =>
+                                !saving && handleAddMeal(meal)
+                              }
+                              style={{
+                                cursor: saving ? 'wait' : 'pointer',
+                                opacity: saving ? 0.6 : 1,
+                                transition: 'background 120ms',
+                              }}
+                            >
+                              <td
+                                style={{ ...MODAL_TD, overflow: 'hidden' }}
+                              >
+                                <div style={{ minWidth: 0 }}>
+                                  <div
+                                    style={{
+                                      fontSize: 14,
+                                      fontWeight: 500,
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      whiteSpace: 'nowrap',
+                                    }}
+                                  >
+                                    {meal.name}
+                                  </div>
+                                  {meal.description && (
+                                    <div
+                                      style={{
+                                        fontSize: 11,
+                                        color:
+                                          'var(--color-muted-foreground)',
+                                        marginTop: 1,
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap',
+                                      }}
+                                    >
+                                      {meal.description}
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                              <td
+                                style={{
+                                  ...MODAL_TD,
+                                  textAlign: 'right',
+                                }}
+                              >
+                                <MonoNum size={13}>{count}</MonoNum>
+                              </td>
+                              <td
+                                style={{
+                                  ...MODAL_TD,
+                                  textAlign: 'right',
+                                }}
+                              >
+                                <MonoNum size={13}>
+                                  {Math.round(totals.calories)}
+                                </MonoNum>
+                                <span
+                                  style={{
+                                    fontSize: 10,
+                                    color:
+                                      'var(--color-muted-foreground)',
+                                    marginLeft: 2,
+                                  }}
+                                >
+                                  kcal
+                                </span>
+                              </td>
+                              <td
+                                style={{
+                                  ...MODAL_TD,
+                                  textAlign: 'right',
+                                }}
+                              >
+                                <MonoNum size={13}>
+                                  {Math.round(totals.protein)}
+                                </MonoNum>
+                                <span
+                                  style={{
+                                    fontSize: 10,
+                                    color:
+                                      'var(--color-muted-foreground)',
+                                    marginLeft: 2,
+                                  }}
+                                >
+                                  g
+                                </span>
+                              </td>
+                              <td
+                                style={{
+                                  ...MODAL_TD,
+                                  textAlign: 'right',
+                                }}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleAddMeal(meal);
+                                  }}
+                                  disabled={saving}
+                                  className="cursor-pointer"
+                                  style={{
+                                    width: 28,
+                                    height: 28,
+                                    borderRadius: 9999,
+                                    background: 'var(--color-primary)',
+                                    color:
+                                      'var(--color-primary-foreground)',
+                                    border: 0,
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    opacity: saving ? 0.5 : 1,
+                                  }}
+                                  aria-label="Log this meal"
+                                >
+                                  <Plus
+                                    style={{
+                                      width: 14,
+                                      height: 14,
+                                      strokeWidth: 2.5,
+                                    }}
+                                  />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  );
+                })()}
+              </div>
             </div>
           </div>
         )}
@@ -760,7 +1723,6 @@ function EditGoalsModal({ isOpen, onClose, goals, onSave }: EditGoalsModalProps)
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Sync when goals change externally
   useEffect(() => {
     setCalories(String(goals.calories));
     setProtein(String(goals.protein));
@@ -768,8 +1730,6 @@ function EditGoalsModal({ isOpen, onClose, goals, onSave }: EditGoalsModalProps)
 
   async function handleSave() {
     setError(null);
-    // Use Number (not parseInt) so decimal goals like 1850.5 aren't silently
-    // truncated to 1850 now that the inputs accept decimal entry.
     const cal = Number(calories);
     const pro = Number(protein);
     if (!Number.isFinite(cal) || cal < 1 || !Number.isFinite(pro) || pro < 1) {
@@ -787,40 +1747,251 @@ function EditGoalsModal({ isOpen, onClose, goals, onSave }: EditGoalsModalProps)
     }
   }
 
+  const calSuggestions = [1800, 1900, 2000, 2100, 2200, 2300];
+  const proSuggestions = [120, 140, 150, 160, 180, 200];
+  const calNum = Number(calories);
+  const proNum = Number(protein);
+
   return (
-    <GlassModal isOpen={isOpen} onClose={onClose} title="Edit Daily Goals" size="sm">
-      <div className="space-y-4">
-        <GlassInput
-          label="Calorie Goal (kcal)"
-          type="number"
-          inputMode="decimal"
-          value={calories}
-          onChange={(e) => setCalories(e.target.value)}
-          min={1}
-          step={50}
-          disabled={saving}
-        />
-        <GlassInput
-          label="Protein Goal (g)"
-          type="number"
-          inputMode="decimal"
-          value={protein}
-          onChange={(e) => setProtein(e.target.value)}
-          min={1}
-          step={5}
-          disabled={saving}
-        />
+    <GlassModal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Daily goals"
+      subtitle="Used across the dashboard"
+      size="sm"
+      footer={
+        <>
+          <GlassButton variant="ghost" size="sm" onClick={onClose} disabled={saving}>
+            Cancel
+          </GlassButton>
+          <GlassButton
+            variant="primary"
+            size="sm"
+            onClick={handleSave}
+            disabled={saving}
+          >
+            {saving ? 'Saving…' : 'Save goals'}
+          </GlassButton>
+        </>
+      }
+    >
+      <div style={{ padding: 4 }}>
+        {/* Calories — hero input */}
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: 'var(--color-muted-foreground)',
+            marginBottom: 6,
+          }}
+        >
+          Calorie goal
+        </div>
+        <div style={{ position: 'relative', marginBottom: 12 }}>
+          <input
+            type="number"
+            inputMode="decimal"
+            value={calories}
+            onChange={(e) => setCalories(e.target.value)}
+            min={1}
+            step={50}
+            disabled={saving}
+            style={{
+              width: '100%',
+              padding: '16px 60px 16px 16px',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 28,
+              fontWeight: 700,
+              letterSpacing: '-0.8px',
+              textAlign: 'right',
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 8,
+              color: 'var(--color-foreground)',
+            }}
+          />
+          <span
+            style={{
+              position: 'absolute',
+              right: 16,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              fontSize: 13,
+              color: 'var(--color-muted-foreground)',
+              fontWeight: 600,
+            }}
+          >
+            kcal
+          </span>
+        </div>
+        <div
+          style={{
+            display: 'flex',
+            gap: 6,
+            marginBottom: 18,
+          }}
+        >
+          {calSuggestions.map((n) => {
+            const active = n === calNum;
+            return (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setCalories(String(n))}
+                className="cursor-pointer"
+                style={{
+                  flex: 1,
+                  padding: '8px 0',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  background: active
+                    ? 'var(--color-foreground)'
+                    : 'var(--color-surface)',
+                  color: active
+                    ? 'var(--color-background)'
+                    : 'var(--color-muted-foreground)',
+                  border:
+                    '1px solid ' +
+                    (active ? 'var(--color-foreground)' : 'var(--color-border)'),
+                  borderRadius: 6,
+                }}
+              >
+                {n}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Protein */}
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: 'var(--color-muted-foreground)',
+            marginBottom: 6,
+          }}
+        >
+          Protein goal
+        </div>
+        <div style={{ position: 'relative', marginBottom: 10 }}>
+          <input
+            type="number"
+            inputMode="decimal"
+            value={protein}
+            onChange={(e) => setProtein(e.target.value)}
+            min={1}
+            step={5}
+            disabled={saving}
+            style={{
+              width: '100%',
+              padding: '12px 40px 12px 14px',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 18,
+              fontWeight: 700,
+              textAlign: 'right',
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 6,
+              color: 'var(--color-foreground)',
+            }}
+          />
+          <span
+            style={{
+              position: 'absolute',
+              right: 14,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              fontSize: 12,
+              color: 'var(--color-muted-foreground)',
+              fontWeight: 600,
+            }}
+          >
+            g
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+          {proSuggestions.map((n) => {
+            const active = n === proNum;
+            return (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setProtein(String(n))}
+                className="cursor-pointer"
+                style={{
+                  flex: 1,
+                  padding: '6px 0',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  background: active
+                    ? 'var(--color-foreground)'
+                    : 'var(--color-surface)',
+                  color: active
+                    ? 'var(--color-background)'
+                    : 'var(--color-muted-foreground)',
+                  border:
+                    '1px solid ' +
+                    (active ? 'var(--color-foreground)' : 'var(--color-border)'),
+                  borderRadius: 6,
+                }}
+              >
+                {n}g
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Advisory */}
+        <div
+          style={{
+            padding: 12,
+            background: 'var(--color-surface-warm)',
+            borderRadius: 8,
+            fontSize: 12,
+            color: 'var(--color-muted-foreground)',
+            lineHeight: 1.5,
+          }}
+        >
+          Most active adults land between{' '}
+          <span
+            style={{
+              fontFamily: 'var(--font-mono)',
+              color: 'var(--color-foreground)',
+              fontWeight: 600,
+            }}
+          >
+            2,000 – 2,500 kcal
+          </span>{' '}
+          and{' '}
+          <span
+            style={{
+              fontFamily: 'var(--font-mono)',
+              color: 'var(--color-foreground)',
+              fontWeight: 600,
+            }}
+          >
+            140 – 180g protein
+          </span>{' '}
+          depending on size and activity. Adjust to fit your reality.
+        </div>
+
         {error && (
-          <p className="text-sm text-red-400 bg-red-500/10 border border-red-400/20 rounded-xl px-3 py-2">
+          <p
+            style={{
+              marginTop: 12,
+              fontSize: 13,
+              color: 'var(--color-critical)',
+              background: 'rgba(201,28,43,0.10)',
+              border: '1px solid rgba(201,28,43,0.25)',
+              padding: '8px 12px',
+              borderRadius: 4,
+            }}
+          >
             {error}
           </p>
         )}
-        <div className="flex gap-3">
-          <GlassButton variant="default" className="flex-1" onClick={onClose} disabled={saving}>Cancel</GlassButton>
-          <GlassButton variant="primary" className="flex-1" onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving…' : 'Save Goals'}
-          </GlassButton>
-        </div>
       </div>
     </GlassModal>
   );
@@ -830,11 +2001,18 @@ function EditGoalsModal({ isOpen, onClose, goals, onSave }: EditGoalsModalProps)
 
 // Shared styling tokens for the action menu surface and its items. Kept at
 // module scope so the menu and any submenus pull from the same source.
-const MENU_SURFACE_CLASS =
-  'min-w-[180px] p-1 rounded-2xl bg-[#1a1a1a]/95 backdrop-blur-xl border border-white/[0.08] shadow-2xl shadow-black/40';
+const MENU_SURFACE_STYLE: React.CSSProperties = {
+  minWidth: 180,
+  padding: 4,
+  background: 'var(--color-surface)',
+  border: '1px solid var(--color-border)',
+  borderRadius: 8,
+  boxShadow: 'var(--shadow-deep)',
+  color: 'var(--color-foreground)',
+};
 const MENU_ITEM_BASE =
-  'w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-sm text-white transition-colors duration-150';
-const MENU_ITEM_HOVER = 'hover:bg-white/[0.08]';
+  'w-full flex items-center gap-2.5 px-3 py-2 rounded text-left text-sm transition-colors duration-150';
+const MENU_ITEM_HOVER = 'hover:bg-[color:var(--color-surface-warm)]';
 
 // Submenu of meal types — used by both "Move to" and "Copy to". Picks a
 // destination meal and fires `onPick`. Auto-flips to the left when there
@@ -877,9 +2055,8 @@ function MealSubmenu({ icon: Icon, label, currentMeal, onPick }: MealSubmenuProp
       </button>
       {open && (
         <div
-          className={`absolute top-0 ${
-            flip ? 'right-full mr-1' : 'left-full ml-1'
-          } ${MENU_SURFACE_CLASS}`}
+          className={`absolute top-0 ${flip ? 'right-full mr-1' : 'left-full ml-1'}`}
+          style={MENU_SURFACE_STYLE}
         >
           {MEAL_TYPES.map((m) => (
             <button
@@ -941,8 +2118,13 @@ function EntryActionMenu({ anchor, currentMeal, onEdit, onMove, onCopy, onDelete
   return createPortal(
     <div
       ref={ref}
-      style={{ position: 'fixed', left: Math.max(8, x), top: Math.max(8, y), zIndex: 50 }}
-      className={MENU_SURFACE_CLASS}
+      style={{
+        position: 'fixed',
+        left: Math.max(8, x),
+        top: Math.max(8, y),
+        zIndex: 50,
+        ...MENU_SURFACE_STYLE,
+      }}
       onClick={(e) => e.stopPropagation()}
     >
       <button
@@ -972,7 +2154,7 @@ function EntryActionMenu({ anchor, currentMeal, onEdit, onMove, onCopy, onDelete
   );
 }
 
-// ─── Entry Row ─────────────────────────────────────────────────────────────
+// ─── Entry row (design-faithful: grid with food, cals, protein, more) ──────────
 
 interface EntryRowProps {
   entry: JournalEntry;
@@ -998,6 +2180,7 @@ function EntryRow({
   const [menuAnchor, setMenuAnchor] = useState<{ x: number; y: number } | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [hovered, setHovered] = useState(false);
   const threeDotRef = useRef<HTMLButtonElement>(null);
 
   function handleDragStart(e: React.DragEvent) {
@@ -1010,17 +2193,15 @@ function EntryRow({
     setDragging(false);
     onDragEndEntry();
   }
-
   function handleContextMenu(e: React.MouseEvent) {
     e.preventDefault();
     setMenuAnchor({ x: e.clientX, y: e.clientY });
   }
-
-  function openMenuFromButton() {
+  function openMenuFromButton(e: React.MouseEvent) {
+    e.stopPropagation();
     const rect = threeDotRef.current?.getBoundingClientRect();
     if (rect) setMenuAnchor({ x: rect.left, y: rect.bottom + 4 });
   }
-
   async function handleDelete() {
     setDeleting(true);
     try {
@@ -1029,52 +2210,110 @@ function EntryRow({
       setDeleting(false);
     }
   }
-
   async function handleCopy(target: MealType) {
     setMenuAnchor(null);
     await onCopy(entry, target);
   }
-
   async function handleMove(target: MealType) {
     setMenuAnchor(null);
     await onMove(entry.id, target);
   }
 
+  const qty = entry.quantity ?? entry.servings ?? 1;
+  const unit = (entry.unit as Unit) ?? 'serving';
+
   return (
-    <div
+    <li
       draggable={pointerCapable}
       onDragStart={pointerCapable ? handleDragStart : undefined}
       onDragEnd={pointerCapable ? handleDragEnd : undefined}
       onContextMenu={handleContextMenu}
-      className={`flex items-center gap-2 px-4 py-3 rounded-2xl bg-white/5 border border-white/10 group transition-opacity ${
-        dragging ? 'opacity-40' : ''
-      } ${pointerCapable ? 'cursor-grab active:cursor-grabbing' : ''}`}
+      onClick={() => onEdit(entry)}
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'minmax(0, 1fr) auto auto auto',
+        alignItems: 'center',
+        gap: 14,
+        padding: '8px 12px',
+        margin: '0 -12px',
+        borderBottom: '1px solid var(--color-border)',
+        cursor: pointerCapable ? 'grab' : 'pointer',
+        opacity: dragging ? 0.4 : 1,
+        background: hovered ? 'var(--color-surface-warm)' : 'transparent',
+        transition: 'background 120ms ease-out',
+      }}
     >
-      <button
-        type="button"
-        onClick={() => onEdit(entry)}
-        className="flex-1 text-left min-w-0 cursor-pointer"
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 14,
+            fontWeight: 500,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {entry.food_name_snapshot}
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            color: 'var(--color-muted-foreground)',
+            marginTop: 2,
+          }}
+        >
+          {formatQuantity(qty, unit)}
+        </div>
+      </div>
+      <span
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 12,
+          color: 'var(--color-muted-foreground)',
+          textAlign: 'right',
+          minWidth: 64,
+        }}
       >
-        <p className="text-sm font-medium text-white truncate">{entry.food_name_snapshot}</p>
-        <p className="text-xs text-white/50">
-          {formatQuantity(entry.quantity ?? entry.servings ?? 1, (entry.unit as Unit) ?? 'serving')} · {entry.calories_snapshot} kcal · {entry.protein_snapshot}g protein
-        </p>
-      </button>
-
-      {/* 3-dot icon → opens action menu (Edit / Copy to ▸ / Delete) */}
+        <span style={{ color: 'var(--color-foreground)', fontWeight: 600 }}>
+          {Math.round(entry.calories_snapshot)}
+        </span>{' '}
+        kcal
+      </span>
+      <span
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 12,
+          color: 'var(--color-muted-foreground)',
+          textAlign: 'right',
+          minWidth: 56,
+        }}
+      >
+        <span style={{ color: 'var(--color-foreground)', fontWeight: 600 }}>
+          {Math.round(entry.protein_snapshot * 10) / 10}
+        </span>
+        g P
+      </span>
       <button
         ref={threeDotRef}
         type="button"
         onClick={openMenuFromButton}
         disabled={deleting}
-        className="p-1.5 rounded-xl text-white/40 hover:text-white hover:bg-white/10 transition-all duration-200 opacity-60 group-hover:opacity-100 disabled:opacity-30"
+        className="cursor-pointer"
+        style={{
+          background: 'transparent',
+          border: 0,
+          color: 'var(--color-muted-foreground)',
+          padding: 4,
+          borderRadius: 4,
+        }}
         aria-label="More actions"
-        title="More actions"
       >
         {deleting ? (
-          <Loader2 className="w-4 h-4 animate-spin" />
+          <Loader2 style={{ width: 14, height: 14 }} className="animate-spin" />
         ) : (
-          <MoreHorizontal className="w-4 h-4" />
+          <MoreHorizontal style={{ width: 14, height: 14, strokeWidth: 1.75 }} />
         )}
       </button>
 
@@ -1082,18 +2321,24 @@ function EntryRow({
         <EntryActionMenu
           anchor={menuAnchor}
           currentMeal={entry.meal_type}
-          onEdit={() => { setMenuAnchor(null); onEdit(entry); }}
-          onMove={(target) => { handleMove(target); }}
-          onCopy={(target) => { handleCopy(target); }}
-          onDelete={() => { setMenuAnchor(null); handleDelete(); }}
+          onEdit={() => {
+            setMenuAnchor(null);
+            onEdit(entry);
+          }}
+          onMove={handleMove}
+          onCopy={handleCopy}
+          onDelete={() => {
+            setMenuAnchor(null);
+            handleDelete();
+          }}
           onClose={() => setMenuAnchor(null)}
         />
       )}
-    </div>
+    </li>
   );
 }
 
-// ─── Meal Section ──────────────────────────────────────────────────────────
+// ─── Meal section (design-faithful: CardShell with totals hint + Add) ──────────
 
 interface MealSectionProps {
   type: MealType;
@@ -1104,7 +2349,6 @@ interface MealSectionProps {
   onRequestAdd: (mealType: MealType) => void;
   onCopyEntry: (entry: JournalEntry, target: MealType) => Promise<void> | void;
   onMoveEntry: (id: number, target: MealType) => Promise<void> | void;
-  /** Set true while ANY drag is active so other sections can highlight on hover */
   draggingActive: boolean;
   onDragStartEntry: () => void;
   onDragEndEntry: () => void;
@@ -1123,20 +2367,27 @@ function MealSection({
   onDragStartEntry,
   onDragEndEntry,
 }: MealSectionProps) {
-  const [collapsed, setCollapsed] = useState(false);
+  const isNarrow = useIsNarrow();
   const [dragOver, setDragOver] = useState(false);
   const dragCounter = useRef(0);
 
-  const totalCal = entries.reduce((a, e) => a + e.calories_snapshot, 0);
-  const totalPro = entries.reduce((a, e) => a + e.protein_snapshot, 0);
+  const totals = entries.reduce(
+    (a, e) => {
+      a.cal += e.calories_snapshot;
+      a.protein += e.protein_snapshot;
+      return a;
+    },
+    { cal: 0, protein: 0 }
+  );
 
   async function handleDelete(id: number) {
     try {
       await deleteJournalEntry(id);
       onDeleted(id);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
-
   function handleDragOver(e: React.DragEvent) {
     if (!pointerCapable) return;
     e.preventDefault();
@@ -1164,76 +2415,468 @@ function MealSection({
     }
   }
 
+  const mealIconName =
+    type === 'breakfast' ? 'Sunrise' : type === 'lunch' ? 'Sun' : type === 'snack' ? 'Cookie' : 'Moon';
+  const IconCmp =
+    type === 'breakfast'
+      ? Sunrise
+      : type === 'lunch'
+      ? Sun
+      : type === 'snack'
+      ? Cookie
+      : Moon;
+
   return (
-    <GlassCard
-      padding={false}
-      className={`overflow-hidden transition-all duration-150 ${
-        dragOver
-          ? 'ring-2 ring-indigo-400/70 bg-indigo-500/5'
+    <div
+      onDragOver={handleDragOver}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      style={{
+        outline: dragOver
+          ? '2px solid var(--color-primary)'
           : draggingActive
-            ? 'ring-1 ring-white/15'
-            : ''
-      }`}
+          ? '1px dashed var(--color-border)'
+          : 'none',
+        outlineOffset: 2,
+        borderRadius: 12,
+        transition: 'outline-color 120ms ease-out',
+      }}
     >
-      {/* Header */}
-      <button
-        onClick={() => setCollapsed(!collapsed)}
-        className="w-full flex items-center justify-between px-5 py-4 hover:bg-white/5 transition-colors duration-200"
-      >
-        <div className="flex items-center gap-3">
-          <span className="text-base font-semibold text-white">{MEAL_LABELS[type]}</span>
-          {entries.length > 0 && (
-            <span className="text-xs text-white/40 font-normal">
-              {Math.round(totalCal)} kcal · {Math.round(totalPro * 10) / 10}g protein
-            </span>
-          )}
-        </div>
-        <ChevronRight
-          className={`w-4 h-4 text-white/40 transition-transform duration-300 ${collapsed ? '' : 'rotate-90'}`}
-        />
-      </button>
-
-      {!collapsed && (
-        <div
-          className="px-5 pb-4 space-y-2"
-          onDragOver={handleDragOver}
-          onDragEnter={handleDragEnter}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-        >
-          {entries.length === 0 && (
-            <p className="text-sm text-white/30 text-center py-2">
-              {dragOver ? `Drop to move here` : 'Nothing logged yet'}
-            </p>
-          )}
-
-          {entries.map((entry) => (
-            <EntryRow
-              key={entry.id}
-              entry={entry}
-              pointerCapable={pointerCapable}
-              onEdit={onEditRequest}
-              onDelete={handleDelete}
-              onCopy={onCopyEntry}
-              onMove={onMoveEntry}
-              onDragStartEntry={onDragStartEntry}
-              onDragEndEntry={onDragEndEntry}
-            />
-          ))}
-
-          <button
-            onClick={() => onRequestAdd(type)}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl border border-dashed border-white/20 text-sm text-white/50 hover:text-white hover:border-indigo-400/50 hover:bg-white/5 transition-all duration-300"
+      <CardShell
+        title={MEAL_LABELS[type]}
+        icon={<IconCmp style={{ width: 14, height: 14, strokeWidth: 2.25 }} aria-label={mealIconName} />}
+        hint={
+          <div
+            style={{
+              display: 'flex',
+              gap: 10,
+              alignItems: 'baseline',
+              flexShrink: 0,
+            }}
           >
-            <Plus className="w-4 h-4" /> Add Food
-          </button>
-        </div>
-      )}
-    </GlassCard>
+            {/* Per-meal totals — hidden on narrow viewports so the + Add
+                button stays clickable. The Day-summary card on the right
+                already aggregates these numbers. */}
+            {!isNarrow && entries.length > 0 && (
+              <span
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 12,
+                  color: 'var(--color-muted-foreground)',
+                }}
+              >
+                <span
+                  style={{
+                    color: 'var(--color-foreground)',
+                    fontWeight: 600,
+                  }}
+                >
+                  {Math.round(totals.cal)}
+                </span>{' '}
+                kcal ·{' '}
+                <span
+                  style={{
+                    color: 'var(--color-foreground)',
+                    fontWeight: 600,
+                  }}
+                >
+                  {Math.round(totals.protein)}g
+                </span>{' '}
+                P
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => onRequestAdd(type)}
+              className="cursor-pointer"
+              style={{
+                background: 'transparent',
+                border: 0,
+                color: 'var(--color-link)',
+                fontSize: 12,
+                fontWeight: 600,
+                padding: 0,
+              }}
+            >
+              + Add
+            </button>
+          </div>
+        }
+      >
+        {entries.length === 0 ? (
+          <EmptyState>
+            {dragOver
+              ? 'Drop to move here'
+              : `No ${MEAL_LABELS[type].toLowerCase()} logged.`}
+          </EmptyState>
+        ) : (
+          <ul
+            style={{
+              listStyle: 'none',
+              padding: 0,
+              margin: 0,
+            }}
+          >
+            {entries.map((entry) => (
+              <EntryRow
+                key={entry.id}
+                entry={entry}
+                pointerCapable={pointerCapable}
+                onEdit={onEditRequest}
+                onDelete={handleDelete}
+                onCopy={onCopyEntry}
+                onMove={onMoveEntry}
+                onDragStartEntry={onDragStartEntry}
+                onDragEndEntry={onDragEndEntry}
+              />
+            ))}
+          </ul>
+        )}
+      </CardShell>
+    </div>
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// ─── Day summary card (right column) ───────────────────────────────────────────
+
+function JournalSummaryCard({
+  calories,
+  protein,
+  entries,
+  goals,
+}: {
+  calories: number;
+  protein: number;
+  entries: number;
+  goals: { calories: number; protein: number };
+}) {
+  return (
+    <div
+      style={{
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 12,
+        boxShadow: 'var(--shadow-card)',
+        padding: 20,
+      }}
+    >
+      <MicroLabel>Day summary</MicroLabel>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          marginTop: 12,
+        }}
+      >
+        <CalorieRing
+          value={Math.round(calories)}
+          target={goals.calories}
+          size={140}
+          stroke={12}
+        />
+      </div>
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+          marginTop: 16,
+        }}
+      >
+        <MacroBar
+          label="Protein"
+          value={Math.round(protein)}
+          target={goals.protein}
+          unit="g"
+          tone={protein >= goals.protein ? 'success' : 'primary'}
+        />
+      </div>
+      <div
+        style={{
+          borderTop: '1px solid var(--color-border)',
+          marginTop: 16,
+          paddingTop: 12,
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'baseline',
+          }}
+        >
+          <MicroLabel>Entries</MicroLabel>
+          <MonoNum size={18}>{entries}</MonoNum>
+        </div>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'baseline',
+            marginTop: 6,
+          }}
+        >
+          <MicroLabel>Calories remaining</MicroLabel>
+          <MonoNum
+            size={18}
+            color={
+              calories > goals.calories
+                ? 'var(--color-critical)'
+                : 'var(--color-success)'
+            }
+          >
+            {calories > goals.calories
+              ? '+' + (calories - goals.calories).toLocaleString()
+              : (goals.calories - calories).toLocaleString()}
+          </MonoNum>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Quick add panel ──────────────────────────────────────────────────────────
+
+function QuickAddPanel({
+  date,
+  defaultMeal,
+  onAdded,
+}: {
+  date: string;
+  defaultMeal: MealType;
+  onAdded: (entry: JournalEntry) => void;
+}) {
+  const [q, setQ] = useState('');
+  const [foods, setFoods] = useState<Food[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [adding, setAdding] = useState<number | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const url = q.trim()
+          ? BASE_URL + '/api/foods?search=' + encodeURIComponent(q.trim())
+          : BASE_URL + '/api/foods';
+        const res = await fetch(url);
+        if (res.ok) setFoods((await res.json()) as Food[]);
+      } catch {
+        /* ignore */
+      } finally {
+        setLoading(false);
+      }
+    }, 250);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [q]);
+
+  async function addOne(food: Food) {
+    setAdding(food.id);
+    try {
+      const units = food.units ?? [
+        { unit: 'serving' as Unit, label: 'serving', default: true },
+      ];
+      const def = units.find((u) => u.default) ?? units[0];
+      const startQty =
+        def.unit === 'serving'
+          ? 1
+          : (food.base_amount ?? food.baseAmount ?? 100);
+      const entry = await addJournalEntry({
+        date,
+        meal_type: defaultMeal,
+        food_id: food.id,
+        food_name_snapshot: food.name,
+        quantity: startQty,
+        unit: def.unit,
+      });
+      onAdded(entry);
+    } catch {
+      /* swallow */
+    } finally {
+      setAdding(null);
+    }
+  }
+
+  const visible = foods.slice(0, 8);
+
+  return (
+    <div
+      style={{
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 12,
+        boxShadow: 'var(--shadow-card)',
+        padding: 20,
+      }}
+    >
+      <h2
+        style={{
+          margin: 0,
+          fontSize: 15,
+          fontWeight: 700,
+          letterSpacing: '-0.25px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+        }}
+      >
+        <Search
+          style={{
+            width: 14,
+            height: 14,
+            color: 'var(--color-muted-foreground)',
+          }}
+        />
+        Quick add
+      </h2>
+      <div style={{ position: 'relative', marginTop: 12, marginBottom: 12 }}>
+        <Search
+          style={{
+            position: 'absolute',
+            left: 10,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            width: 14,
+            height: 14,
+            color: 'var(--color-placeholder)',
+          }}
+        />
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Find a food…"
+          style={{
+            width: '100%',
+            padding: '8px 10px 8px 32px',
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 4,
+            color: 'var(--color-foreground)',
+            fontFamily: 'inherit',
+            fontSize: 14,
+          }}
+        />
+      </div>
+      {loading && (
+        <div
+          style={{
+            fontSize: 12,
+            color: 'var(--color-muted-foreground)',
+            textAlign: 'center',
+            padding: '8px 0',
+          }}
+        >
+          Searching…
+        </div>
+      )}
+      {!loading && visible.length === 0 && (
+        <div
+          style={{
+            fontSize: 12,
+            color: 'var(--color-muted-foreground)',
+            textAlign: 'center',
+            padding: '8px 0',
+          }}
+        >
+          No foods match.
+        </div>
+      )}
+      <ul
+        style={{
+          listStyle: 'none',
+          padding: 0,
+          margin: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 2,
+        }}
+      >
+        {visible.map((f) => {
+          const cal = f.calories ?? f.calories_per_100g ?? 0;
+          return (
+            <li
+              key={f.id}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '6px 8px',
+                borderRadius: 4,
+                fontSize: 13,
+              }}
+            >
+              <span
+                style={{
+                  flex: 1,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {f.name}
+              </span>
+              <span
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 11,
+                  color: 'var(--color-muted-foreground)',
+                }}
+              >
+                {cal} kcal
+              </span>
+              <button
+                onClick={() => addOne(f)}
+                disabled={adding === f.id}
+                className="cursor-pointer"
+                style={{
+                  background: 'var(--color-soft)',
+                  border: 0,
+                  borderRadius: 4,
+                  padding: '3px 6px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  color: 'var(--color-foreground)',
+                  opacity: adding === f.id ? 0.5 : 1,
+                }}
+              >
+                {adding === f.id ? (
+                  <Loader2
+                    style={{ width: 12, height: 12 }}
+                    className="animate-spin"
+                  />
+                ) : (
+                  <Plus
+                    style={{ width: 12, height: 12, strokeWidth: 2.25 }}
+                  />
+                )}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function MealStackSkeleton() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {MEAL_TYPES.map((m) => (
+        <div
+          key={m}
+          className="skeleton"
+          style={{ height: 110, borderRadius: 12 }}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function JournalPage() {
   const [currentDate, setCurrentDate] = useState<Date>(() => new Date());
@@ -1249,42 +2892,40 @@ export default function JournalPage() {
   const [pointerCapable, setPointerCapable] = useState(false);
   const [draggingActive, setDraggingActive] = useState(false);
 
-  // Detect hover-capable input (mouse/trackpad) to gate drag-and-drop.
-  // Touch devices fall back to the 3-dot menu / copy button.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     setPointerCapable(window.matchMedia('(hover: hover)').matches);
   }, []);
 
-  // Load goals from API
   useEffect(() => {
     getGoals()
       .then((g) => setGoals({ calories: g.calories, protein: g.protein }))
-      .catch(() => {}); // keep defaults on failure
+      .catch(() => {});
   }, []);
 
-  async function handleSaveGoals(newGoals: { calories: number; protein: number }) {
-    // No optimistic update — wait for the backend to confirm so the modal
-    // can surface failures rather than closing on a fire-and-forget save
-    // that silently dropped the user's input.
+  async function handleSaveGoals(newGoals: {
+    calories: number;
+    protein: number;
+  }) {
     const updated = await updateGoals(newGoals);
     setGoals({ calories: updated.calories, protein: updated.protein });
   }
 
   const dateStr = toISODate(currentDate);
 
-  // `silent`: skip the loading skeleton so socket-driven refetches don't
-  // tear down the meal sections (which scroll-snaps the page back to top
-  // after a delete/edit). Only initial load + date change should show the
-  // skeleton — every other refresh updates entries in place.
-  const fetchEntries = useCallback((silent = false) => {
-    if (!silent) setLoading(true);
-    setError('');
-    getJournalEntries({ date: dateStr })
-      .then(setEntries)
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to load'))
-      .finally(() => setLoading(false));
-  }, [dateStr]);
+  const fetchEntries = useCallback(
+    (silent = false) => {
+      if (!silent) setLoading(true);
+      setError('');
+      getJournalEntries({ date: dateStr })
+        .then(setEntries)
+        .catch((e: unknown) =>
+          setError(e instanceof Error ? e.message : 'Failed to load')
+        )
+        .finally(() => setLoading(false));
+    },
+    [dateStr]
+  );
 
   useEffect(() => {
     fetchEntries();
@@ -1324,7 +2965,6 @@ export default function JournalPage() {
     setEditEntry(null);
   }
 
-  // Duplicate an entry into another meal on the same day.
   async function handleEntryCopy(entry: JournalEntry, target: MealType) {
     setError('');
     try {
@@ -1344,27 +2984,27 @@ export default function JournalPage() {
     }
   }
 
-  // Move an entry to a different meal section (drag/drop).
-  // Optimistic update with rollback on failure.
   async function handleEntryMove(id: number, target: MealType) {
     const current = entries.find((e) => e.id === id);
     if (!current || current.meal_type === target) return;
     const previous = current;
-    setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, meal_type: target } : e)));
+    setEntries((prev) =>
+      prev.map((e) => (e.id === id ? { ...e, meal_type: target } : e))
+    );
     try {
       const updated = await updateJournalEntry(id, { meal_type: target });
       setEntries((prev) => prev.map((e) => (e.id === id ? updated : e)));
     } catch (e: unknown) {
-      setEntries((prev) => prev.map((entry) => (entry.id === id ? previous : entry)));
+      setEntries((prev) =>
+        prev.map((entry) => (entry.id === id ? previous : entry))
+      );
       setError(e instanceof Error ? e.message : 'Failed to move entry');
     }
   }
 
-  // Totals
   const totalCalories = entries.reduce((a, e) => a + e.calories_snapshot, 0);
   const totalProtein = entries.reduce((a, e) => a + e.protein_snapshot, 0);
 
-  // Group
   const byMeal: Record<MealType, JournalEntry[]> = {
     breakfast: [],
     lunch: [],
@@ -1377,30 +3017,71 @@ export default function JournalPage() {
 
   const isToday = dateStr === toISODate(new Date());
 
+  function defaultMealForNow(): MealType {
+    const h = new Date().getHours();
+    if (h < 11) return 'breakfast';
+    if (h < 15) return 'lunch';
+    if (h < 17) return 'snack';
+    return 'dinner';
+  }
+
   return (
-    <div className="space-y-6 animate-fade-in w-full max-w-full overflow-x-hidden px-3 sm:px-4">
-      {/* Header */}
-      <div className="flex items-center justify-between w-full">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Food Journal</h1>
-      </div>
-
-      {/* Date Navigation */}
-      <GlassCard padding={false}>
-        <div className="flex items-center justify-between px-5 py-4">
-          <button
-            onClick={handlePrevDay}
-            className="p-2 rounded-xl text-white/60 hover:text-white hover:bg-white/10 transition-all duration-200"
+    <main
+      className="page-mount"
+      style={{
+        maxWidth: 1120,
+        margin: '0 auto',
+        padding: '24px 16px 80px',
+      }}
+    >
+      {/* Date bar */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <GlassButton variant="outline" size="sm" onClick={handlePrevDay}>
+            <ChevronLeft style={{ width: 14, height: 14 }} />
+          </GlassButton>
+          <GlassButton
+            variant="outline"
+            size="sm"
+            onClick={handleNextDay}
+            disabled={isToday}
           >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-
-          <div className="relative">
+            <ChevronRight style={{ width: 14, height: 14 }} />
+          </GlassButton>
+          <div style={{ position: 'relative' }}>
             <button
               onClick={() => setShowDateInput(true)}
-              className="flex items-center gap-2 text-white font-semibold hover:text-indigo-300 transition-colors duration-200"
+              className="cursor-pointer"
+              style={{
+                margin: '0 4px',
+                fontSize: 22,
+                fontWeight: 700,
+                letterSpacing: '-0.4px',
+                background: 'transparent',
+                border: 0,
+                color: 'var(--color-foreground)',
+                fontFamily: 'inherit',
+                padding: 0,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
             >
               {formatDateLabel(currentDate)}
-              <Pencil className="w-3.5 h-3.5 text-white/40" />
+              <Pencil
+                style={{
+                  width: 12,
+                  height: 12,
+                  color: 'var(--color-muted-foreground)',
+                }}
+              />
             </button>
             {showDateInput && (
               <input
@@ -1409,150 +3090,135 @@ export default function JournalPage() {
                 value={dateStr}
                 onChange={handleDateChange}
                 onBlur={() => setShowDateInput(false)}
-                className="absolute opacity-0 w-0 h-0"
+                style={{
+                  position: 'absolute',
+                  opacity: 0,
+                  width: 0,
+                  height: 0,
+                }}
               />
             )}
           </div>
-
-          <button
-            onClick={handleNextDay}
-            disabled={isToday}
-            className="p-2 rounded-xl text-white/60 hover:text-white hover:bg-white/10 transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            <ChevronRight className="w-5 h-5" />
-          </button>
         </div>
-      </GlassCard>
+        <GlassButton
+          variant="primary"
+          size="sm"
+          onClick={() => setAddMealType(defaultMealForNow())}
+        >
+          <Plus style={{ width: 14, height: 14, strokeWidth: 2.25 }} />
+          Log food
+        </GlassButton>
+      </div>
+      <div
+        style={{
+          color: 'var(--color-muted-foreground)',
+          marginTop: 4,
+          fontSize: 14,
+        }}
+      >
+        Logged across the day. Tap any entry to edit.
+      </div>
 
-      {/* Daily Totals */}
-      <GlassCard>
-        {(() => {
-        const caloriesOver = totalCalories > goals.calories;
-        const caloriesOverBy = Math.round(totalCalories - goals.calories);
-        return (
-        <>
-        <div className="flex items-center gap-6">
-          {/* Calories ring */}
-          <div className="relative shrink-0">
-            <ProgressRing
-              value={totalCalories}
-              max={goals.calories}
-              size={72}
-              stroke={6}
-              color={caloriesOver ? '#ef4444' : '#6366f1'}
-            />
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-sm font-bold leading-tight">{Math.round(totalCalories)}</span>
-              <span className="text-[10px] text-gray-400 dark:text-white/40">kcal</span>
-            </div>
-          </div>
-
-          <div className="flex-1 space-y-3">
-            {/* Calories */}
-            <div>
-              <div className="flex items-end justify-between mb-1">
-                <span className="text-sm text-gray-500 dark:text-white/60">Calories</span>
-                <span className="text-base font-bold">
-                  {Math.round(totalCalories)} <span className="text-gray-400 dark:text-white/40 font-normal">/ {goals.calories}</span>
-                  {caloriesOver && (
-                    <span className="ml-1.5 text-red-500 dark:text-red-400 font-semibold text-sm">
-                      +{caloriesOverBy} over
-                    </span>
-                  )}
-                </span>
-              </div>
-              <div className="h-1.5 rounded-full bg-black/10 dark:bg-white/10 overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all duration-500 ${
-                    caloriesOver
-                      ? 'bg-gradient-to-r from-red-500 to-rose-500'
-                      : 'bg-gradient-to-r from-indigo-500 to-blue-500'
-                  }`}
-                  style={{ width: `${Math.min((totalCalories / goals.calories) * 100, 100)}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Protein */}
-            <div>
-              <div className="flex items-end justify-between mb-1">
-                <span className="text-sm text-gray-500 dark:text-white/60">Protein</span>
-                <span className="text-base font-bold">
-                  {Math.round(totalProtein * 10) / 10}g <span className="text-gray-400 dark:text-white/40 font-normal">/ {goals.protein}g</span>
-                </span>
-              </div>
-              <div className="h-1.5 rounded-full bg-black/10 dark:bg-white/10 overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-500"
-                  style={{ width: `${Math.min((totalProtein / goals.protein) * 100, 100)}%` }}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Remaining + Edit Goals */}
-        <div className="mt-4 pt-4 border-t border-black/[0.06] dark:border-white/10 flex gap-4 text-sm items-center">
-          <div className="flex-1 text-center">
-            <p className="text-gray-400 dark:text-white/40 text-xs mb-0.5">Remaining</p>
-            <p className={`font-semibold ${totalCalories > goals.calories ? 'text-red-500 dark:text-red-400' : ''}`}>
-              {Math.max(goals.calories - Math.round(totalCalories), 0)} kcal
-            </p>
-          </div>
-          <div className="w-px bg-black/[0.06] dark:bg-white/10 self-stretch" />
-          <div className="flex-1 text-center">
-            <p className="text-gray-400 dark:text-white/40 text-xs mb-0.5">Protein left</p>
-            <p className={`font-semibold ${totalProtein >= goals.protein ? 'text-emerald-500 dark:text-emerald-400' : ''}`}>
-              {totalProtein >= goals.protein ? '✓ Goal met' : `${Math.round((goals.protein - totalProtein) * 10) / 10}g`}
-            </p>
-          </div>
-          <div className="w-px bg-black/[0.06] dark:bg-white/10 self-stretch" />
-          <div className="flex-1 text-center">
-            <button
-              onClick={() => setGoalsModalOpen(true)}
-              className="text-xs text-[#2E8B57] hover:text-[#61bc84] font-medium transition-colors duration-200"
-            >
-              ✏ Edit Goals
-            </button>
-          </div>
-        </div>
-        </>
-        );
-        })()}
-      </GlassCard>
-
-      {/* Error */}
       {error && (
-        <div className="px-4 py-3 rounded-2xl bg-red-500/10 border border-red-400/20 text-red-400 text-sm">
+        <div
+          style={{
+            marginTop: 16,
+            padding: '10px 14px',
+            borderRadius: 6,
+            background: 'rgba(201,28,43,0.10)',
+            border: '1px solid rgba(201,28,43,0.25)',
+            color: 'var(--color-critical)',
+            fontSize: 13,
+          }}
+        >
           {error}
         </div>
       )}
 
-      {/* Meals */}
-      {loading ? (
-        <JournalSkeleton />
-      ) : (
-        <div className="space-y-4">
-          {MEAL_TYPES.map((mealType) => (
-            <MealSection
-              key={mealType}
-              type={mealType}
-              entries={byMeal[mealType]}
-              pointerCapable={pointerCapable}
-              onDeleted={handleEntryDeleted}
-              onEditRequest={setEditEntry}
-              onRequestAdd={(type) => setAddMealType(type)}
-              onCopyEntry={handleEntryCopy}
-              onMoveEntry={handleEntryMove}
-              draggingActive={draggingActive}
-              onDragStartEntry={() => setDraggingActive(true)}
-              onDragEndEntry={() => setDraggingActive(false)}
-            />
-          ))}
+      <div
+        className="journal-grid"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 1.6fr) minmax(0, 1fr)',
+          gap: 16,
+          marginTop: 24,
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 12,
+            minWidth: 0,
+          }}
+        >
+          {loading ? (
+            <MealStackSkeleton />
+          ) : (
+            MEAL_TYPES.map((mealType) => (
+              <MealSection
+                key={mealType}
+                type={mealType}
+                entries={byMeal[mealType]}
+                pointerCapable={pointerCapable}
+                onDeleted={handleEntryDeleted}
+                onEditRequest={setEditEntry}
+                onRequestAdd={(type) => setAddMealType(type)}
+                onCopyEntry={handleEntryCopy}
+                onMoveEntry={handleEntryMove}
+                draggingActive={draggingActive}
+                onDragStartEntry={() => setDraggingActive(true)}
+                onDragEndEntry={() => setDraggingActive(false)}
+              />
+            ))
+          )}
         </div>
-      )}
+        <div
+          style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
+        >
+          <JournalSummaryCard
+            calories={totalCalories}
+            protein={totalProtein}
+            entries={entries.length}
+            goals={goals}
+          />
+          <QuickAddPanel
+            date={dateStr}
+            defaultMeal={defaultMealForNow()}
+            onAdded={handleEntryAdded}
+          />
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+            }}
+          >
+            <button
+              onClick={() => setGoalsModalOpen(true)}
+              className="cursor-pointer"
+              style={{
+                background: 'transparent',
+                border: 0,
+                color: 'var(--color-link)',
+                fontSize: 12,
+                fontWeight: 600,
+                padding: 0,
+              }}
+            >
+              Edit goals
+            </button>
+          </div>
+        </div>
+      </div>
 
-      {/* Add Food Modal — rendered at page level so it escapes the card overflow */}
+      <style jsx>{`
+        @media (max-width: 900px) {
+          :global(.journal-grid) {
+            grid-template-columns: minmax(0, 1fr) !important;
+          }
+        }
+      `}</style>
+
       <AddFoodModal
         isOpen={addMealType !== null}
         onClose={() => setAddMealType(null)}
@@ -1560,22 +3226,18 @@ export default function JournalPage() {
         date={dateStr}
         onAdded={handleEntryAdded}
       />
-
-      {/* Edit Entry Modal */}
       <EditEntryModal
         isOpen={!!editEntry}
         onClose={() => setEditEntry(null)}
         entry={editEntry}
         onUpdated={handleEntryUpdated}
       />
-
-      {/* Edit Goals Modal */}
       <EditGoalsModal
         isOpen={goalsModalOpen}
         onClose={() => setGoalsModalOpen(false)}
         goals={goals}
         onSave={handleSaveGoals}
       />
-    </div>
+    </main>
   );
 }

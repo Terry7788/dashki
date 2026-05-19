@@ -158,20 +158,23 @@ async function wipeAndInsert(data) {
   }
   for (const m of data.savedMealsFull) {
     for (const item of (m.items || [])) {
-      await run(db, 'INSERT INTO SavedMealItems (id, meal_id, food_id, servings) VALUES (?, ?, ?, ?)',
-        [item.id, m.id, item.foodId ?? item.food_id, item.servings]);
+      // Schema migrated: SavedMealItems.servings → quantity + unit
+      const qty = item.quantity ?? item.servings ?? 1;
+      const unit = item.unit ?? 'serving';
+      await run(db, 'INSERT INTO SavedMealItems (id, meal_id, food_id, quantity, unit) VALUES (?, ?, ?, ?, ?)',
+        [item.id, m.id, item.foodId ?? item.food_id, qty, unit]);
     }
   }
 
-  // Journal entries — old API may not include quantity/unit; fall back to servings.
+  // Journal entries — schema migrated to quantity + unit only (servings dropped).
   for (const e of data.journal) {
     await run(db,
       `INSERT INTO JournalEntries
          (id, date, meal_type, logged_at, food_id, food_name_snapshot,
-          servings, quantity, unit, calories_snapshot, protein_snapshot, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          quantity, unit, calories_snapshot, protein_snapshot, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [e.id, e.date, e.meal_type, e.logged_at, e.food_id, e.food_name_snapshot,
-       e.servings, e.quantity ?? e.servings, e.unit ?? 'serving',
+       e.quantity ?? e.servings ?? 1, e.unit ?? 'serving',
        e.calories_snapshot, e.protein_snapshot ?? null, e.created_at ?? new Date().toISOString()]);
   }
 

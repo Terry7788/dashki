@@ -47,7 +47,12 @@ export default function GlassInput({
       {label && (
         <label
           htmlFor={inputId}
-          className="text-sm font-medium text-[#313d44] dark:text-white/60 pl-1"
+          style={{
+            fontSize: 13,
+            fontWeight: 500,
+            color: 'var(--color-muted-foreground)',
+            paddingLeft: 2,
+          }}
         >
           {label}
         </label>
@@ -68,15 +73,17 @@ export default function GlassInput({
         required={required}
         disabled={disabled}
         autoComplete={autoComplete}
-        className={clsx(
-          'w-full px-4 py-3 rounded-2xl transition-all duration-200',
-          // Light mode
-          'bg-[#f5f4f1] border border-[#cccbc8] text-[#1d1c1c] placeholder-[#313d44]/45',
-          'focus:outline-none focus:ring-2 focus:ring-[#71c4ef]/40 focus:border-[#00668c]/60',
-          // Dark mode
-          'dark:bg-white/[0.06] dark:border-white/[0.12] dark:text-white dark:placeholder-white/40',
-          'disabled:opacity-40 disabled:cursor-not-allowed'
-        )}
+        className="w-full transition-colors duration-150"
+        style={{
+          padding: '8px 12px',
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border)',
+          borderRadius: 4,
+          color: 'var(--color-foreground)',
+          fontFamily: 'inherit',
+          fontSize: 14,
+          opacity: disabled ? 0.5 : 1,
+        }}
       />
     </div>
   );
