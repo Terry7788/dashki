@@ -154,6 +154,8 @@ function FoodPicker({ selectedFoods, setSelectedFoods }: FoodPickerProps) {
         ...selectedFoods,
         { food, quantity: startQty, unit: def.unit },
       ]);
+      // Auto-expand the quantity editor so the user can tweak immediately.
+      setExpandedId(food.id);
     }
   }
 
@@ -720,16 +722,6 @@ function FoodPicker({ selectedFoods, setSelectedFoods }: FoodPickerProps) {
             </ul>
           )}
         </div>
-      </div>
-
-      <div
-        style={{
-          fontSize: 11,
-          color: 'var(--color-muted-foreground)',
-        }}
-      >
-        Tap a row to stage it · tap an already-staged row to tweak quantity ·
-        the bottom bar shows your running total.
       </div>
     </div>
   );
@@ -1576,16 +1568,6 @@ function AddFoodModal({ isOpen, onClose, mealType: initialMealType, date, onAdde
                   );
                 })()}
               </div>
-            </div>
-
-            <div
-              style={{
-                fontSize: 11,
-                color: 'var(--color-muted-foreground)',
-              }}
-            >
-              Tap a row to log the full meal — items get added to{' '}
-              {MEAL_LABELS[mealType]} immediately.
             </div>
           </div>
         )}

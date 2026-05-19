@@ -71,13 +71,11 @@ function buildMonthGrid(year: number, month: number): { date: Date; isCurrentMon
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
-type CalView = 'month' | 'week';
 
 export default function CalendarPage() {
   const todayDate = new Date();
   todayDate.setHours(0, 0, 0, 0);
 
-  const [view, setView] = useState<CalView>('month');
   const [currentMonth, setCurrentMonth] = useState(
     new Date(todayDate.getFullYear(), todayDate.getMonth(), 1)
   );
@@ -218,43 +216,6 @@ export default function CalendarPage() {
             }}
           >
             Your meals, weigh-ins, and movement at a glance.
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <div
-            style={{
-              display: 'flex',
-              background: 'var(--color-surface-warm)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 4,
-              padding: 2,
-            }}
-          >
-            {(['month', 'week'] as const).map((v) => (
-              <button
-                key={v}
-                onClick={() => setView(v)}
-                className="cursor-pointer"
-                style={{
-                  padding: '5px 12px',
-                  borderRadius: 3,
-                  fontSize: 12,
-                  fontWeight: 600,
-                  background:
-                    view === v ? 'var(--color-surface)' : 'transparent',
-                  color:
-                    view === v
-                      ? 'var(--color-foreground)'
-                      : 'var(--color-muted-foreground)',
-                  border: 0,
-                  fontFamily: 'inherit',
-                  textTransform: 'capitalize',
-                  boxShadow: view === v ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
-                }}
-              >
-                {v}
-              </button>
-            ))}
           </div>
         </div>
       </div>
