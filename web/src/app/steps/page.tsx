@@ -1440,6 +1440,7 @@ export default function StepsPage() {
           title="Last 14 days"
           icon={<List style={{ width: 14, height: 14, strokeWidth: 2.25 }} />}
         >
+          <div style={{ minHeight: 280, display: 'flex', flexDirection: 'column' }}>
           {loading ? (
             <div className="skeleton" style={{ height: 200, borderRadius: 8 }} />
           ) : recent.length === 0 ? (
@@ -1449,6 +1450,10 @@ export default function StepsPage() {
                 color: 'var(--color-muted-foreground)',
                 textAlign: 'center',
                 padding: '16px 0',
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
               }}
             >
               Nothing logged yet.
@@ -1517,6 +1522,7 @@ export default function StepsPage() {
               })}
             </ul>
           )}
+          </div>
         </CardShell>
       </div>
 

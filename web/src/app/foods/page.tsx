@@ -707,8 +707,15 @@ function FoodRow({
         transition: 'background 120ms',
       }}
     >
-      <td style={TD_STYLE}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <td style={{ ...TD_STYLE, overflow: 'hidden' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            minWidth: 0,
+          }}
+        >
           <span
             style={{
               width: 28,
@@ -726,7 +733,7 @@ function FoodRow({
               style={{ width: 13, height: 13, color: 'var(--color-muted-foreground)' }}
             />
           </span>
-          <div style={{ minWidth: 0 }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
             <div
               style={{
                 fontSize: 14,
@@ -743,6 +750,9 @@ function FoodRow({
                 fontSize: 11,
                 color: 'var(--color-muted-foreground)',
                 marginTop: 1,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
               }}
             >
               {unitLabel(food)}
@@ -786,15 +796,40 @@ const TH_STYLE: React.CSSProperties = {
 
 // ─── Detail panel (right column) ──────────────────────────────────────────────
 
+function defaultMealForNow(): MealType {
+  const h = new Date().getHours();
+  if (h < 11) return 'breakfast';
+  if (h < 15) return 'lunch';
+  if (h < 17) return 'snack';
+  return 'dinner';
+}
+
 function FoodDetail({
   food,
   onAddToJournal,
   onEdit,
+  onQuickLog,
 }: {
   food: Food | null;
   onAddToJournal: (food: Food) => void;
   onEdit: (food: Food) => void;
+  onQuickLog: (food: Food, servings: number) => Promise<void>;
 }) {
+  const [logging, setLogging] = useState<number | null>(null);
+  const [justLogged, setJustLogged] = useState<number | null>(null);
+
+  async function handleQuickServing(s: number) {
+    if (!food) return;
+    setLogging(s);
+    try {
+      await onQuickLog(food, s);
+      setJustLogged(s);
+      setTimeout(() => setJustLogged(null), 1400);
+    } finally {
+      setLogging(null);
+    }
+  }
+
   if (!food) {
     return (
       <div
@@ -909,41 +944,59 @@ function FoodDetail({
           paddingTop: 16,
         }}
       >
-        <MicroLabel style={{ marginBottom: 8 }}>Quick serving</MicroLabel>
+        <MicroLabel style={{ marginBottom: 8 }}>
+          Quick serving · logs to {MEAL_LABELS[defaultMealForNow()]}
+        </MicroLabel>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {[0.5, 1, 1.5, 2].map((s) => (
-            <button
-              key={s}
-              className="cursor-pointer"
-              style={{
-                padding: '6px 12px',
-                fontSize: 13,
-                fontWeight: 600,
-                background:
-                  s === 1 ? 'var(--color-primary)' : 'var(--color-surface-warm)',
-                color:
-                  s === 1
+          {[0.5, 1, 1.5, 2].map((s) => {
+            const isLogging = logging === s;
+            const isSuccess = justLogged === s;
+            return (
+              <button
+                key={s}
+                type="button"
+                onClick={() => handleQuickServing(s)}
+                disabled={logging !== null}
+                className="cursor-pointer"
+                style={{
+                  padding: '6px 12px',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  background: isSuccess
+                    ? 'var(--color-success)'
+                    : isLogging
+                    ? 'var(--color-primary)'
+                    : 'var(--color-surface-warm)',
+                  color: isSuccess || isLogging
                     ? 'var(--color-primary-foreground)'
                     : 'var(--color-foreground)',
-                border:
-                  '1px solid ' +
-                  (s === 1 ? 'var(--color-primary)' : 'var(--color-border)'),
-                borderRadius: 4,
-                fontFamily: 'inherit',
-              }}
-            >
-              {s}×{' '}
-              <span
-                style={{
-                  fontFamily: 'var(--font-mono)',
-                  opacity: 0.7,
-                  marginLeft: 4,
+                  border:
+                    '1px solid ' +
+                    (isSuccess
+                      ? 'var(--color-success)'
+                      : isLogging
+                      ? 'var(--color-primary)'
+                      : 'var(--color-border)'),
+                  borderRadius: 4,
+                  fontFamily: 'inherit',
+                  transition: 'background 160ms, border-color 160ms',
+                  opacity: logging !== null && !isLogging ? 0.5 : 1,
                 }}
               >
-                {Math.round(cal * s)}
-              </span>
-            </button>
-          ))}
+                {isSuccess ? '✓ ' : ''}
+                {s}×{' '}
+                <span
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    opacity: 0.7,
+                    marginLeft: 4,
+                  }}
+                >
+                  {Math.round(cal * s)}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -1285,7 +1338,14 @@ export default function FoodsPage() {
             ))}
           </div>
 
-          <div style={{ maxHeight: 640, overflowY: 'auto' }}>
+          <div
+            style={{
+              height: 'calc(100vh - 280px)',
+              minHeight: 480,
+              overflowY: 'auto',
+              overflowX: 'hidden',
+            }}
+          >
             {loading ? (
               <div style={{ padding: 16 }}>
                 {Array.from({ length: 6 }).map((_, i) => (
@@ -1312,7 +1372,19 @@ export default function FoodsPage() {
                 </EmptyState>
               </div>
             ) : (
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <table
+                style={{
+                  width: '100%',
+                  tableLayout: 'fixed',
+                  borderCollapse: 'collapse',
+                }}
+              >
+                <colgroup>
+                  <col />
+                  <col style={{ width: 70 }} />
+                  <col style={{ width: 80 }} />
+                  <col style={{ width: 90 }} />
+                </colgroup>
                 <thead
                   style={{
                     position: 'sticky',
@@ -1348,6 +1420,17 @@ export default function FoodsPage() {
           food={selectedFood}
           onAddToJournal={(f) => setJournalFood(f)}
           onEdit={(f) => handleEdit(f)}
+          onQuickLog={async (f, servings) => {
+            const today = new Date().toLocaleString('en-CA').split(',')[0];
+            await addJournalEntry({
+              date: today,
+              meal_type: defaultMealForNow(),
+              food_id: f.id,
+              food_name_snapshot: f.name,
+              quantity: servings,
+              unit: 'serving',
+            });
+          }}
         />
       </div>
 

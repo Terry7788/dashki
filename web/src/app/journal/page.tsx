@@ -253,7 +253,11 @@ interface AddFoodModalProps {
   onAdded: (entry: JournalEntry) => void;
 }
 
-function AddFoodModal({ isOpen, onClose, mealType, date, onAdded }: AddFoodModalProps) {
+function AddFoodModal({ isOpen, onClose, mealType: initialMealType, date, onAdded }: AddFoodModalProps) {
+  const [mealType, setMealType] = useState<MealType>(initialMealType);
+  useEffect(() => {
+    if (isOpen) setMealType(initialMealType);
+  }, [isOpen, initialMealType]);
   const [tab, setTab] = useState<'foods' | 'meals' | 'quick'>('foods');
   const [savedMeals, setSavedMeals] = useState<SavedMeal[]>([]);
   const [loadingMeals, setLoadingMeals] = useState(false);
@@ -380,12 +384,24 @@ function AddFoodModal({ isOpen, onClose, mealType, date, onAdded }: AddFoodModal
     }
   }
 
-  const tabClass = (t: typeof tab) =>
-    `flex-1 py-3 sm:py-3.5 px-2 text-sm sm:text-base font-medium rounded-xl transition-all duration-200 flex items-center justify-center gap-2 ${
-      tab === t
-        ? 'bg-white/[0.12] text-white border border-white/20 shadow-sm'
-        : 'text-white/55 hover:text-white hover:bg-white/[0.04] border border-transparent'
-    }`;
+  // Chip-row tab button — matches the design's foreground-inverted active state.
+  function chipStyle(active: boolean): React.CSSProperties {
+    return {
+      padding: '4px 12px',
+      borderRadius: 9999,
+      fontSize: 12,
+      fontWeight: 600,
+      background: active ? 'var(--color-foreground)' : 'var(--color-surface)',
+      color: active
+        ? 'var(--color-background)'
+        : 'var(--color-muted-foreground)',
+      border:
+        '1px solid ' +
+        (active ? 'var(--color-foreground)' : 'var(--color-border)'),
+      cursor: 'pointer',
+      fontFamily: 'inherit',
+    };
+  }
 
   // Selection summary for the sticky footer
   const footerTotals = selectedFoods.reduce(
@@ -409,63 +425,140 @@ function AddFoodModal({ isOpen, onClose, mealType, date, onAdded }: AddFoodModal
   const totalCalories = footerTotals.calories;
   const totalProtein = footerTotals.protein;
 
-  // Sticky bottom bar — only meaningful for the foods tab. Meals add inline
-  // on tap; quick-add has its own button. So footer is null for those tabs
-  // and the modal renders without the bottom band.
-  const footer = tab === 'foods' && selectedFoods.length > 0
-    ? (
-      <div className="flex items-center gap-3">
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-white tabular-nums">
-            {selectedFoods.length} selected · {Math.round(totalCalories)} kcal
-          </p>
-          <p className="text-xs text-white/50 tabular-nums">
-            {totalProtein.toFixed(1)}g protein
-          </p>
+  // Leading footer slot — running total when foods are selected.
+  const leadingFooter =
+    tab === 'foods' && selectedFoods.length > 0 ? (
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 13,
+            fontWeight: 600,
+            color: 'var(--color-foreground)',
+            fontFamily: 'var(--font-mono)',
+          }}
+        >
+          {selectedFoods.length} staged · {Math.round(totalCalories)} kcal
         </div>
+        <div
+          style={{
+            fontSize: 11,
+            color: 'var(--color-muted-foreground)',
+            fontFamily: 'var(--font-mono)',
+          }}
+        >
+          {totalProtein.toFixed(1)}g protein
+        </div>
+      </div>
+    ) : null;
+
+  const footerActions =
+    tab === 'foods' ? (
+      <>
+        <GlassButton variant="ghost" size="sm" onClick={onClose}>
+          Cancel
+        </GlassButton>
         <GlassButton
           variant="primary"
+          size="sm"
           onClick={handleAddSelectedFoods}
-          disabled={saving}
+          disabled={saving || selectedFoods.length === 0}
         >
-          {saving
-            ? 'Adding…'
-            : `Add to ${MEAL_LABELS[mealType]}`}
+          {saving ? 'Adding…' : `Add to ${MEAL_LABELS[mealType]}`}
         </GlassButton>
-      </div>
-    )
-    : null;
+      </>
+    ) : tab === 'quick' ? null : (
+      <GlassButton variant="ghost" size="sm" onClick={onClose}>
+        Cancel
+      </GlassButton>
+    );
+
+  // Subtitle uses Melbourne-friendly day label so the user always sees
+  // the destination day + meal.
+  const subtitle = `Logging to ${MEAL_LABELS[mealType]} · ${formatDateLabel(
+    new Date(date + 'T00:00:00')
+  )}`;
 
   return (
     <GlassModal
       isOpen={isOpen}
       onClose={onClose}
-      title={`Add to ${MEAL_LABELS[mealType]}`}
+      title="Add food"
+      subtitle={subtitle}
       size="lg"
       mobileFullscreen
-      // Floor the modal at ~80% of the viewport on tablet+ so it doesn't
-      // visibly shrink when search filters the food list down to a couple
-      // of rows. Mobile-fullscreen handles the same goal differently
-      // (forced height) — see GlassModal.
       minHeight="sm:min-h-[80vh]"
-      footer={footer}
+      footer={footerActions}
+      leadingFooter={leadingFooter}
+      headerTrailing={
+        <div style={{ display: 'flex', gap: 0, padding: 3, background: 'var(--color-surface-warm)', border: '1px solid var(--color-border)', borderRadius: 6 }}>
+          {MEAL_TYPES.map((m) => {
+            const active = m === mealType;
+            return (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMealType(m)}
+                className="cursor-pointer"
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: 4,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  background: active ? 'var(--color-surface)' : 'transparent',
+                  color: active
+                    ? 'var(--color-foreground)'
+                    : 'var(--color-muted-foreground)',
+                  border: 0,
+                  fontFamily: 'inherit',
+                  boxShadow: active ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                }}
+              >
+                {MEAL_LABELS[m]}
+              </button>
+            );
+          })}
+        </div>
+      }
     >
       <div className="space-y-4">
-        {/* Tabs — shorter labels so they don't crowd on narrow screens */}
-        <div className="flex gap-1.5 p-1.5 rounded-2xl bg-white/[0.04] border border-white/10">
-          <button className={tabClass('foods')} onClick={() => setTab('foods')}>
-            <span aria-hidden className="text-base">🍎</span> Foods
+        {/* Chip-row tabs matching the design */}
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button
+            type="button"
+            onClick={() => setTab('foods')}
+            style={chipStyle(tab === 'foods')}
+          >
+            Foods
           </button>
-          <button className={tabClass('meals')} onClick={() => setTab('meals')}>
-            <span aria-hidden className="text-base">🍽️</span> Meals
+          <button
+            type="button"
+            onClick={() => setTab('meals')}
+            style={chipStyle(tab === 'meals')}
+          >
+            Saved meals
           </button>
-          <button className={tabClass('quick')} onClick={() => setTab('quick')}>
-            <span aria-hidden className="text-base">⚡</span> Quick
+          <button
+            type="button"
+            onClick={() => setTab('quick')}
+            style={chipStyle(tab === 'quick')}
+          >
+            Quick add
           </button>
         </div>
 
         {error && (
-          <p className="text-sm text-red-400 bg-red-500/10 border border-red-400/20 rounded-xl px-3 py-2">{error}</p>
+          <p
+            style={{
+              fontSize: 13,
+              color: 'var(--color-critical)',
+              background: 'rgba(201,28,43,0.10)',
+              border: '1px solid rgba(201,28,43,0.25)',
+              padding: '8px 12px',
+              borderRadius: 4,
+            }}
+          >
+            {error}
+          </p>
         )}
 
         {tab === 'foods' && (

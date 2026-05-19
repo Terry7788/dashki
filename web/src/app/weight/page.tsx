@@ -233,11 +233,6 @@ function LogWeightModal({
   }
 
   const today = todayISO();
-  const yesterday = (() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 1);
-    return d.toLocaleString('en-CA').split(',')[0];
-  })();
 
   const kgNum = parseFloat(weight);
   const diff =
@@ -279,7 +274,16 @@ function LogWeightModal({
         </>
       }
     >
-      <div style={{ padding: 4 }}>
+      <div
+        style={{
+          padding: 4,
+          /* Lock total body height so toggling the date picker / showing
+             the diff hint doesn't shift the modal vertically. */
+          minHeight: 320,
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
         {/* Hero number input */}
         <div
           style={{
@@ -330,27 +334,36 @@ function LogWeightModal({
           </span>
         </div>
 
-        {/* Diff hint */}
-        {diff !== null && prevWeight != null && (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              fontSize: 12,
-              color: 'var(--color-muted-foreground)',
-              marginBottom: 16,
-            }}
-          >
-            <Pill tone={diff < 0 ? 'success' : diff > 0 ? 'warning' : 'neutral'} dot>
-              {diff > 0 ? '+' : ''}
-              {diff} kg
-            </Pill>
-            <span>
-              from previous ({prevWeight.toFixed(1)} kg)
+        {/* Diff hint row — reserve fixed height so the modal doesn't grow
+            when a value is entered. */}
+        <div
+          style={{
+            height: 24,
+            marginBottom: 16,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            fontSize: 12,
+            color: 'var(--color-muted-foreground)',
+          }}
+        >
+          {diff !== null && prevWeight != null ? (
+            <>
+              <Pill
+                tone={diff < 0 ? 'success' : diff > 0 ? 'warning' : 'neutral'}
+                dot
+              >
+                {diff > 0 ? '+' : ''}
+                {diff} kg
+              </Pill>
+              <span>from previous ({prevWeight.toFixed(1)} kg)</span>
+            </>
+          ) : (
+            <span style={{ color: 'var(--color-placeholder)' }}>
+              Type a weight to see the change from last log.
             </span>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Date adjust */}
         <div
@@ -364,97 +377,105 @@ function LogWeightModal({
           Date
         </div>
         <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-          {[
-            { label: 'Today', value: today },
-            { label: 'Yesterday', value: yesterday },
-          ].map((d) => {
-            const active = logDate === d.value;
-            return (
-              <button
-                key={d.value}
-                type="button"
-                onClick={() => {
-                  setLogDate(d.value);
-                  setPickerOpen(false);
-                }}
-                className="cursor-pointer"
-                style={{
-                  flex: 1,
-                  padding: '8px 12px',
-                  fontSize: 13,
-                  fontWeight: active ? 600 : 500,
-                  background: active
-                    ? 'var(--color-primary)'
-                    : 'var(--color-surface)',
-                  color: active
-                    ? 'var(--color-primary-foreground)'
-                    : 'var(--color-muted-foreground)',
-                  border: active ? '0' : '1px solid var(--color-border)',
-                  borderRadius: 6,
-                  fontFamily: 'inherit',
-                }}
-              >
-                {d.label}
-              </button>
-            );
-          })}
+          <button
+            type="button"
+            onClick={() => {
+              setLogDate(today);
+              setPickerOpen(false);
+            }}
+            className="cursor-pointer"
+            style={{
+              flex: 1,
+              padding: '8px 12px',
+              fontSize: 13,
+              fontWeight: logDate === today ? 600 : 500,
+              background:
+                logDate === today
+                  ? 'var(--color-primary)'
+                  : 'var(--color-surface)',
+              color:
+                logDate === today
+                  ? 'var(--color-primary-foreground)'
+                  : 'var(--color-muted-foreground)',
+              border: logDate === today ? '0' : '1px solid var(--color-border)',
+              borderRadius: 6,
+              fontFamily: 'inherit',
+            }}
+          >
+            Today
+          </button>
           <button
             type="button"
             onClick={() => setPickerOpen((o) => !o)}
             className="cursor-pointer"
             style={{
+              flex: 1,
               padding: '8px 12px',
               fontSize: 13,
               fontWeight: 500,
               background:
-                logDate !== today && logDate !== yesterday
+                logDate !== today
                   ? 'var(--color-primary)'
                   : 'var(--color-surface)',
               color:
-                logDate !== today && logDate !== yesterday
+                logDate !== today
                   ? 'var(--color-primary-foreground)'
                   : 'var(--color-muted-foreground)',
               border:
-                logDate !== today && logDate !== yesterday
-                  ? '0'
-                  : '1px solid var(--color-border)',
+                logDate !== today ? '0' : '1px solid var(--color-border)',
               borderRadius: 6,
               fontFamily: 'inherit',
               display: 'flex',
               alignItems: 'center',
-              gap: 4,
+              justifyContent: 'center',
+              gap: 6,
             }}
           >
             <CalendarIcon style={{ width: 12, height: 12, strokeWidth: 2 }} />
-            Pick
+            {logDate !== today
+              ? new Date(logDate + 'T00:00:00').toLocaleDateString('en-AU', {
+                  day: 'numeric',
+                  month: 'short',
+                })
+              : 'Pick a date'}
           </button>
         </div>
-        {pickerOpen && (
-          <input
-            type="date"
-            value={logDate}
-            max={today}
-            onChange={(e) => setLogDate(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '8px 12px',
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 4,
-              color: 'var(--color-foreground)',
-              fontFamily: 'inherit',
-              fontSize: 14,
-              marginBottom: 14,
-            }}
-            autoFocus
-          />
-        )}
+        {/* Date picker — overlay (absolutely positioned) so the modal body
+            height stays fixed whether it's open or closed. */}
+        <div style={{ position: 'relative', height: pickerOpen ? 46 : 0 }}>
+          {pickerOpen && (
+            <input
+              type="date"
+              value={logDate}
+              max={today}
+              onChange={(e) => setLogDate(e.target.value)}
+              style={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                top: 0,
+                padding: '8px 12px',
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 4,
+                color: 'var(--color-foreground)',
+                fontFamily: 'inherit',
+                fontSize: 14,
+              }}
+              autoFocus
+            />
+          )}
+        </div>
 
+        {/* Goal + streak — reserve enough space for the line whether
+            present or not. */}
         <div
           style={{
             fontSize: 11,
             color: 'var(--color-muted-foreground)',
             lineHeight: 1.5,
+            marginTop: pickerOpen ? 12 : 0,
+            minHeight: 32,
           }}
         >
           {goalWeight != null && (
@@ -481,6 +502,7 @@ function LogWeightModal({
           )}
         </div>
 
+        {/* Error row reserved (slim, only flashes on error) */}
         {error && (
           <p
             style={{
@@ -907,6 +929,7 @@ export default function WeightPage() {
           title="Recent entries"
           icon={<List style={{ width: 14, height: 14, strokeWidth: 2.25 }} />}
         >
+          <div style={{ minHeight: 280, display: 'flex', flexDirection: 'column' }}>
           {loading ? (
             <div
               className="skeleton"
@@ -919,6 +942,10 @@ export default function WeightPage() {
                 color: 'var(--color-muted-foreground)',
                 textAlign: 'center',
                 padding: '16px 0',
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
               }}
             >
               Nothing logged yet.
@@ -1004,6 +1031,7 @@ export default function WeightPage() {
               })}
             </ul>
           )}
+          </div>
         </CardShell>
       </div>
 

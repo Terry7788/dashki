@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   Plus,
   Scale,
   Footprints,
   Utensils,
   Calendar as CalendarIcon,
+  Search,
 } from 'lucide-react';
 import {
   GlassCard,
@@ -28,6 +29,7 @@ import {
   getSteps,
   getWeightEntries,
   addWeightEntry,
+  addJournalEntry,
   createStepLog,
   getGoals,
   getPreferences,
@@ -40,7 +42,20 @@ import type {
   Goals,
   JournalEntry,
   MealType,
+  Food,
+  Unit,
 } from '@/lib/types';
+
+const BASE_URL =
+  (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000').replace(/\/$/, '');
+
+function defaultMealForNow(): MealType {
+  const h = new Date().getHours();
+  if (h < 11) return 'breakfast';
+  if (h < 15) return 'lunch';
+  if (h < 17) return 'snack';
+  return 'dinner';
+}
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -904,8 +919,46 @@ function WeekVariant({
   weekSteps: { date: string; steps: number }[];
   goals: Goals;
 }) {
-  const entries = summary?.entries ?? [];
+  const todayEntries = summary?.entries ?? [];
   const today = todayISO();
+
+  // Selected day — drives the right-column panel. Default = today.
+  const [selectedDate, setSelectedDate] = useState<string>(today);
+
+  // Reset selection when the week-window changes underneath us
+  // (e.g. after socket-driven refetch).
+  useEffect(() => {
+    if (!weekJournal.find((d) => d.date === selectedDate)) {
+      setSelectedDate(today);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekJournal, today]);
+
+  // Per-day journal entries (fetched on demand for non-today days).
+  const [dayEntries, setDayEntries] = useState<JournalEntry[]>([]);
+  const [dayLoading, setDayLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (selectedDate === today) {
+      setDayEntries(todayEntries);
+      return;
+    }
+    setDayLoading(true);
+    getJournalEntries({ date: selectedDate })
+      .then((arr) => {
+        if (!cancelled) setDayEntries(arr);
+      })
+      .catch(() => {
+        if (!cancelled) setDayEntries([]);
+      })
+      .finally(() => {
+        if (!cancelled) setDayLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDate, today, todayEntries]);
 
   // 7-day average (excludes today's partial)
   const avg7 = useMemo(() => {
@@ -913,6 +966,13 @@ function WeekVariant({
     if (past.length === 0) return null;
     return Math.round(past.reduce((a, d) => a + d.cal, 0) / past.length);
   }, [weekJournal]);
+
+  // Stats for the currently selected day
+  const selectedJournal = weekJournal.find((d) => d.date === selectedDate);
+  const selectedSteps = weekSteps.find((d) => d.date === selectedDate);
+  const selectedCal = selectedJournal?.cal ?? 0;
+  const selectedProtein = selectedJournal?.protein ?? 0;
+  const selectedStepCount = selectedSteps?.steps ?? 0;
 
   // Weight: most-recent (60d limit) — show last 30 in sparkline
   const weight30 = useMemo(() => {
@@ -983,7 +1043,9 @@ function WeekVariant({
                   key={d.date}
                   day={d}
                   isToday={d.date === today}
+                  isSelected={d.date === selectedDate}
                   goal={goals.calories}
+                  onSelect={() => setSelectedDate(d.date)}
                 />
               ))}
             </div>
@@ -1036,152 +1098,176 @@ function WeekVariant({
         className="week-grid"
       >
         <CardShell
-          title="Today"
+          title={
+            selectedDate === today
+              ? 'Today'
+              : new Date(selectedDate + 'T00:00:00').toLocaleDateString(
+                  'en-AU',
+                  { weekday: 'long', day: 'numeric', month: 'short' }
+                )
+          }
           icon={<Utensils style={{ width: 14, height: 14, strokeWidth: 2.25 }} />}
           hint={
             <Pill tone="medium">
               {goals.calories
-                ? `${Math.round((calories / goals.calories) * 100)}% to goal`
+                ? `${Math.round((selectedCal / goals.calories) * 100)}% to goal`
                 : ''}
             </Pill>
           }
         >
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr 1fr',
-              gap: 14,
-            }}
-          >
-            <BigTile
-              label="Calories"
-              value={calories}
-              target={goals.calories}
-              unit=" kcal"
-            />
-            <BigTile
-              label="Protein"
-              value={protein}
-              target={goals.protein}
-              unit=" g"
-            />
-            <BigTile
-              label="Steps"
-              value={todaySteps}
-              target={goals.steps}
-              unit=""
-            />
-          </div>
-
-          {loading ? (
-            <div
-              className="skeleton"
-              style={{ height: 120, borderRadius: 8, marginTop: 16 }}
-            />
-          ) : entries.length === 0 ? (
+          {/* Fixed-height inner body so the card doesn't shrink when there's
+              no data for a different day. */}
+          <div style={{ minHeight: 320, display: 'flex', flexDirection: 'column' }}>
             <div
               style={{
-                background: 'var(--color-surface-warm)',
-                border: '1px dashed var(--color-border)',
-                borderRadius: 12,
-                padding: '20px 16px',
-                textAlign: 'center',
-                color: 'var(--color-muted-foreground)',
-                fontSize: 13,
-                marginTop: 16,
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr 1fr',
+                gap: 14,
               }}
             >
-              No food logged yet today.{' '}
-              <a href="/journal" style={{ color: 'var(--color-link)' }}>
-                Log a meal.
-              </a>
+              <BigTile
+                label="Calories"
+                value={Math.round(selectedCal)}
+                target={goals.calories}
+                unit=" kcal"
+              />
+              <BigTile
+                label="Protein"
+                value={Math.round(selectedProtein)}
+                target={goals.protein}
+                unit=" g"
+              />
+              <BigTile
+                label="Steps"
+                value={selectedStepCount}
+                target={goals.steps}
+                unit=""
+              />
             </div>
-          ) : (
-            <div
-              style={{
-                marginTop: 16,
-                display: 'flex',
-                flexDirection: 'column',
-              }}
-            >
-              {entries.slice(0, 10).map((e) => (
-                <div
-                  key={e.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    fontSize: 13,
-                    padding: '6px 0',
-                    borderBottom: '1px solid var(--color-border)',
-                  }}
+
+            {loading || dayLoading ? (
+              <div
+                className="skeleton"
+                style={{ flex: 1, minHeight: 140, borderRadius: 8, marginTop: 16 }}
+              />
+            ) : dayEntries.length === 0 ? (
+              <div
+                style={{
+                  background: 'var(--color-surface-warm)',
+                  border: '1px dashed var(--color-border)',
+                  borderRadius: 12,
+                  padding: '20px 16px',
+                  textAlign: 'center',
+                  color: 'var(--color-muted-foreground)',
+                  fontSize: 13,
+                  marginTop: 16,
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                {selectedDate === today
+                  ? 'No food logged yet today.'
+                  : 'Nothing logged on this day.'}{' '}
+                <a
+                  href="/journal"
+                  style={{ color: 'var(--color-link)', marginLeft: 4 }}
                 >
-                  <span
+                  Open journal
+                </a>
+              </div>
+            ) : (
+              <div
+                style={{
+                  marginTop: 16,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  flex: 1,
+                }}
+              >
+                {dayEntries.slice(0, 10).map((e) => (
+                  <div
+                    key={e.id}
                     style={{
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 11,
-                      color: 'var(--color-muted-foreground)',
-                      width: 38,
-                    }}
-                  >
-                    {(e.logged_at || '').slice(11, 16)}
-                  </span>
-                  <Pill
-                    tone={
-                      e.meal_type === 'breakfast'
-                        ? 'warning'
-                        : e.meal_type === 'lunch'
-                        ? 'success'
-                        : e.meal_type === 'snack'
-                        ? 'teal'
-                        : 'primary'
-                    }
-                    upper
-                  >
-                    {e.meal_type}
-                  </Pill>
-                  <span
-                    style={{
-                      flex: 1,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {e.food_name_snapshot}
-                  </span>
-                  <span
-                    style={{
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 11,
-                      color: 'var(--color-muted-foreground)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      fontSize: 13,
+                      padding: '6px 0',
+                      borderBottom: '1px solid var(--color-border)',
                     }}
                   >
                     <span
                       style={{
-                        color: 'var(--color-foreground)',
-                        fontWeight: 600,
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 11,
+                        color: 'var(--color-muted-foreground)',
+                        width: 38,
                       }}
                     >
-                      {Math.round(e.calories_snapshot)}
-                    </span>{' '}
-                    kcal
-                  </span>
-                </div>
-              ))}
-              {entries.length > 10 && (
-                <div
-                  style={{
-                    fontSize: 11,
-                    color: 'var(--color-muted-foreground)',
-                    marginTop: 6,
-                  }}
-                >
-                  +{entries.length - 10} more · <a href="/journal" style={{ color: 'var(--color-link)' }}>open journal</a>
-                </div>
-              )}
-            </div>
-          )}
+                      {(e.logged_at || '').slice(11, 16)}
+                    </span>
+                    <Pill
+                      tone={
+                        e.meal_type === 'breakfast'
+                          ? 'warning'
+                          : e.meal_type === 'lunch'
+                          ? 'success'
+                          : e.meal_type === 'snack'
+                          ? 'teal'
+                          : 'primary'
+                      }
+                      upper
+                    >
+                      {e.meal_type}
+                    </Pill>
+                    <span
+                      style={{
+                        flex: 1,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {e.food_name_snapshot}
+                    </span>
+                    <span
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 11,
+                        color: 'var(--color-muted-foreground)',
+                      }}
+                    >
+                      <span
+                        style={{
+                          color: 'var(--color-foreground)',
+                          fontWeight: 600,
+                        }}
+                      >
+                        {Math.round(e.calories_snapshot)}
+                      </span>{' '}
+                      kcal
+                    </span>
+                  </div>
+                ))}
+                {dayEntries.length > 10 && (
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: 'var(--color-muted-foreground)',
+                      marginTop: 6,
+                    }}
+                  >
+                    +{dayEntries.length - 10} more ·{' '}
+                    <a href="/journal" style={{ color: 'var(--color-link)' }}>
+                      open journal
+                    </a>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </CardShell>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -1246,43 +1332,7 @@ function WeekVariant({
             )}
           </GlassCard>
 
-          <CardShell
-            title="Quick links"
-            icon={
-              <CalendarIcon
-                style={{ width: 14, height: 14, strokeWidth: 2.25 }}
-              />
-            }
-          >
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 8,
-              }}
-            >
-              {[
-                { label: 'Open journal', href: '/journal' },
-                { label: 'Foods database', href: '/foods' },
-                { label: 'Saved meals', href: '/meals' },
-                { label: 'Weight history', href: '/weight' },
-              ].map((l) => (
-                <a
-                  key={l.href}
-                  href={l.href}
-                  style={{
-                    fontSize: 13,
-                    color: 'var(--color-link)',
-                    textDecoration: 'none',
-                    padding: '4px 0',
-                    borderBottom: '1px solid var(--color-border)',
-                  }}
-                >
-                  {l.label}
-                </a>
-              ))}
-            </div>
-          </CardShell>
+          <QuickAddFoodPanel />
         </div>
       </div>
 
@@ -1297,39 +1347,257 @@ function WeekVariant({
   );
 }
 
+// ─── Quick add food panel (shared on the dashboard's side rail) ──────────────
+
+function QuickAddFoodPanel() {
+  const [q, setQ] = useState('');
+  const [foods, setFoods] = useState<Food[]>([]);
+  const [adding, setAdding] = useState<number | null>(null);
+  const [justAdded, setJustAdded] = useState<number | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const url = q.trim()
+          ? BASE_URL + '/api/foods?search=' + encodeURIComponent(q.trim())
+          : BASE_URL + '/api/foods';
+        const res = await fetch(url);
+        if (res.ok) setFoods((await res.json()) as Food[]);
+      } catch {
+        /* ignore */
+      }
+    }, 250);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [q]);
+
+  async function addOne(food: Food) {
+    setAdding(food.id);
+    try {
+      const units = food.units ?? [
+        { unit: 'serving' as Unit, label: 'serving', default: true },
+      ];
+      const def = units.find((u) => u.default) ?? units[0];
+      const startQty =
+        def.unit === 'serving'
+          ? 1
+          : (food.base_amount ?? food.baseAmount ?? 100);
+      const today = new Date().toLocaleString('en-CA').split(',')[0];
+      await addJournalEntry({
+        date: today,
+        meal_type: defaultMealForNow(),
+        food_id: food.id,
+        food_name_snapshot: food.name,
+        quantity: startQty,
+        unit: def.unit,
+      });
+      setJustAdded(food.id);
+      setTimeout(() => setJustAdded(null), 1400);
+    } catch {
+      /* swallow */
+    } finally {
+      setAdding(null);
+    }
+  }
+
+  const visible = foods.slice(0, 6);
+  const mealLabel = {
+    breakfast: 'Breakfast',
+    lunch: 'Lunch',
+    snack: 'Snack',
+    dinner: 'Dinner',
+  }[defaultMealForNow()];
+
+  return (
+    <CardShell
+      title="Quick add"
+      icon={<Search style={{ width: 14, height: 14, strokeWidth: 2.25 }} />}
+      hint={
+        <span style={{ fontSize: 11, color: 'var(--color-muted-foreground)' }}>
+          → {mealLabel}
+        </span>
+      }
+    >
+      <div style={{ minHeight: 280, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ position: 'relative', marginBottom: 10 }}>
+          <Search
+            style={{
+              position: 'absolute',
+              left: 10,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              width: 14,
+              height: 14,
+              color: 'var(--color-placeholder)',
+            }}
+          />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Find a food…"
+            style={{
+              width: '100%',
+              padding: '8px 10px 8px 32px',
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 4,
+              color: 'var(--color-foreground)',
+              fontFamily: 'inherit',
+              fontSize: 14,
+            }}
+          />
+        </div>
+        <ul
+          style={{
+            listStyle: 'none',
+            padding: 0,
+            margin: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+            flex: 1,
+          }}
+        >
+          {visible.length === 0 ? (
+            <li
+              style={{
+                fontSize: 12,
+                color: 'var(--color-muted-foreground)',
+                textAlign: 'center',
+                padding: '12px 0',
+              }}
+            >
+              {q.trim() ? 'No foods match.' : 'Loading…'}
+            </li>
+          ) : (
+            visible.map((f) => {
+              const cal = f.calories ?? f.calories_per_100g ?? 0;
+              const isAdding = adding === f.id;
+              const isAdded = justAdded === f.id;
+              return (
+                <li
+                  key={f.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '6px 8px',
+                    borderRadius: 4,
+                    fontSize: 13,
+                  }}
+                >
+                  <span
+                    style={{
+                      flex: 1,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {f.name}
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 11,
+                      color: 'var(--color-muted-foreground)',
+                    }}
+                  >
+                    {cal} kcal
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => addOne(f)}
+                    disabled={adding !== null}
+                    className="cursor-pointer"
+                    style={{
+                      background: isAdded
+                        ? 'var(--color-success)'
+                        : 'var(--color-soft)',
+                      border: 0,
+                      borderRadius: 4,
+                      padding: '3px 6px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      color: isAdded
+                        ? 'var(--color-primary-foreground)'
+                        : 'var(--color-foreground)',
+                      opacity: isAdding ? 0.5 : 1,
+                      transition: 'background 160ms',
+                    }}
+                    aria-label={isAdded ? 'Added' : 'Add to journal'}
+                  >
+                    {isAdded ? (
+                      <span style={{ fontSize: 11, fontWeight: 700 }}>✓</span>
+                    ) : (
+                      <Plus
+                        style={{ width: 12, height: 12, strokeWidth: 2.25 }}
+                      />
+                    )}
+                  </button>
+                </li>
+              );
+            })
+          )}
+        </ul>
+      </div>
+    </CardShell>
+  );
+}
+
 // ─── DayStack — vertical bar showing one day's calorie load vs goal ──────────
 
 function DayStack({
   day,
   isToday,
+  isSelected,
   goal,
+  onSelect,
 }: {
   day: { date: string; cal: number; protein: number; partial?: boolean };
   isToday: boolean;
+  isSelected: boolean;
   goal: number;
+  onSelect: () => void;
 }) {
   const pct = goal > 0 ? Math.min(1, day.cal / goal) : 0;
   const d = new Date(day.date + 'T00:00:00');
-  const fill =
-    day.partial
-      ? 'var(--color-warning)'
-      : pct >= 0.95
-      ? 'var(--color-success)'
-      : 'var(--color-primary)';
+  const fill = day.partial
+    ? 'var(--color-warning)'
+    : pct >= 0.95
+    ? 'var(--color-success)'
+    : 'var(--color-primary)';
+  const borderColor = isSelected
+    ? 'var(--color-primary)'
+    : isToday
+    ? 'var(--color-primary)'
+    : 'var(--color-border)';
   return (
-    <div
+    <button
+      type="button"
+      onClick={onSelect}
+      className="cursor-pointer"
       style={{
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         gap: 6,
+        background: 'transparent',
+        border: 0,
+        padding: 0,
+        fontFamily: 'inherit',
       }}
     >
       <div
         style={{
           fontSize: 11,
-          color: 'var(--color-muted-foreground)',
-          fontWeight: isToday ? 700 : 500,
+          color: isSelected
+            ? 'var(--color-primary)'
+            : 'var(--color-muted-foreground)',
+          fontWeight: isToday || isSelected ? 700 : 500,
         }}
       >
         {d.toLocaleDateString('en-AU', { weekday: 'short' })}
@@ -1340,11 +1608,15 @@ function DayStack({
           width: '100%',
           height: 120,
           borderRadius: 8,
-          background: 'var(--color-surface-warm)',
+          background: isSelected
+            ? 'var(--color-badge-bg)'
+            : 'var(--color-surface-warm)',
           overflow: 'hidden',
-          border: isToday
-            ? '1px solid var(--color-primary)'
-            : '1px solid var(--color-border)',
+          border: '1px solid ' + borderColor,
+          boxShadow: isSelected
+            ? '0 0 0 1px var(--color-primary)'
+            : 'none',
+          transition: 'background 120ms, box-shadow 120ms',
         }}
       >
         <div
@@ -1359,7 +1631,6 @@ function DayStack({
             transition: 'height 240ms ease-out',
           }}
         />
-        {/* Dashed goal line at the top edge */}
         <div
           style={{
             position: 'absolute',
@@ -1376,7 +1647,10 @@ function DayStack({
           fontFamily: 'var(--font-mono)',
           fontSize: 11,
           fontWeight: 600,
-          color: isToday ? 'var(--color-primary)' : 'var(--color-foreground)',
+          color:
+            isToday || isSelected
+              ? 'var(--color-primary)'
+              : 'var(--color-foreground)',
         }}
       >
         {day.cal === 0 ? '—' : (day.cal / 1000).toFixed(1) + 'k'}
@@ -1390,7 +1664,7 @@ function DayStack({
       >
         {day.protein > 0 ? `${Math.round(day.protein)}g` : ''}
       </div>
-    </div>
+    </button>
   );
 }
 
