@@ -286,7 +286,7 @@ export default function DashboardPage() {
       }}
     >
       <GreetingHeader
-        name={displayName ?? 'there'}
+        name={displayName ?? 'Terry'}
         onLogFood={() => {
           /* journal page handles food entry */
           window.location.href = '/journal';
