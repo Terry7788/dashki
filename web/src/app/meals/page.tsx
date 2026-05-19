@@ -11,10 +11,12 @@ import {
   MicroLabel,
   MonoNum,
   EmptyState,
+  Stepper,
 } from '@/components/ui';
 import { getSavedMeals, createSavedMeal, updateSavedMeal, deleteSavedMeal, addJournalEntry } from '@/lib/api';
 import type { SavedMeal, Food, MealType, Unit } from '@/lib/types';
 import { useSocketEvent } from '@/lib/useSocketEvent';
+import { useIsNarrow } from '@/lib/useIsNarrow';
 import { QuantityInput } from '@/components/QuantityInput';
 import { nutritionFor, formatQuantity } from '@/lib/nutrition';
 
@@ -307,80 +309,268 @@ function CreateMealModal({ isOpen, onClose, onCreated, editingMeal }: CreateMeal
     }
   }
 
-  const modalTitle = editingMeal ? 'Edit Saved Meal' : 'Create Saved Meal';
-  const buttonText = editingMeal ? 'Save Changes' : 'Create Meal';
+  const modalTitle = editingMeal ? 'Edit meal' : 'New meal';
+  const subtitle =
+    items.length > 0
+      ? `${items.length} ${items.length === 1 ? 'item' : 'items'} · template`
+      : 'Template';
+  const buttonText = editingMeal ? 'Save changes' : 'Save meal';
 
   return (
-    <GlassModal isOpen={isOpen} onClose={onClose} title={modalTitle} size="xl">
-      <div className="space-y-4">
-        <GlassInput
-          label="Meal Name *"
-          placeholder="e.g. Protein Breakfast"
-          value={name}
-          onChange={(e) => { setName(e.target.value); setNameError(''); }}
-        />
-        {nameError && <p className="text-xs text-red-400 -mt-2 pl-1">{nameError}</p>}
-
-        <GlassInput
-          label="Description (optional)"
-          placeholder="Short note about this meal"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
-
-        {/* Totals */}
-        {items.length > 0 && (
-          <div className="flex gap-4 px-4 py-3 rounded-2xl bg-white/5 border border-white/10">
-            <div className="text-center flex-1">
-              <p className="text-xs text-white/40">Calories</p>
-              <p className="font-bold text-white">{Math.round(totals.calories)}</p>
+    <GlassModal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={modalTitle}
+      subtitle={subtitle}
+      size="xl"
+      mobileFullscreen
+      minHeight="sm:min-h-[80vh]"
+      leadingFooter={
+        items.length > 0 ? (
+          <div style={{ display: 'flex', gap: 16, alignItems: 'baseline' }}>
+            <div>
+              <div
+                style={{
+                  fontSize: 9,
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.06em',
+                  color: 'var(--color-muted-foreground)',
+                }}
+              >
+                Total
+              </div>
+              <MonoNum size={16}>
+                {Math.round(totals.calories)}
+                <span
+                  style={{
+                    fontSize: 11,
+                    color: 'var(--color-muted-foreground)',
+                    marginLeft: 2,
+                  }}
+                >
+                  kcal
+                </span>
+              </MonoNum>
             </div>
-            <div className="w-px bg-white/10" />
-            <div className="text-center flex-1">
-              <p className="text-xs text-white/40">Protein</p>
-              <p className="font-bold text-white">{Math.round(totals.protein * 10) / 10}g</p>
+            <div>
+              <div
+                style={{
+                  fontSize: 9,
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.06em',
+                  color: 'var(--color-muted-foreground)',
+                }}
+              >
+                Protein
+              </div>
+              <MonoNum size={16}>
+                {Math.round(totals.protein)}
+                <span
+                  style={{
+                    fontSize: 11,
+                    color: 'var(--color-muted-foreground)',
+                    marginLeft: 2,
+                  }}
+                >
+                  g
+                </span>
+              </MonoNum>
             </div>
           </div>
-        )}
+        ) : null
+      }
+      footer={
+        <>
+          <GlassButton variant="ghost" size="sm" onClick={onClose}>
+            Cancel
+          </GlassButton>
+          <GlassButton
+            variant="primary"
+            size="sm"
+            onClick={handleSave}
+            disabled={saving || items.length === 0}
+          >
+            {saving ? 'Saving…' : buttonText}
+          </GlassButton>
+        </>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* Name + description */}
+        <div>
+          <FieldLabel>Name</FieldLabel>
+          <input
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value);
+              setNameError('');
+            }}
+            placeholder="e.g. Protein breakfast"
+            style={{
+              width: '100%',
+              padding: '8px 10px',
+              fontSize: 14,
+              background: 'var(--color-surface)',
+              border:
+                '1px solid ' +
+                (nameError
+                  ? 'var(--color-critical)'
+                  : 'var(--color-border)'),
+              borderRadius: 4,
+              color: 'var(--color-foreground)',
+              fontFamily: 'inherit',
+            }}
+          />
+          {nameError && (
+            <div
+              style={{
+                fontSize: 11,
+                color: 'var(--color-critical)',
+                marginTop: 4,
+                paddingLeft: 2,
+              }}
+            >
+              {nameError}
+            </div>
+          )}
+        </div>
+        <div>
+          <FieldLabel>Description (optional)</FieldLabel>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Short note about this meal"
+            rows={1}
+            style={{
+              width: '100%',
+              padding: '8px 10px',
+              fontSize: 13,
+              resize: 'vertical',
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 4,
+              color: 'var(--color-foreground)',
+              fontFamily: 'inherit',
+            }}
+          />
+        </div>
 
-        {/* Two-column layout on larger screens */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left: Added foods list */}
-          <div>
-            <p className="text-sm font-medium text-white/60 pl-1 mb-2">Added Foods ({items.length})</p>
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex-1 overflow-y-auto space-y-2 min-h-0">
-              {items.length === 0 ? (
-                <p className="text-white/40 text-sm text-center py-8">No foods added yet</p>
-              ) : (
-                items.map(({ food, quantity, unit }) => {
-                  const { calories, protein } = calcItemNutrition(food, quantity, unit);
+        {/* Two-column body: items list (left) + food picker (right) */}
+        <div
+          className="create-meal-grid"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+            gap: 16,
+          }}
+        >
+          {/* Items list */}
+          <div style={{ minWidth: 0 }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'baseline',
+                marginBottom: 8,
+              }}
+            >
+              <FieldLabel>Items ({items.length})</FieldLabel>
+            </div>
+            {items.length === 0 ? (
+              <EmptyState>No items yet — pick foods on the right.</EmptyState>
+            ) : (
+              <ul
+                style={{
+                  listStyle: 'none',
+                  padding: 0,
+                  margin: 0,
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 6,
+                  overflow: 'hidden',
+                  background: 'var(--color-surface)',
+                }}
+              >
+                {items.map(({ food, quantity, unit }) => {
+                  const { calories } = calcItemNutrition(food, quantity, unit);
                   return (
-                    <div
+                    <li
                       key={food.id}
-                      className="flex items-center gap-3 px-4 py-3 rounded-xl bg-indigo-500/10 border border-indigo-400/20"
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns:
+                          'minmax(0, 1fr) auto auto auto',
+                        alignItems: 'center',
+                        gap: 10,
+                        padding: '8px 10px',
+                        borderBottom: '1px solid var(--color-border)',
+                      }}
                     >
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-white truncate">{food.name}</p>
-                        <p className="text-xs text-white/50">
-                          {formatQuantity(quantity, unit)} · {calories} kcal · {protein}g pro
-                        </p>
+                      <div style={{ minWidth: 0 }}>
+                        <div
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 500,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {food.name}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 11,
+                            color: 'var(--color-muted-foreground)',
+                            marginTop: 1,
+                          }}
+                        >
+                          {formatQuantity(quantity, unit)}
+                        </div>
                       </div>
-                      <button
-                        onClick={() => handleRemove(food.id)}
-                        className="p-1.5 rounded-lg text-white/30 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                      <Stepper
+                        value={quantity}
+                        onChange={(q) => handleUpdate(food.id, q, unit)}
+                        suffix={unit === 'serving' ? '×' : ''}
+                      />
+                      <span
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 12,
+                          fontWeight: 600,
+                          minWidth: 56,
+                          textAlign: 'right',
+                        }}
                       >
-                        <Trash2 className="w-4 h-4" />
+                        {Math.round(calories)} kcal
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemove(food.id)}
+                        className="cursor-pointer"
+                        style={{
+                          background: 'transparent',
+                          border: 0,
+                          color: 'var(--color-muted-foreground)',
+                          padding: 4,
+                          borderRadius: 4,
+                          display: 'inline-flex',
+                        }}
+                        aria-label="Remove"
+                      >
+                        <X style={{ width: 13, height: 13, strokeWidth: 2 }} />
                       </button>
-                    </div>
+                    </li>
                   );
-                })
-              )}
-            </div>
+                })}
+              </ul>
+            )}
           </div>
 
-          {/* Right: Search and add foods */}
-          <div>
-            <p className="text-sm font-medium text-white/60 pl-1 mb-2">Search & Add Foods</p>
+          {/* Search + picker */}
+          <div style={{ minWidth: 0 }}>
+            <FieldLabel>Add food</FieldLabel>
             <FoodPickerForMeal
               items={items}
               onAdd={handleAddFood}
@@ -391,17 +581,45 @@ function CreateMealModal({ isOpen, onClose, onCreated, editingMeal }: CreateMeal
         </div>
 
         {error && (
-          <p className="text-sm text-red-400 bg-red-500/10 border border-red-400/20 rounded-xl px-3 py-2">{error}</p>
+          <p
+            style={{
+              fontSize: 13,
+              color: 'var(--color-critical)',
+              background: 'rgba(201,28,43,0.10)',
+              border: '1px solid rgba(201,28,43,0.25)',
+              padding: '8px 12px',
+              borderRadius: 4,
+            }}
+          >
+            {error}
+          </p>
         )}
 
-        <div className="flex gap-3 pt-1">
-          <GlassButton variant="default" className="flex-1" onClick={onClose}>Cancel</GlassButton>
-          <GlassButton variant="primary" className="flex-1" onClick={handleSave} disabled={saving || items.length === 0}>
-            {saving ? 'Saving…' : buttonText}
-          </GlassButton>
-        </div>
+        <style jsx>{`
+          @media (max-width: 720px) {
+            :global(.create-meal-grid) {
+              grid-template-columns: minmax(0, 1fr) !important;
+            }
+          }
+        `}</style>
       </div>
     </GlassModal>
+  );
+}
+
+// Small label helper to match the design's FieldLabel pattern.
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        fontSize: 11,
+        fontWeight: 600,
+        color: 'var(--color-muted-foreground)',
+        marginBottom: 6,
+      }}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -546,18 +764,20 @@ function DeleteMealModal({ isOpen, onClose, meal, onDeleted }: DeleteMealModalPr
     </GlassModal>
   );
 }
-// ─── Meal card (design-faithful: name + items + cal/protein + Log button) ─────
+// ─── Meal row (table style, matches Foods database) ─────────────────────────
 
-function MealCard({
+function MealRow({
   meal,
   selected,
   onSelect,
-  onAddToJournal,
+  onLog,
+  showProtein = true,
 }: {
   meal: SavedMeal;
   selected: boolean;
   onSelect: () => void;
-  onAddToJournal: (meal: SavedMeal) => void;
+  onLog: (meal: SavedMeal) => void;
+  showProtein?: boolean;
 }) {
   const [hover, setHover] = useState(false);
   const items = meal.items ?? [];
@@ -581,168 +801,107 @@ function MealCard({
   );
 
   return (
-    <div
+    <tr
       onClick={onSelect}
       onPointerEnter={() => setHover(true)}
       onPointerLeave={() => setHover(false)}
       style={{
-        background: 'var(--color-surface)',
-        border: selected
-          ? '1px solid var(--color-primary)'
-          : '1px solid var(--color-border)',
-        boxShadow: selected
-          ? '0 0 0 1px var(--color-primary), var(--shadow-card)'
-          : 'var(--shadow-card)',
-        borderRadius: 12,
-        padding: 18,
         cursor: 'pointer',
-        transition: 'border-color 120ms, box-shadow 120ms',
-        opacity: hover && !selected ? 0.95 : 1,
+        background: selected
+          ? 'var(--color-badge-bg)'
+          : hover
+          ? 'var(--color-surface-warm)'
+          : 'transparent',
+        transition: 'background 120ms',
       }}
     >
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          justifyContent: 'space-between',
-          gap: 10,
-          marginBottom: 8,
-        }}
-      >
-        <h3
-          style={{
-            margin: 0,
-            fontSize: 15,
-            fontWeight: 700,
-            letterSpacing: '-0.2px',
-            color: 'var(--color-foreground)',
-          }}
-        >
-          {meal.name}
-        </h3>
-        <Pill tone="medium">
-          {items.length} {items.length === 1 ? 'item' : 'items'}
-        </Pill>
-      </div>
-      {meal.description && (
-        <div
-          style={{
-            fontSize: 12,
-            color: 'var(--color-muted-foreground)',
-            marginBottom: 12,
-            lineHeight: 1.4,
-          }}
-        >
-          {meal.description}
+      <td style={{ ...TD_STYLE, overflow: 'hidden' }}>
+        <div style={{ minWidth: 0 }}>
+          <div
+            style={{
+              fontSize: 14,
+              fontWeight: 500,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {meal.name}
+          </div>
+          <div
+            style={{
+              fontSize: 11,
+              color: 'var(--color-muted-foreground)',
+              marginTop: 1,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {items.length} {items.length === 1 ? 'item' : 'items'}
+            {meal.description ? ' · ' + meal.description : ''}
+          </div>
         </div>
+      </td>
+      <td style={{ ...TD_STYLE, textAlign: 'right' }}>
+        <MonoNum size={14}>{Math.round(totals.calories)}</MonoNum>
+        <span style={{ fontSize: 11, color: 'var(--color-muted-foreground)', marginLeft: 2 }}>
+          kcal
+        </span>
+      </td>
+      {showProtein && (
+        <td style={{ ...TD_STYLE, textAlign: 'right' }}>
+          <MonoNum size={14}>{Math.round(totals.protein)}</MonoNum>
+          <span style={{ fontSize: 11, color: 'var(--color-muted-foreground)', marginLeft: 2 }}>
+            g
+          </span>
+        </td>
       )}
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 4,
-          marginBottom: 12,
-        }}
-      >
-        {items.slice(0, 4).map((it, i) => (
-          <div
-            key={i}
-            style={{
-              display: 'flex',
-              fontSize: 12,
-              gap: 8,
-            }}
-          >
-            <span
-              style={{
-                fontFamily: 'var(--font-mono)',
-                color: 'var(--color-muted-foreground)',
-                minWidth: 32,
-              }}
-            >
-              {it.quantity ?? it.servings ?? 1}×
-            </span>
-            <span
-              style={{
-                color: 'var(--color-foreground)',
-                flex: 1,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {it.name}
-            </span>
-          </div>
-        ))}
-        {items.length > 4 && (
-          <div style={{ fontSize: 12, color: 'var(--color-muted-foreground)' }}>
-            + {items.length - 4} more
-          </div>
-        )}
-      </div>
-      <div
-        style={{
-          display: 'flex',
-          gap: 12,
-          paddingTop: 10,
-          borderTop: '1px solid var(--color-border)',
-          alignItems: 'baseline',
-        }}
-      >
-        <div>
-          <div
-            style={{
-              fontSize: 9,
-              fontWeight: 600,
-              textTransform: 'uppercase',
-              letterSpacing: '0.06em',
-              color: 'var(--color-muted-foreground)',
-            }}
-          >
-            Cal
-          </div>
-          <MonoNum size={18}>{Math.round(totals.calories)}</MonoNum>
-        </div>
-        <div>
-          <div
-            style={{
-              fontSize: 9,
-              fontWeight: 600,
-              textTransform: 'uppercase',
-              letterSpacing: '0.06em',
-              color: 'var(--color-muted-foreground)',
-            }}
-          >
-            Protein
-          </div>
-          <MonoNum size={18}>
-            {Math.round(totals.protein)}
-            <span
-              style={{
-                fontSize: 11,
-                color: 'var(--color-muted-foreground)',
-                marginLeft: 2,
-              }}
-            >
-              g
-            </span>
-          </MonoNum>
-        </div>
-        <div style={{ marginLeft: 'auto' }}>
-          <GlassButton
-            variant="soft"
-            size="xs"
-            onClick={() => onAddToJournal(meal)}
-          >
-            <Plus style={{ width: 12, height: 12, strokeWidth: 2.25 }} />
-            Log
-          </GlassButton>
-        </div>
-      </div>
-    </div>
+      <td style={{ ...TD_STYLE, textAlign: 'right' }}>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onLog(meal);
+          }}
+          className="cursor-pointer"
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 9999,
+            background: 'var(--color-primary)',
+            color: 'var(--color-primary-foreground)',
+            border: 0,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontFamily: 'inherit',
+          }}
+          aria-label="Log this meal"
+        >
+          <Plus style={{ width: 14, height: 14, strokeWidth: 2.5 }} />
+        </button>
+      </td>
+    </tr>
   );
 }
+
+const TD_STYLE: React.CSSProperties = {
+  padding: '10px 12px',
+  borderBottom: '1px solid var(--color-border)',
+  verticalAlign: 'middle',
+};
+
+const TH_STYLE: React.CSSProperties = {
+  padding: '10px 12px',
+  textAlign: 'left',
+  fontSize: 10,
+  fontWeight: 600,
+  textTransform: 'uppercase',
+  letterSpacing: '0.06em',
+  color: 'var(--color-muted-foreground)',
+  borderBottom: '1px solid var(--color-border)',
+};
 
 // ─── Meal detail (right column) ──────────────────────────────────────────────
 
@@ -954,6 +1113,7 @@ function MealDetail({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function MealsPage() {
+  const isNarrow = useIsNarrow();
   const [meals, setMeals] = useState<SavedMeal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -962,6 +1122,7 @@ export default function MealsPage() {
   const [journalTarget, setJournalTarget] = useState<SavedMeal | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SavedMeal | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [query, setQuery] = useState('');
 
   const fetchMeals = useCallback(() => {
     getSavedMeals()
@@ -1085,53 +1246,135 @@ export default function MealsPage() {
           className="meals-grid"
           style={{
             display: 'grid',
-            gridTemplateColumns: '1.5fr 1fr',
+            gridTemplateColumns: 'minmax(0, 1.7fr) minmax(0, 1fr)',
             gap: 16,
             marginTop: 24,
           }}
         >
+          {/* LEFT — search + table (matches Foods database) */}
           <div
-            className="meals-card-grid"
             style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: 14,
-              alignContent: 'start',
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 12,
+              boxShadow: 'var(--shadow-card)',
+              overflow: 'hidden',
+              minWidth: 0,
             }}
           >
-            {meals.map((m) => (
-              <MealCard
-                key={m.id}
-                meal={m}
-                selected={selectedId === m.id}
-                onSelect={() => setSelectedId(m.id)}
-                onAddToJournal={(meal) => setJournalTarget(meal)}
-              />
-            ))}
-            <button
-              onClick={() => setCreateOpen(true)}
-              className="cursor-pointer"
+            <div
               style={{
-                background: 'var(--color-surface-warm)',
-                border: '1px dashed var(--color-border)',
-                borderRadius: 12,
-                padding: '30px 20px',
+                padding: '14px 16px',
+                borderBottom: '1px solid var(--color-border)',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
                 gap: 8,
-                color: 'var(--color-muted-foreground)',
-                fontSize: 13,
-                fontWeight: 600,
-                fontFamily: 'inherit',
-                minHeight: 200,
               }}
             >
-              <Plus style={{ width: 16, height: 16, strokeWidth: 2 }} />
-              New meal template
-            </button>
+              <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+                <Search
+                  style={{
+                    position: 'absolute',
+                    left: 10,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    width: 14,
+                    height: 14,
+                    color: 'var(--color-placeholder)',
+                    strokeWidth: 1.75,
+                  }}
+                />
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search saved meals…"
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px 8px 32px',
+                    background: 'var(--color-surface)',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 4,
+                    color: 'var(--color-foreground)',
+                    fontFamily: 'inherit',
+                    fontSize: 14,
+                  }}
+                />
+              </div>
+            </div>
+
+            <div
+              style={{
+                height: 'calc(100vh - 280px)',
+                minHeight: 480,
+                overflowY: 'auto',
+                overflowX: 'hidden',
+              }}
+            >
+              {(() => {
+                const filtered = meals.filter(
+                  (m) =>
+                    !query.trim() ||
+                    m.name.toLowerCase().includes(query.toLowerCase())
+                );
+                if (filtered.length === 0) {
+                  return (
+                    <div style={{ padding: 24 }}>
+                      <EmptyState>No meals match.</EmptyState>
+                    </div>
+                  );
+                }
+                return (
+                  <table
+                    style={{
+                      width: '100%',
+                      tableLayout: 'fixed',
+                      borderCollapse: 'collapse',
+                    }}
+                  >
+                    <colgroup>
+                      <col />
+                      <col style={{ width: 80 }} />
+                      {!isNarrow && <col style={{ width: 72 }} />}
+                      <col style={{ width: 56 }} />
+                    </colgroup>
+                    <thead
+                      style={{
+                        position: 'sticky',
+                        top: 0,
+                        background: 'var(--color-surface)',
+                        zIndex: 1,
+                      }}
+                    >
+                      <tr>
+                        <th style={TH_STYLE}>Meal</th>
+                        <th style={{ ...TH_STYLE, textAlign: 'right' }}>Cal</th>
+                        {!isNarrow && (
+                          <th style={{ ...TH_STYLE, textAlign: 'right' }}>
+                            Protein
+                          </th>
+                        )}
+                        <th style={TH_STYLE}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered.map((m) => (
+                        <MealRow
+                          key={m.id}
+                          meal={m}
+                          selected={selectedId === m.id}
+                          onSelect={() => setSelectedId(m.id)}
+                          onLog={(meal) => setJournalTarget(meal)}
+                          showProtein={!isNarrow}
+                        />
+                      ))}
+                    </tbody>
+                  </table>
+                );
+              })()}
+            </div>
           </div>
 
+          {/* RIGHT — detail panel */}
           <MealDetail
             meal={selectedMeal}
             onLog={(m) => setJournalTarget(m)}
@@ -1144,9 +1387,6 @@ export default function MealsPage() {
       <style jsx>{`
         @media (max-width: 900px) {
           :global(.meals-grid) {
-            grid-template-columns: minmax(0, 1fr) !important;
-          }
-          :global(.meals-card-grid) {
             grid-template-columns: minmax(0, 1fr) !important;
           }
         }

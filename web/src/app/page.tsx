@@ -1686,23 +1686,29 @@ function BigTile({
         background: 'var(--color-surface-warm)',
         borderRadius: 8,
         border: '1px solid var(--color-border)',
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: 110,
       }}
     >
       <MicroLabel>{label}</MicroLabel>
+      {/* Big value on its own line so the target never wraps mid-row.
+          This keeps every tile the same shape on narrow screens. */}
       <div style={{ marginTop: 6 }}>
         <MonoNum size={26}>{value.toLocaleString()}</MonoNum>
-        <span
-          style={{
-            fontSize: 11,
-            color: 'var(--color-muted-foreground)',
-            marginLeft: 4,
-          }}
-        >
-          / {target.toLocaleString()}
-          {unit}
-        </span>
       </div>
-      <div style={{ marginTop: 8 }}>
+      <div
+        style={{
+          fontSize: 11,
+          color: 'var(--color-muted-foreground)',
+          fontFamily: 'var(--font-mono)',
+          marginTop: 2,
+        }}
+      >
+        / {target.toLocaleString()}
+        {unit}
+      </div>
+      <div style={{ marginTop: 'auto', paddingTop: 8 }}>
         <ProgressBar
           value={value}
           max={target}
