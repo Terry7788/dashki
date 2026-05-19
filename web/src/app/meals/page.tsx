@@ -632,42 +632,53 @@ interface AddToJournalModalProps {
 }
 
 function AddToJournalModal({ isOpen, onClose, meal }: AddToJournalModalProps) {
-  const [mealType, setMealType] = useState<MealType>('breakfast');
+  const [mealType, setMealType] = useState<MealType>('lunch');
+  const [logDate, setLogDate] = useState(toISODate(new Date()));
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [fullMeal, setFullMeal] = useState<SavedMeal | null>(null);
 
   useEffect(() => {
-    if (isOpen) { setError(''); setSuccess(false); }
-  }, [isOpen]);
+    if (!isOpen) return;
+    setError('');
+    setSuccess(false);
+    setPickerOpen(false);
+    setLogDate(toISODate(new Date()));
+    // Pick a default meal type based on the time of day.
+    const h = new Date().getHours();
+    setMealType(
+      h < 11 ? 'breakfast' : h < 15 ? 'lunch' : h < 17 ? 'snack' : 'dinner'
+    );
+    // Resolve the full meal (the list endpoint omits items).
+    if (meal) {
+      if (meal.items) {
+        setFullMeal(meal);
+      } else {
+        fetch(`${BASE_URL}/api/meals/saved/${meal.id}`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((m) => setFullMeal(m ?? meal))
+          .catch(() => setFullMeal(meal));
+      }
+    }
+  }, [isOpen, meal]);
 
   async function handleAdd() {
-    if (!meal) return;
+    if (!meal || !fullMeal) return;
     setSaving(true);
     setError('');
-    const today = toISODate(new Date());
     try {
-      // The list endpoint doesn't include items — fetch the full meal detail first
-      let fullMeal = meal;
-      if (!meal.items) {
-        const res = await fetch(`${BASE_URL}/api/meals/saved/${meal.id}`);
-        if (res.ok) {
-          fullMeal = await res.json();
-        }
-      }
-
       if (!fullMeal.items || fullMeal.items.length === 0) {
         setError('Meal has no items');
         setSaving(false);
         return;
       }
-
       for (const item of fullMeal.items) {
-        // Log each item in its native unit
         const quantity = item.quantity ?? item.servings ?? 1;
         const unit = (item.unit as Unit) ?? 'serving';
         await addJournalEntry({
-          date: today,
+          date: logDate,
           meal_type: mealType,
           food_id: item.foodId,
           food_name_snapshot: item.name ?? `Food ${item.foodId}`,
@@ -676,7 +687,10 @@ function AddToJournalModal({ isOpen, onClose, meal }: AddToJournalModalProps) {
         });
       }
       setSuccess(true);
-      setTimeout(() => { setSuccess(false); onClose(); }, 1200);
+      setTimeout(() => {
+        setSuccess(false);
+        onClose();
+      }, 1200);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to add to journal');
     } finally {
@@ -684,37 +698,319 @@ function AddToJournalModal({ isOpen, onClose, meal }: AddToJournalModalProps) {
     }
   }
 
+  // Compute totals for the summary preview.
+  const totals = (fullMeal?.items ?? []).reduce(
+    (acc, item) => {
+      const quantity = item.quantity ?? item.servings ?? 1;
+      const unit = (item.unit as Unit) ?? 'serving';
+      const food: Food = {
+        id: item.foodId,
+        name: item.name,
+        baseAmount: item.baseAmount,
+        baseUnit: item.baseUnit,
+        calories: item.calories,
+        protein: item.protein,
+        serving_size_g: item.serving_size_g,
+      } as Food;
+      const { calories, protein } = calcItemNutrition(food, quantity, unit);
+      return { calories: acc.calories + calories, protein: acc.protein + protein };
+    },
+    { calories: 0, protein: 0 }
+  );
+
+  const today = toISODate(new Date());
+  const subtitle = meal ? meal.name : '';
+
   return (
-    <GlassModal isOpen={isOpen} onClose={onClose} title="Add to Journal" size="sm">
-      <div className="space-y-4">
-        {meal && (
-          <p className="text-gray-900 dark:text-white font-medium">{meal.name}</p>
-        )}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-gray-500 dark:text-white/60 pl-1">Meal</label>
-          <div className="relative">
-            <select
-              value={mealType}
-              onChange={(e) => setMealType(e.target.value as MealType)}
-              className="w-full pl-4 pr-10 py-3 bg-black/[0.04] border border-black/[0.10] text-gray-900 dark:bg-white/10 dark:border-white/20 dark:text-white rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#2E8B57]/40 focus:border-[#2E8B57]/60 transition-all duration-200 appearance-none [color-scheme:dark] cursor-pointer"
+    <GlassModal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Log meal"
+      subtitle={subtitle}
+      size="sm"
+      headerTrailing={
+        <div
+          style={{
+            display: 'flex',
+            gap: 0,
+            padding: 3,
+            background: 'var(--color-surface-warm)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 6,
+          }}
+        >
+          {MEAL_TYPES.map((m) => {
+            const active = m === mealType;
+            return (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMealType(m)}
+                className="cursor-pointer"
+                style={{
+                  padding: '4px 8px',
+                  borderRadius: 4,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  background: active ? 'var(--color-surface)' : 'transparent',
+                  color: active
+                    ? 'var(--color-foreground)'
+                    : 'var(--color-muted-foreground)',
+                  border: 0,
+                  fontFamily: 'inherit',
+                  boxShadow: active ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                }}
+              >
+                {MEAL_LABELS[m]}
+              </button>
+            );
+          })}
+        </div>
+      }
+      footer={
+        <>
+          <GlassButton variant="ghost" size="sm" onClick={onClose} disabled={saving}>
+            Cancel
+          </GlassButton>
+          <GlassButton
+            variant="primary"
+            size="sm"
+            onClick={handleAdd}
+            disabled={saving || success || !fullMeal?.items?.length}
+          >
+            {success ? '✓ Logged' : saving ? 'Logging…' : 'Add to journal'}
+          </GlassButton>
+        </>
+      }
+    >
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 14,
+          minHeight: 220,
+        }}
+      >
+        {/* Summary card */}
+        <div
+          style={{
+            padding: 12,
+            background: 'var(--color-badge-bg)',
+            border: '1px solid var(--color-primary)',
+            borderRadius: 8,
+            display: 'flex',
+            gap: 18,
+            alignItems: 'baseline',
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontSize: 9,
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+                color: 'var(--color-muted-foreground)',
+              }}
             >
-              {MEAL_TYPES.map((m) => (
-                <option key={m} value={m} className="bg-[#1a1a1a] text-white">{MEAL_LABELS[m]}</option>
-              ))}
-            </select>
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 dark:text-white/50 pointer-events-none" />
+              Items
+            </div>
+            <MonoNum size={20}>{fullMeal?.items?.length ?? 0}</MonoNum>
+          </div>
+          <div>
+            <div
+              style={{
+                fontSize: 9,
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+                color: 'var(--color-muted-foreground)',
+              }}
+            >
+              Calories
+            </div>
+            <MonoNum size={20}>
+              {Math.round(totals.calories)}
+              <span
+                style={{
+                  fontSize: 11,
+                  color: 'var(--color-muted-foreground)',
+                  marginLeft: 2,
+                }}
+              >
+                kcal
+              </span>
+            </MonoNum>
+          </div>
+          <div>
+            <div
+              style={{
+                fontSize: 9,
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+                color: 'var(--color-muted-foreground)',
+              }}
+            >
+              Protein
+            </div>
+            <MonoNum size={20}>
+              {Math.round(totals.protein)}
+              <span
+                style={{
+                  fontSize: 11,
+                  color: 'var(--color-muted-foreground)',
+                  marginLeft: 2,
+                }}
+              >
+                g
+              </span>
+            </MonoNum>
           </div>
         </div>
-        {error && <p className="text-sm text-red-400">{error}</p>}
-        {success && (
-          <p className="text-sm text-emerald-400 text-center">✓ Added to journal!</p>
-        )}
-        <div className="flex gap-3">
-          <GlassButton variant="default" className="flex-1" onClick={onClose}>Cancel</GlassButton>
-          <GlassButton variant="primary" className="flex-1" onClick={handleAdd} disabled={saving || success}>
-            {saving ? 'Adding…' : 'Add to Today'}
-          </GlassButton>
+
+        {/* Date selector */}
+        <div>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: 'var(--color-muted-foreground)',
+              marginBottom: 6,
+            }}
+          >
+            Date
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button
+              type="button"
+              onClick={() => {
+                setLogDate(today);
+                setPickerOpen(false);
+              }}
+              className="cursor-pointer"
+              style={{
+                flex: 1,
+                padding: '8px 12px',
+                fontSize: 13,
+                fontWeight: logDate === today ? 600 : 500,
+                background:
+                  logDate === today
+                    ? 'var(--color-primary)'
+                    : 'var(--color-surface)',
+                color:
+                  logDate === today
+                    ? 'var(--color-primary-foreground)'
+                    : 'var(--color-muted-foreground)',
+                border:
+                  logDate === today ? '0' : '1px solid var(--color-border)',
+                borderRadius: 6,
+                fontFamily: 'inherit',
+              }}
+            >
+              Today
+            </button>
+            <button
+              type="button"
+              onClick={() => setPickerOpen((o) => !o)}
+              className="cursor-pointer"
+              style={{
+                flex: 1,
+                padding: '8px 12px',
+                fontSize: 13,
+                fontWeight: 500,
+                background:
+                  logDate !== today
+                    ? 'var(--color-primary)'
+                    : 'var(--color-surface)',
+                color:
+                  logDate !== today
+                    ? 'var(--color-primary-foreground)'
+                    : 'var(--color-muted-foreground)',
+                border:
+                  logDate !== today ? '0' : '1px solid var(--color-border)',
+                borderRadius: 6,
+                fontFamily: 'inherit',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+              }}
+            >
+              {logDate !== today
+                ? new Date(logDate + 'T00:00:00').toLocaleDateString('en-AU', {
+                    day: 'numeric',
+                    month: 'short',
+                  })
+                : 'Pick a date'}
+            </button>
+          </div>
+          {pickerOpen && (
+            <input
+              type="date"
+              value={logDate}
+              max={today}
+              onChange={(e) => setLogDate(e.target.value)}
+              autoFocus
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 4,
+                color: 'var(--color-foreground)',
+                fontFamily: 'inherit',
+                fontSize: 14,
+                marginTop: 8,
+              }}
+            />
+          )}
         </div>
+
+        {/* Hint */}
+        <div
+          style={{
+            fontSize: 11,
+            color: 'var(--color-muted-foreground)',
+            lineHeight: 1.5,
+          }}
+        >
+          Logs all{' '}
+          <span
+            style={{
+              fontFamily: 'var(--font-mono)',
+              color: 'var(--color-foreground)',
+              fontWeight: 600,
+            }}
+          >
+            {fullMeal?.items?.length ?? 0}
+          </span>{' '}
+          items into{' '}
+          <span
+            style={{
+              color: 'var(--color-foreground)',
+              fontWeight: 600,
+            }}
+          >
+            {MEAL_LABELS[mealType]}
+          </span>
+          .
+        </div>
+
+        {error && (
+          <p
+            style={{
+              fontSize: 13,
+              color: 'var(--color-critical)',
+              background: 'rgba(201,28,43,0.10)',
+              border: '1px solid rgba(201,28,43,0.25)',
+              padding: '8px 12px',
+              borderRadius: 4,
+            }}
+          >
+            {error}
+          </p>
+        )}
       </div>
     </GlassModal>
   );
@@ -733,6 +1029,10 @@ function DeleteMealModal({ isOpen, onClose, meal, onDeleted }: DeleteMealModalPr
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState('');
 
+  useEffect(() => {
+    if (isOpen) setError('');
+  }, [isOpen]);
+
   async function handleDelete() {
     if (!meal) return;
     setDeleting(true);
@@ -747,19 +1047,103 @@ function DeleteMealModal({ isOpen, onClose, meal, onDeleted }: DeleteMealModalPr
     }
   }
 
+  const itemCount = meal?.items?.length ?? 0;
+
   return (
-    <GlassModal isOpen={isOpen} onClose={onClose} title="Delete Meal" size="sm">
-      <div className="space-y-4">
-        <p className="text-gray-700 dark:text-white/70 text-sm">
-          Delete <span className="text-gray-900 dark:text-white font-semibold">{meal?.name}</span>? This cannot be undone.
-        </p>
-        {error && <p className="text-sm text-red-400">{error}</p>}
-        <div className="flex gap-3">
-          <GlassButton variant="default" className="flex-1" onClick={onClose}>Cancel</GlassButton>
-          <GlassButton variant="danger" className="flex-1" onClick={handleDelete} disabled={deleting}>
-            {deleting ? 'Deleting…' : 'Delete'}
+    <GlassModal
+      isOpen={isOpen}
+      onClose={onClose}
+      title=""
+      size="sm"
+      showCloseButton={false}
+      footer={
+        <>
+          <GlassButton variant="ghost" size="sm" onClick={onClose} disabled={deleting}>
+            Cancel
           </GlassButton>
+          <GlassButton
+            variant="danger"
+            size="sm"
+            onClick={handleDelete}
+            disabled={deleting}
+          >
+            <Trash2 style={{ width: 13, height: 13, strokeWidth: 2 }} />
+            {deleting ? 'Deleting…' : 'Delete meal'}
+          </GlassButton>
+        </>
+      }
+    >
+      <div style={{ padding: 4 }}>
+        {/* Danger icon */}
+        <div
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 9999,
+            background: 'rgba(201,28,43,0.12)',
+            color: 'var(--color-critical)',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 14,
+          }}
+        >
+          <Trash2 style={{ width: 18, height: 18, strokeWidth: 2 }} />
         </div>
+        <div
+          style={{
+            fontSize: 16,
+            fontWeight: 700,
+            letterSpacing: '-0.2px',
+            marginBottom: 6,
+            color: 'var(--color-foreground)',
+          }}
+        >
+          Delete &ldquo;{meal?.name}&rdquo;?
+        </div>
+        <div
+          style={{
+            fontSize: 13,
+            color: 'var(--color-muted-foreground)',
+            lineHeight: 1.5,
+          }}
+        >
+          This permanently removes the meal template
+          {itemCount > 0 && (
+            <>
+              , including all{' '}
+              <span
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  color: 'var(--color-foreground)',
+                  fontWeight: 600,
+                }}
+              >
+                {itemCount}
+              </span>{' '}
+              {itemCount === 1 ? 'item' : 'items'}
+            </>
+          )}
+          . Logged journal entries that used it stay where they are.{' '}
+          <strong style={{ color: 'var(--color-foreground)' }}>
+            Cannot be undone.
+          </strong>
+        </div>
+        {error && (
+          <p
+            style={{
+              marginTop: 12,
+              fontSize: 13,
+              color: 'var(--color-critical)',
+              background: 'rgba(201,28,43,0.10)',
+              border: '1px solid rgba(201,28,43,0.25)',
+              padding: '8px 12px',
+              borderRadius: 4,
+            }}
+          >
+            {error}
+          </p>
+        )}
       </div>
     </GlassModal>
   );
