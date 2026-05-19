@@ -84,20 +84,24 @@ interface PickedItem {
   unit: Unit;
 }
 
-interface FoodPickerForMealProps {
-  items: PickedItem[];
+/**
+ * MealFoodPicker — flat, single-tap food picker used inside the
+ * Create/Edit meal modal. Renders an inline list of foods (table on
+ * desktop, cards on mobile) where clicking + stages the food with
+ * a sensible default quantity. Adjusting quantity happens in the
+ * "Items" list above, via Stepper. No Back/Confirm two-step.
+ */
+function MealFoodPicker({
+  stagedIds,
+  onAdd,
+}: {
+  stagedIds: Set<number>;
   onAdd: (food: Food, quantity: number, unit: Unit) => void;
-  onRemove: (foodId: number) => void;
-  onUpdate: (foodId: number, quantity: number, unit: Unit) => void;
-}
-
-function FoodPickerForMeal({ items, onAdd, onRemove, onUpdate }: FoodPickerForMealProps) {
+}) {
+  const isNarrow = useIsNarrow();
   const [query, setQuery] = useState('');
   const [foods, setFoods] = useState<Food[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selected, setSelected] = useState<Food | null>(null);
-  const [pickerQty, setPickerQty] = useState(1);
-  const [pickerUnit, setPickerUnit] = useState<Unit>('serving');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -110,90 +114,241 @@ function FoodPickerForMeal({ items, onAdd, onRemove, onUpdate }: FoodPickerForMe
           : `${BASE_URL}/api/foods`;
         const res = await fetch(url);
         if (res.ok) setFoods(await res.json());
-      } catch { /* ignore */ } finally {
+      } catch {
+        /* ignore */
+      } finally {
         setLoading(false);
       }
-    }, 300);
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+    }, 250);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
   }, [query]);
 
-  function handleSelect(food: Food) {
-    // Initialise picker quantity from the food's default unit
-    const units = food.units ?? [{ unit: 'serving' as Unit, label: 'serving', default: true }];
+  function addFood(food: Food) {
+    const units = food.units ?? [
+      { unit: 'serving' as Unit, label: 'serving', default: true },
+    ];
     const def = units.find((u) => u.default) ?? units[0];
     const startQty =
-      def.unit === 'serving' ? 1 : (food.base_amount ?? food.baseAmount ?? 100);
-    setPickerQty(startQty);
-    setPickerUnit(def.unit);
-    setSelected(food);
+      def.unit === 'serving'
+        ? 1
+        : food.base_amount ?? food.baseAmount ?? 100;
+    onAdd(food, startQty, def.unit);
   }
 
-  function handleConfirm() {
-    if (!selected) return;
-    onAdd(selected, pickerQty, pickerUnit);
-    setSelected(null);
-    setPickerQty(1);
-    setPickerUnit('serving');
-    setQuery('');
-  }
+  // Hide already-staged foods so the picker only shows what you can still add.
+  const available = foods.filter((f) => !stagedIds.has(f.id));
 
   return (
-    <div className="space-y-4">
-      {/* Food picker */}
-      {selected ? (
-        <div className="space-y-3 p-4 rounded-2xl bg-white/5 border border-white/10">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ position: 'relative' }}>
+        <Search
+          style={{
+            position: 'absolute',
+            left: 10,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            width: 14,
+            height: 14,
+            color: 'var(--color-placeholder)',
+            strokeWidth: 1.75,
+          }}
+        />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search foods to add…"
+          style={{
+            width: '100%',
+            padding: '8px 32px 8px 32px',
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 4,
+            color: 'var(--color-foreground)',
+            fontFamily: 'inherit',
+            fontSize: 14,
+          }}
+        />
+        {query && (
           <button
-            onClick={() => setSelected(null)}
-            className="flex items-center gap-2 text-sm text-white/50 hover:text-white transition-colors"
+            onClick={() => setQuery('')}
+            type="button"
+            style={{
+              position: 'absolute',
+              right: 6,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              background: 'transparent',
+              border: 0,
+              padding: 4,
+              color: 'var(--color-muted-foreground)',
+              cursor: 'pointer',
+              display: 'flex',
+            }}
+            aria-label="Clear search"
           >
-            <ChevronLeft className="w-4 h-4" /> Back
+            <X style={{ width: 14, height: 14 }} />
           </button>
-          <p className="font-medium text-white">{selected.name}</p>
-          <QuantityInput
-            food={selected}
-            quantity={pickerQty}
-            unit={pickerUnit}
-            onChange={({ quantity, unit }) => { setPickerQty(quantity); setPickerUnit(unit); }}
-          />
-          <GlassButton variant="primary" className="w-full" onClick={handleConfirm}>
-            Add to Meal
-          </GlassButton>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 pointer-events-none" />
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search foods to add…"
-              className="w-full pl-10 pr-4 py-2.5 text-sm bg-white/10 border border-white/20 rounded-2xl text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-indigo-400/40 focus:border-indigo-400/60 transition-all duration-200"
-            />
+        )}
+      </div>
+
+      <div
+        style={{
+          border: '1px solid var(--color-border)',
+          borderRadius: 6,
+          overflow: 'hidden',
+          background: 'var(--color-surface)',
+          maxHeight: 320,
+          overflowY: 'auto',
+        }}
+      >
+        {loading && (
+          <div
+            style={{
+              padding: 16,
+              textAlign: 'center',
+              fontSize: 12,
+              color: 'var(--color-muted-foreground)',
+            }}
+          >
+            Searching…
           </div>
-          <div className="flex-1 overflow-y-auto space-y-1 pr-1 min-h-0">
-            {loading && <p className="text-center text-white/40 text-xs py-3">Searching…</p>}
-            {!loading && foods.length === 0 && (
-              <p className="text-center text-white/40 text-xs py-3">No foods found</p>
-            )}
-            {foods.filter((f) => !items.find((i) => i.food.id === f.id)).map((food) => {
-              const calories = food.calories ?? food.calories_per_100g ?? 0;
+        )}
+        {!loading && available.length === 0 && (
+          <div
+            style={{
+              padding: 16,
+              textAlign: 'center',
+              fontSize: 12,
+              color: 'var(--color-muted-foreground)',
+            }}
+          >
+            {query.trim()
+              ? 'No foods match.'
+              : 'All matching foods are already in this meal.'}
+          </div>
+        )}
+        {!loading && available.length > 0 && (
+          <ul
+            style={{
+              listStyle: 'none',
+              padding: 0,
+              margin: 0,
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            {available.map((food) => {
+              const cal = food.calories ?? food.calories_per_100g ?? 0;
+              const protein = food.protein ?? food.protein_per_100g ?? 0;
               return (
-                <button
+                <li
                   key={food.id}
-                  onClick={() => handleSelect(food)}
-                  className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-all duration-200 text-left"
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: isNarrow
+                      ? 'minmax(0, 1fr) auto'
+                      : 'minmax(0, 1fr) auto auto auto',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '8px 12px',
+                    borderBottom: '1px solid var(--color-border)',
+                  }}
                 >
-                  <span className="text-sm text-white truncate">{food.name}</span>
-                  <span className="text-xs text-white/40 ml-2 shrink-0">
-                    {calories} kcal
-                  </span>
-                </button>
+                  <div style={{ minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 500,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {food.name}
+                    </div>
+                    {isNarrow && (
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: 'var(--color-muted-foreground)',
+                          marginTop: 1,
+                          fontFamily: 'var(--font-mono)',
+                        }}
+                      >
+                        {cal} kcal · {protein}g
+                      </div>
+                    )}
+                  </div>
+                  {!isNarrow && (
+                    <span
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 12,
+                        color: 'var(--color-muted-foreground)',
+                        minWidth: 64,
+                        textAlign: 'right',
+                      }}
+                    >
+                      <span
+                        style={{
+                          color: 'var(--color-foreground)',
+                          fontWeight: 600,
+                        }}
+                      >
+                        {cal}
+                      </span>{' '}
+                      kcal
+                    </span>
+                  )}
+                  {!isNarrow && (
+                    <span
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 12,
+                        color: 'var(--color-muted-foreground)',
+                        minWidth: 48,
+                        textAlign: 'right',
+                      }}
+                    >
+                      <span
+                        style={{
+                          color: 'var(--color-foreground)',
+                          fontWeight: 600,
+                        }}
+                      >
+                        {protein}
+                      </span>
+                      g
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => addFood(food)}
+                    className="cursor-pointer"
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 9999,
+                      background: 'var(--color-primary)',
+                      color: 'var(--color-primary-foreground)',
+                      border: 0,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontFamily: 'inherit',
+                    }}
+                    aria-label="Add to meal"
+                  >
+                    <Plus style={{ width: 14, height: 14, strokeWidth: 2.5 }} />
+                  </button>
+                </li>
               );
             })}
-          </div>
-        </div>
-      )}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }
@@ -457,128 +612,181 @@ function CreateMealModal({ isOpen, onClose, onCreated, editingMeal }: CreateMeal
           />
         </div>
 
-        {/* Two-column body: items list (left) + food picker (right) */}
-        <div
-          className="create-meal-grid"
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
-            gap: 16,
-          }}
-        >
-          {/* Items list */}
-          <div style={{ minWidth: 0 }}>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'baseline',
-                marginBottom: 8,
-              }}
-            >
-              <FieldLabel>Items ({items.length})</FieldLabel>
-            </div>
-            {items.length === 0 ? (
-              <EmptyState>No items yet — pick foods on the right.</EmptyState>
-            ) : (
-              <ul
+        {/* Items list — single column, full width */}
+        <div>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'baseline',
+              marginBottom: 8,
+            }}
+          >
+            <FieldLabel>Items ({items.length})</FieldLabel>
+            {items.length > 0 && (
+              <span
                 style={{
-                  listStyle: 'none',
-                  padding: 0,
-                  margin: 0,
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 6,
-                  overflow: 'hidden',
-                  background: 'var(--color-surface)',
+                  fontSize: 11,
+                  fontFamily: 'var(--font-mono)',
+                  color: 'var(--color-muted-foreground)',
                 }}
               >
-                {items.map(({ food, quantity, unit }) => {
-                  const { calories } = calcItemNutrition(food, quantity, unit);
-                  return (
-                    <li
-                      key={food.id}
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns:
-                          'minmax(0, 1fr) auto auto auto',
-                        alignItems: 'center',
-                        gap: 10,
-                        padding: '8px 10px',
-                        borderBottom: '1px solid var(--color-border)',
-                      }}
-                    >
-                      <div style={{ minWidth: 0 }}>
-                        <div
-                          style={{
-                            fontSize: 13,
-                            fontWeight: 500,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {food.name}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: 11,
-                            color: 'var(--color-muted-foreground)',
-                            marginTop: 1,
-                          }}
-                        >
-                          {formatQuantity(quantity, unit)}
-                        </div>
-                      </div>
-                      <Stepper
-                        value={quantity}
-                        onChange={(q) => handleUpdate(food.id, q, unit)}
-                        suffix={unit === 'serving' ? '×' : ''}
-                      />
-                      <span
-                        style={{
-                          fontFamily: 'var(--font-mono)',
-                          fontSize: 12,
-                          fontWeight: 600,
-                          minWidth: 56,
-                          textAlign: 'right',
-                        }}
-                      >
-                        {Math.round(calories)} kcal
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => handleRemove(food.id)}
-                        className="cursor-pointer"
-                        style={{
-                          background: 'transparent',
-                          border: 0,
-                          color: 'var(--color-muted-foreground)',
-                          padding: 4,
-                          borderRadius: 4,
-                          display: 'inline-flex',
-                        }}
-                        aria-label="Remove"
-                      >
-                        <X style={{ width: 13, height: 13, strokeWidth: 2 }} />
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
+                <span
+                  style={{
+                    color: 'var(--color-foreground)',
+                    fontWeight: 600,
+                  }}
+                >
+                  {Math.round(totals.calories)}
+                </span>{' '}
+                kcal ·{' '}
+                <span
+                  style={{
+                    color: 'var(--color-foreground)',
+                    fontWeight: 600,
+                  }}
+                >
+                  {Math.round(totals.protein)}g
+                </span>{' '}
+                P
+              </span>
             )}
           </div>
-
-          {/* Search + picker */}
-          <div style={{ minWidth: 0 }}>
-            <FieldLabel>Add food</FieldLabel>
-            <FoodPickerForMeal
-              items={items}
-              onAdd={handleAddFood}
-              onRemove={handleRemove}
-              onUpdate={handleUpdate}
-            />
-          </div>
+          {items.length === 0 ? (
+            <EmptyState>
+              No items yet — add foods using the search below.
+            </EmptyState>
+          ) : (
+            <ul
+              style={{
+                listStyle: 'none',
+                padding: 0,
+                margin: 0,
+                border: '1px solid var(--color-border)',
+                borderRadius: 6,
+                overflow: 'hidden',
+                background: 'var(--color-surface)',
+              }}
+            >
+              {items.map(({ food, quantity, unit }) => {
+                const { calories } = calcItemNutrition(food, quantity, unit);
+                return (
+                  <li
+                    key={food.id}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns:
+                        'minmax(0, 1fr) auto auto auto',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '8px 10px',
+                      borderBottom: '1px solid var(--color-border)',
+                    }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 500,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {food.name}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: 'var(--color-muted-foreground)',
+                          marginTop: 1,
+                        }}
+                      >
+                        {formatQuantity(quantity, unit)}
+                      </div>
+                    </div>
+                    <Stepper
+                      value={quantity}
+                      onChange={(q) => handleUpdate(food.id, q, unit)}
+                      suffix={unit === 'serving' ? '×' : ''}
+                    />
+                    <span
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        minWidth: 56,
+                        textAlign: 'right',
+                      }}
+                    >
+                      {Math.round(calories)} kcal
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemove(food.id)}
+                      className="cursor-pointer"
+                      style={{
+                        background: 'transparent',
+                        border: 0,
+                        color: 'var(--color-muted-foreground)',
+                        padding: 4,
+                        borderRadius: 4,
+                        display: 'inline-flex',
+                      }}
+                      aria-label="Remove"
+                    >
+                      <X style={{ width: 13, height: 13, strokeWidth: 2 }} />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
+
+        {/* Divider between staged items and the search-to-add picker */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            marginTop: 4,
+            marginBottom: 4,
+          }}
+        >
+          <div
+            style={{
+              flex: 1,
+              height: 1,
+              background: 'var(--color-border)',
+            }}
+          />
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em',
+              color: 'var(--color-muted-foreground)',
+            }}
+          >
+            Add foods
+          </span>
+          <div
+            style={{
+              flex: 1,
+              height: 1,
+              background: 'var(--color-border)',
+            }}
+          />
+        </div>
+
+        {/* Inline search + food list. Single tap adds with default qty;
+            adjust quantity in the Items list above. */}
+        <MealFoodPicker
+          stagedIds={new Set(items.map((i) => i.food.id))}
+          onAdd={handleAddFood}
+        />
 
         {error && (
           <p
@@ -594,14 +802,6 @@ function CreateMealModal({ isOpen, onClose, onCreated, editingMeal }: CreateMeal
             {error}
           </p>
         )}
-
-        <style jsx>{`
-          @media (max-width: 720px) {
-            :global(.create-meal-grid) {
-              grid-template-columns: minmax(0, 1fr) !important;
-            }
-          }
-        `}</style>
       </div>
     </GlassModal>
   );
