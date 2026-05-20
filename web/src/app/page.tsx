@@ -288,8 +288,11 @@ export default function DashboardPage() {
       <GreetingHeader
         name={displayName ?? 'Terry'}
         onLogFood={() => {
-          /* journal page handles food entry */
-          window.location.href = '/journal';
+          // Hand off to journal page with a flag — the journal page's
+          // mount effect reads ?addFood=1 and opens the Add Food modal
+          // automatically. Saves a click vs. landing on the page and
+          // then having to hit "+ Add".
+          window.location.href = '/journal?addFood=1';
         }}
         onWeighIn={() => setWeightModal(true)}
       />
