@@ -11,11 +11,13 @@ const openai = process.env.OPENAI_API_KEY
 interface EstimateResponse {
   calories: number;
   protein: number;
+  carbs: number;
+  fat: number;
   portion: string;
   reasoning: string;
 }
 
-const ESTIMATE_FOOD_PROMPT = `You are estimating the calories and protein for a single food entry that a user typed into a Quick Add field.
+const ESTIMATE_FOOD_PROMPT = `You are estimating macros for a single food entry that a user typed into a Quick Add or New Food field.
 
 The user's text may include a portion description ("2 slices of pepperoni pizza", "large apple", "250ml oat milk"). If no portion is described, assume one typical serving for that food as a normal person would eat it.
 
@@ -23,6 +25,8 @@ Return ONLY valid JSON in this exact shape — no markdown, no commentary:
 {
   "calories": <integer kcal for the entire portion described>,
   "protein": <number grams of protein for the entire portion, one decimal place>,
+  "carbs":   <number grams of carbohydrates for the entire portion, one decimal place>,
+  "fat":     <number grams of fat for the entire portion, one decimal place>,
   "portion": "<short human-readable description of the portion you assumed, e.g. '1 medium apple (~180g)' or '2 slices (~250g)'>",
   "reasoning": "<one or two sentences explaining how you arrived at the numbers — components, density, source rule of thumb. Keep it concise but specific.>"
 }
@@ -30,12 +34,16 @@ Return ONLY valid JSON in this exact shape — no markdown, no commentary:
 Rules:
 1. Numbers must reflect the TOTAL portion described (or your assumed serving), not per-100g.
 2. Calories: round to the nearest integer.
-3. Protein: round to one decimal place.
+3. Protein / carbs / fat: round to one decimal place each.
 4. Reasoning must be specific — name the components or the typical macro density. Do not say "based on standard nutritional data".
 5. If the food is wildly ambiguous (e.g. just "food", "snack"), still produce a reasonable best guess and say so in reasoning.
-6. If the input is clearly not food (e.g. "blue car"), return calories=0, protein=0, portion="(not a food)", reasoning="That doesn't look like a food item.".
+6. If the input is clearly not food (e.g. "blue car"), return all macros 0, portion="(not a food)", reasoning="That doesn't look like a food item.".
 
 Return JSON only.`;
+
+function clampNonNegOneDp(n: unknown): number {
+  return Number.isFinite(n) ? Math.max(0, Math.round(Number(n) * 10) / 10) : 0;
+}
 
 router.post('/estimate-food', async (req: Request, res: Response) => {
   if (!openai) {
@@ -54,12 +62,12 @@ router.post('/estimate-food', async (req: Request, res: Response) => {
         {
           role: 'system',
           content:
-            'You estimate calories and protein for one-off food entries. Output JSON only — no prose, no markdown.',
+            'You estimate macros for one-off food entries. Output JSON only — no prose, no markdown.',
         },
         { role: 'user', content: `${ESTIMATE_FOOD_PROMPT}\n\nFood: "${name.trim()}"` },
       ],
       temperature: 0.2,
-      max_tokens: 400,
+      max_tokens: 500,
       response_format: { type: 'json_object' },
     });
 
@@ -67,14 +75,16 @@ router.post('/estimate-food', async (req: Request, res: Response) => {
     const parsed = JSON.parse(raw) as Partial<EstimateResponse>;
 
     const calories = Number.isFinite(parsed.calories) ? Math.max(0, Math.round(Number(parsed.calories))) : 0;
-    const protein = Number.isFinite(parsed.protein) ? Math.max(0, Math.round(Number(parsed.protein) * 10) / 10) : 0;
+    const protein = clampNonNegOneDp(parsed.protein);
+    const carbs = clampNonNegOneDp(parsed.carbs);
+    const fat = clampNonNegOneDp(parsed.fat);
     const portion = typeof parsed.portion === 'string' && parsed.portion.trim() ? parsed.portion.trim() : '1 serving';
     const reasoning =
       typeof parsed.reasoning === 'string' && parsed.reasoning.trim()
         ? parsed.reasoning.trim()
         : 'Estimate based on typical nutritional values for this food.';
 
-    const result: EstimateResponse = { calories, protein, portion, reasoning };
+    const result: EstimateResponse = { calories, protein, carbs, fat, portion, reasoning };
     res.json(result);
   } catch (err) {
     logger.error('[ai/estimate-food] failed:', err);

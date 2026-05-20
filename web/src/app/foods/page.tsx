@@ -17,6 +17,8 @@ import {
   Droplet,
   Coffee,
   Cookie,
+  Sparkles,
+  Loader2,
 } from 'lucide-react';
 import {
   GlassCard,
@@ -36,7 +38,7 @@ import {
   unitLabel,
 } from '@/lib/foodTags';
 import type { FoodTag } from '@/lib/foodTags';
-import { getFoods, createFood, updateFood, deleteFood, addJournalEntry } from '@/lib/api';
+import { getFoods, createFood, updateFood, deleteFood, addJournalEntry, estimateFood } from '@/lib/api';
 import type { Food, MealType } from '@/lib/types';
 import { useSocketEvent } from '@/lib/useSocketEvent';
 import { useIsNarrow } from '@/lib/useIsNarrow';
@@ -133,6 +135,10 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
   const [addToJournal, setAddToJournal] = useState(false);
   const [journalMealType, setJournalMealType] = useState<MealType>('breakfast');
   const [journalServings, setJournalServings] = useState('1');
+  // AI estimate state — only meaningful when creating a new food (not editing)
+  const [aiEstimating, setAiEstimating] = useState(false);
+  const [aiError, setAiError] = useState('');
+  const [aiResult, setAiResult] = useState<{ portion: string; reasoning: string } | null>(null);
 
   useEffect(() => {
     if (editingFood) {
@@ -171,12 +177,40 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
     setAddToJournal(false);
     setJournalMealType('breakfast');
     setJournalServings('1');
+    setAiResult(null);
+    setAiError('');
+    setAiEstimating(false);
   }, [editingFood, isOpen]);
 
   function set(field: keyof FoodFormData, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
     if (errors[field as keyof FormErrors]) {
       setErrors((prev) => ({ ...prev, [field]: undefined }));
+    }
+  }
+
+  async function handleAiGuess() {
+    if (!form.name.trim() || aiEstimating) return;
+    setAiEstimating(true);
+    setAiError('');
+    try {
+      const r = await estimateFood(form.name.trim());
+      // AI returns totals for an assumed serving — force the form to
+      // "per 1 serving" so the numbers map 1:1 without conversion.
+      setForm((prev) => ({
+        ...prev,
+        base_unit: 'servings',
+        base_amount: '1',
+        calories_per_100g: String(r.calories),
+        protein_per_100g: String(r.protein),
+        carbs_per_100g: String(r.carbs),
+        fat_per_100g: String(r.fat),
+      }));
+      setAiResult({ portion: r.portion, reasoning: r.reasoning });
+    } catch (e: unknown) {
+      setAiError(e instanceof Error ? e.message : 'Could not estimate this food');
+    } finally {
+      setAiEstimating(false);
     }
   }
 
@@ -253,6 +287,106 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
           )}
         </div>
         {errors.name && <p className="text-xs text-red-400 -mt-2 pl-1">{errors.name}</p>}
+
+        {!editingFood && (
+          <>
+            <button
+              type="button"
+              onClick={handleAiGuess}
+              disabled={!form.name.trim() || aiEstimating}
+              className="cursor-pointer w-full"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                padding: '10px 14px',
+                background: 'var(--color-surface-warm)',
+                border: '1px dashed var(--color-border)',
+                borderRadius: 6,
+                color: 'var(--color-foreground)',
+                fontSize: 13,
+                fontWeight: 600,
+                fontFamily: 'inherit',
+                opacity: !form.name.trim() || aiEstimating ? 0.55 : 1,
+              }}
+            >
+              {aiEstimating ? (
+                <>
+                  <Loader2 className="animate-spin" style={{ width: 14, height: 14 }} />
+                  <span>AI is estimating…</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles style={{ width: 14, height: 14, color: 'var(--color-primary)' }} />
+                  <span>Let AI guess macros (per 1 serving)</span>
+                </>
+              )}
+            </button>
+            {aiError && (
+              <div
+                style={{
+                  fontSize: 12,
+                  color: 'var(--color-critical)',
+                  background: 'rgba(201,28,43,0.10)',
+                  border: '1px solid rgba(201,28,43,0.25)',
+                  padding: '8px 10px',
+                  borderRadius: 4,
+                }}
+              >
+                {aiError}
+              </div>
+            )}
+            {aiResult && !aiError && (
+              <div
+                style={{
+                  background: 'var(--color-surface-warm)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 6,
+                  padding: '10px 12px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4,
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    color: 'var(--color-muted-foreground)',
+                  }}
+                >
+                  <Sparkles style={{ width: 11, height: 11, color: 'var(--color-primary)' }} />
+                  AI estimate · {aiResult.portion}
+                </div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: 'var(--color-foreground)',
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {aiResult.reasoning}
+                </div>
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: 'var(--color-muted-foreground)',
+                    fontStyle: 'italic',
+                    marginTop: 2,
+                  }}
+                >
+                  Filled as &ldquo;per 1 serving&rdquo; — edit anything below if it looks off.
+                </div>
+              </div>
+            )}
+          </>
+        )}
 
         <div className="grid grid-cols-2 gap-2 sm:gap-3">
           <div className="relative">

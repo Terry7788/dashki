@@ -337,6 +337,8 @@ export function updatePreferences(
 export interface FoodEstimate {
   calories: number;
   protein: number;
+  carbs: number;
+  fat: number;
   portion: string;
   reasoning: string;
 }
