@@ -3091,6 +3091,25 @@ export default function JournalPage() {
   const [pointerCapable, setPointerCapable] = useState(false);
   const [draggingActive, setDraggingActive] = useState(false);
 
+  // Auto-open the Add Food modal when arriving from the home page's
+  // "Log food" button (which navigates here with ?addFood=1). Strip the
+  // param afterwards so reloads / back-navigation don't re-open the modal.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('addFood') === '1') {
+      const h = new Date().getHours();
+      const meal: MealType =
+        h < 11 ? 'breakfast' : h < 15 ? 'lunch' : h < 17 ? 'snack' : 'dinner';
+      setAddMealType(meal);
+      params.delete('addFood');
+      const newSearch = params.toString();
+      const newUrl =
+        window.location.pathname + (newSearch ? `?${newSearch}` : '') + window.location.hash;
+      window.history.replaceState({}, '', newUrl);
+    }
+  }, []);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     setPointerCapable(window.matchMedia('(hover: hover)').matches);
