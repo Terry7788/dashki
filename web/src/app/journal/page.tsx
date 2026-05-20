@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Loader2, Clock, Search, Copy, MoreHorizontal, Move, Sunrise, Sun, Cookie, Moon, X, Apple, Sparkles } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Loader2, Clock, Search, Copy, MoreHorizontal, Move, Sunrise, Sun, Cookie, Moon, X, Apple, Sparkles, BookOpen } from 'lucide-react';
 import { GlassCard, GlassButton, GlassInput, GlassModal, CalorieRing, MacroBar, Pill, MicroLabel, MonoNum, EmptyState, CardShell } from '@/components/ui';
 import {
   FOOD_TAGS,
@@ -21,6 +21,7 @@ import {
   getGoals,
   updateGoals,
   estimateFood,
+  createFood,
 } from '@/lib/api';
 import type { JournalEntry, MealType, Food, SavedMeal, Unit } from '@/lib/types';
 import { useSocketEvent } from '@/lib/useSocketEvent';
@@ -772,6 +773,10 @@ function AddFoodModal({ isOpen, onClose, mealType: initialMealType, date, onAdde
   const [quickName, setQuickName] = useState('');
   const [quickCalories, setQuickCalories] = useState('');
   const [quickProtein, setQuickProtein] = useState('');
+  // Hidden Quick Add macros — only populated by AI guess, used when the user
+  // clicks "Add to Journal and Database" so the saved Food row gets full macros.
+  const [quickCarbs, setQuickCarbs] = useState<number | null>(null);
+  const [quickFat, setQuickFat] = useState<number | null>(null);
   // AI estimate state for Quick Add
   const [aiEstimating, setAiEstimating] = useState(false);
   const [aiError, setAiError] = useState('');
@@ -871,11 +876,55 @@ function AddFoodModal({ isOpen, onClose, mealType: initialMealType, date, onAdde
       const r = await estimateFood(quickName.trim());
       setQuickCalories(String(r.calories));
       setQuickProtein(String(r.protein));
+      setQuickCarbs(r.carbs);
+      setQuickFat(r.fat);
       setAiResult({ portion: r.portion, reasoning: r.reasoning });
     } catch (e: unknown) {
       setAiError(e instanceof Error ? e.message : 'Could not estimate this food');
     } finally {
       setAiEstimating(false);
+    }
+  }
+
+  // "Add to Journal and Database" — creates a Food row (per 1 serving) using
+  // the typed/AI-filled macros, then adds a journal entry that references it.
+  async function handleQuickAddAndSave() {
+    const cal = parseFloat(quickCalories);
+    const pro = parseFloat(quickProtein) || 0;
+    if (!quickName.trim() || !cal || cal < 0) return;
+    setSaving(true);
+    setError('');
+    try {
+      const food = await createFood({
+        name: quickName.trim(),
+        baseAmount: 1,
+        baseUnit: 'serving',
+        calories: Math.round(cal),
+        protein: Math.round(pro * 10) / 10,
+        carbs: quickCarbs ?? 0,
+        fat: quickFat ?? 0,
+      } as unknown as Omit<Food, 'id' | 'created_at'>);
+      const entry = await addJournalEntry({
+        date,
+        meal_type: mealType,
+        food_id: food.id,
+        food_name_snapshot: food.name,
+        quantity: 1,
+        unit: 'serving',
+      });
+      onAdded(entry);
+      setQuickName('');
+      setQuickCalories('');
+      setQuickProtein('');
+      setQuickCarbs(null);
+      setQuickFat(null);
+      setAiResult(null);
+      setAiError('');
+      onClose();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to save food');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -899,6 +948,8 @@ function AddFoodModal({ isOpen, onClose, mealType: initialMealType, date, onAdde
       setQuickName('');
       setQuickCalories('');
       setQuickProtein('');
+      setQuickCarbs(null);
+      setQuickFat(null);
       setAiResult(null);
       setAiError('');
       onClose();
@@ -1231,17 +1282,36 @@ function AddFoodModal({ isOpen, onClose, mealType: initialMealType, date, onAdde
                 step={0.1}
               />
             </div>
-            <GlassButton
-              variant="primary"
-              className="w-full justify-center"
-              onClick={handleQuickAdd}
-              disabled={!quickName.trim() || !quickCalories || saving}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: 8,
+              }}
             >
-              <span className="flex items-center gap-2">
-                <Plus className="w-4 h-4" />
-                {saving ? 'Adding…' : 'Add to Journal'}
-              </span>
-            </GlassButton>
+              <GlassButton
+                variant="default"
+                className="justify-center"
+                onClick={handleQuickAddAndSave}
+                disabled={!quickName.trim() || !quickCalories || saving}
+              >
+                <span className="flex items-center gap-2">
+                  <BookOpen className="w-4 h-4" />
+                  {saving ? 'Saving…' : 'Add to Journal & Database'}
+                </span>
+              </GlassButton>
+              <GlassButton
+                variant="primary"
+                className="justify-center"
+                onClick={handleQuickAdd}
+                disabled={!quickName.trim() || !quickCalories || saving}
+              >
+                <span className="flex items-center gap-2">
+                  <Plus className="w-4 h-4" />
+                  {saving ? 'Adding…' : 'Add to Today'}
+                </span>
+              </GlassButton>
+            </div>
           </div>
         )}
 
