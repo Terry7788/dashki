@@ -86,12 +86,49 @@ export function QuantityInput({ food, quantity, unit, onChange }: QuantityInputP
     kcalPreview = nutritionFor(foodForCalc, quantity, unit).calories;
   } catch { /* ignore — invalid combo */ }
 
-  // ─── Stepper variant (servings) ─────────────────────────────────────────────
   const isServingMode = unit === 'serving';
 
+  // ─── Dashko-tokenised inline styles ─────────────────────────
+  const stepperBtnStyle: React.CSSProperties = {
+    width: 32,
+    height: 32,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 6,
+    background: 'var(--color-surface-warm)',
+    border: '1px solid var(--color-border)',
+    color: 'var(--color-foreground)',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    transition: 'background-color 120ms',
+  };
+
+  const fieldStyle: React.CSSProperties = {
+    padding: '6px 10px',
+    background: 'var(--color-surface)',
+    border: '1px solid var(--color-border)',
+    borderRadius: 4,
+    color: 'var(--color-foreground)',
+    fontFamily: 'inherit',
+    fontSize: 13,
+    fontWeight: 600,
+    textAlign: 'center',
+    outline: 'none',
+  };
+
   return (
-    <div className="px-4 py-3 flex items-center gap-3 flex-wrap" onClick={stop}>
-      <div className="flex items-center gap-2">
+    <div
+      onClick={stop}
+      style={{
+        padding: '12px 14px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        flexWrap: 'wrap',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {isServingMode ? (
           <>
             <button
@@ -99,9 +136,9 @@ export function QuantityInput({ food, quantity, unit, onChange }: QuantityInputP
               onClick={(e) => { stop(e); onChange({ quantity: Math.max(0, quantity - 0.5), unit }); }}
               aria-label="Decrease"
               disabled={quantity <= 0}
-              className="w-9 h-9 flex items-center justify-center rounded-xl bg-white/10 hover:bg-white/15 active:bg-white/20 text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              style={{ ...stepperBtnStyle, opacity: quantity <= 0 ? 0.4 : 1, cursor: quantity <= 0 ? 'not-allowed' : 'pointer' }}
             >
-              <Minus className="w-4 h-4" />
+              <Minus style={{ width: 14, height: 14 }} />
             </button>
 
             {editingCustom ? (
@@ -115,13 +152,26 @@ export function QuantityInput({ food, quantity, unit, onChange }: QuantityInputP
                   if (e.key === 'Escape') { setCustomDraft(String(quantity)); setEditingCustom(false); }
                 }}
                 onClick={stop}
-                className="w-16 px-2 py-1 text-sm bg-white/10 border border-indigo-400/60 rounded-lg text-white text-center focus:outline-none focus:ring-2 focus:ring-indigo-400/40 tabular-nums"
+                style={{ ...fieldStyle, width: 64, borderColor: 'var(--color-primary)' }}
+                className="tabular-nums"
               />
             ) : (
               <button
                 type="button"
                 onClick={(e) => { stop(e); setCustomDraft(String(quantity)); setEditingCustom(true); }}
-                className="min-w-[3.5rem] px-2 py-1 text-sm font-semibold text-white tabular-nums hover:bg-white/10 rounded-lg transition-colors"
+                style={{
+                  minWidth: 56,
+                  padding: '6px 10px',
+                  background: 'transparent',
+                  border: 0,
+                  borderRadius: 4,
+                  color: 'var(--color-foreground)',
+                  fontFamily: 'inherit',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+                className="tabular-nums"
               >
                 {quantity === 0 ? '—' : Number.isInteger(quantity) ? quantity : quantity.toFixed(1)}
               </button>
@@ -131,9 +181,9 @@ export function QuantityInput({ food, quantity, unit, onChange }: QuantityInputP
               type="button"
               onClick={(e) => { stop(e); onChange({ quantity: quantity + 0.5, unit }); }}
               aria-label="Increase"
-              className="w-9 h-9 flex items-center justify-center rounded-xl bg-white/10 hover:bg-white/15 active:bg-white/20 text-white transition-colors"
+              style={stepperBtnStyle}
             >
-              <Plus className="w-4 h-4" />
+              <Plus style={{ width: 14, height: 14 }} />
             </button>
           </>
         ) : (
@@ -155,7 +205,8 @@ export function QuantityInput({ food, quantity, unit, onChange }: QuantityInputP
               if (e.key === 'Escape') { setCustomDraft(String(quantity)); setEditingCustom(false); }
             }}
             onClick={stop}
-            className="w-20 px-2 py-1 text-sm bg-white/10 border border-white/15 rounded-lg text-white text-center focus:outline-none focus:ring-2 focus:ring-indigo-400/40 tabular-nums"
+            style={{ ...fieldStyle, width: 80 }}
+            className="tabular-nums"
             placeholder="0"
           />
         )}
@@ -163,27 +214,58 @@ export function QuantityInput({ food, quantity, unit, onChange }: QuantityInputP
 
       {/* Unit pills (or plain label if only one option) */}
       {showToggle ? (
-        <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.06] border border-white/10">
-          {units.map((opt) => (
-            <button
-              key={opt.unit}
-              type="button"
-              onClick={(e) => { stop(e); switchUnit(opt.unit); }}
-              className={`px-3 py-1.5 text-sm rounded-lg transition-all duration-150 ${
-                opt.unit === unit
-                  ? 'bg-indigo-500/30 border border-indigo-400 text-white font-semibold shadow-sm shadow-indigo-500/20'
-                  : 'text-white/60 hover:text-white hover:bg-white/[0.06] border border-transparent'
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
+        <div
+          style={{
+            display: 'flex',
+            gap: 0,
+            padding: 3,
+            background: 'var(--color-surface-warm)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 6,
+          }}
+        >
+          {units.map((opt) => {
+            const active = opt.unit === unit;
+            return (
+              <button
+                key={opt.unit}
+                type="button"
+                onClick={(e) => { stop(e); switchUnit(opt.unit); }}
+                className="cursor-pointer"
+                style={{
+                  padding: '5px 10px',
+                  borderRadius: 4,
+                  background: active ? 'var(--color-surface)' : 'transparent',
+                  color: active ? 'var(--color-foreground)' : 'var(--color-muted-foreground)',
+                  border: 0,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  boxShadow: active ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                  fontFamily: 'inherit',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
         </div>
       ) : (
-        <span className="text-sm text-white/60 px-2">{units[0].label}</span>
+        <span style={{ fontSize: 13, color: 'var(--color-muted-foreground)', padding: '0 4px' }}>
+          {units[0].label}
+        </span>
       )}
 
-      <span className="text-sm font-semibold text-indigo-300 ml-auto tabular-nums">
+      <span
+        style={{
+          marginLeft: 'auto',
+          fontSize: 13,
+          fontWeight: 600,
+          color: 'var(--color-primary)',
+          fontFamily: 'var(--font-mono)',
+        }}
+        className="tabular-nums"
+      >
         {kcalPreview != null ? `${kcalPreview} kcal` : '—'}
       </span>
     </div>
