@@ -96,6 +96,26 @@ interface FormErrors {
   calories_per_100g?: string;
 }
 
+// Shared style for native <select>s in this file — matches GlassInput's
+// shape so the modal dropdowns sit next to other fields without looking
+// out of place. appearance-none + custom ChevronDown so the closed
+// state is consistent across browsers.
+const selectStyle: React.CSSProperties = {
+  width: '100%',
+  height: 38,
+  padding: '0 32px 0 12px',
+  background: 'var(--color-surface)',
+  border: '1px solid var(--color-border)',
+  borderRadius: 4,
+  color: 'var(--color-foreground)',
+  fontFamily: 'inherit',
+  fontSize: 14,
+  appearance: 'none',
+  WebkitAppearance: 'none',
+  MozAppearance: 'none',
+  outline: 'none',
+};
+
 function validate(form: FoodFormData): FormErrors {
   const errors: FormErrors = {};
   if (!form.name.trim()) errors.name = 'Name is required';
@@ -410,13 +430,7 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-gray-500 dark:text-white/60 pl-1">Unit</label>
-            {/* Native <select> with dark-themed dropdown panel:
-                - [color-scheme:dark] tells the browser to render the native
-                  dropdown chrome in dark mode (Chrome/Firefox/Edge respect this)
-                - appearance-none + custom ChevronDown for a clean closed state
-                - Each <option> gets explicit bg/text so options are readable
-                  even in browsers that don't fully honour color-scheme */}
-            <div className="relative">
+            <div style={{ position: 'relative' }}>
               <select
                 value={form.base_unit}
                 onChange={(e) => {
@@ -430,13 +444,25 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
                   else if (newUnit === 'grams' || newUnit === 'ml') set('base_amount', '100');
                   set('base_unit', newUnit);
                 }}
-                className="w-full h-[46px] pl-3 sm:pl-4 pr-10 bg-black/[0.04] border border-black/[0.10] text-gray-900 dark:bg-white/10 dark:border-white/20 dark:text-white rounded-xl sm:rounded-2xl text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-[#2E8B57]/40 focus:border-[#2E8B57]/60 transition-all duration-200 appearance-none [color-scheme:dark] cursor-pointer"
+                style={selectStyle}
+                className="cursor-pointer"
               >
-                <option value="grams" className="bg-[#1a1a1a] text-white">Grams</option>
-                <option value="ml" className="bg-[#1a1a1a] text-white">ml</option>
-                <option value="servings" className="bg-[#1a1a1a] text-white">Servings</option>
+                <option value="grams">Grams</option>
+                <option value="ml">ml</option>
+                <option value="servings">Servings</option>
               </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 dark:text-white/50 pointer-events-none" />
+              <ChevronDown
+                style={{
+                  position: 'absolute',
+                  right: 10,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  width: 14,
+                  height: 14,
+                  color: 'var(--color-muted-foreground)',
+                  pointerEvents: 'none',
+                }}
+              />
             </div>
           </div>
         </div>
@@ -583,17 +609,29 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
               <div className="grid grid-cols-2 gap-2">
                 <div className="flex flex-col gap-1.5">
                   <label className="text-sm font-medium text-gray-500 dark:text-white/60 pl-1">Meal</label>
-                  <div className="relative">
+                  <div style={{ position: 'relative' }}>
                     <select
                       value={journalMealType}
                       onChange={(e) => setJournalMealType(e.target.value as MealType)}
-                      className="w-full h-[46px] pl-3 sm:pl-4 pr-10 bg-black/[0.04] border border-black/[0.10] text-gray-900 dark:bg-white/10 dark:border-white/20 dark:text-white rounded-xl sm:rounded-2xl text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-[#2E8B57]/40 focus:border-[#2E8B57]/60 transition-all duration-200 appearance-none [color-scheme:dark] cursor-pointer"
+                      style={selectStyle}
+                      className="cursor-pointer"
                     >
                       {MEAL_TYPES.map((m) => (
-                        <option key={m} value={m} className="bg-[#1a1a1a] text-white">{MEAL_LABELS[m]}</option>
+                        <option key={m} value={m}>{MEAL_LABELS[m]}</option>
                       ))}
                     </select>
-                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 dark:text-white/50 pointer-events-none" />
+                    <ChevronDown
+                      style={{
+                        position: 'absolute',
+                        right: 10,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        width: 14,
+                        height: 14,
+                        color: 'var(--color-muted-foreground)',
+                        pointerEvents: 'none',
+                      }}
+                    />
                   </div>
                 </div>
                 <GlassInput
@@ -717,13 +755,25 @@ function AddToJournalModal({ food, isOpen, onClose, onAdd }: AddToJournalModalPr
             <select
               value={mealType}
               onChange={(e) => setMealType(e.target.value as MealType)}
-              className="w-full h-[46px] pl-4 pr-10 bg-white/10 border border-white/20 text-white rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2E8B57]/40 focus:border-[#2E8B57]/60 transition-all duration-200 appearance-none [color-scheme:dark] cursor-pointer"
+              style={selectStyle}
+              className="cursor-pointer"
             >
               {MEAL_TYPES.map((m) => (
-                <option key={m} value={m} className="bg-[#1a1a1a] text-white">{MEAL_LABELS[m]}</option>
+                <option key={m} value={m}>{MEAL_LABELS[m]}</option>
               ))}
             </select>
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/50 pointer-events-none" />
+            <ChevronDown
+              style={{
+                position: 'absolute',
+                right: 10,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                width: 14,
+                height: 14,
+                color: 'var(--color-muted-foreground)',
+                pointerEvents: 'none',
+              }}
+            />
           </div>
         </div>
         <GlassInput
