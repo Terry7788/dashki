@@ -13,6 +13,7 @@ interface EstimateResponse {
   protein: number;
   carbs: number;
   fat: number;
+  fiber: number;
   portion: string;
   reasoning: string;
 }
@@ -27,6 +28,7 @@ Return ONLY valid JSON in this exact shape — no markdown, no commentary:
   "protein": <number grams of protein for the entire portion, one decimal place>,
   "carbs":   <number grams of carbohydrates for the entire portion, one decimal place>,
   "fat":     <number grams of fat for the entire portion, one decimal place>,
+  "fiber":   <number grams of dietary fibre for the entire portion, one decimal place>,
   "portion": "<short human-readable description of the portion you assumed, e.g. '1 medium apple (~180g)' or '2 slices (~250g)'>",
   "reasoning": "<one or two sentences explaining how you arrived at the numbers — components, density, source rule of thumb. Keep it concise but specific.>"
 }
@@ -34,10 +36,11 @@ Return ONLY valid JSON in this exact shape — no markdown, no commentary:
 Rules:
 1. Numbers must reflect the TOTAL portion described (or your assumed serving), not per-100g.
 2. Calories: round to the nearest integer.
-3. Protein / carbs / fat: round to one decimal place each.
-4. Reasoning must be specific — name the components or the typical macro density. Do not say "based on standard nutritional data".
-5. If the food is wildly ambiguous (e.g. just "food", "snack"), still produce a reasonable best guess and say so in reasoning.
-6. If the input is clearly not food (e.g. "blue car"), return all macros 0, portion="(not a food)", reasoning="That doesn't look like a food item.".
+3. Protein / carbs / fat / fiber: round to one decimal place each.
+4. Fibre counts the dietary fibre subset of carbs (not net carbs) — for most refined foods this is 0–2g, for produce/legumes/wholegrains it's higher.
+5. Reasoning must be specific — name the components or the typical macro density. Do not say "based on standard nutritional data".
+6. If the food is wildly ambiguous (e.g. just "food", "snack"), still produce a reasonable best guess and say so in reasoning.
+7. If the input is clearly not food (e.g. "blue car"), return all macros 0, portion="(not a food)", reasoning="That doesn't look like a food item.".
 
 Return JSON only.`;
 
@@ -78,13 +81,14 @@ router.post('/estimate-food', async (req: Request, res: Response) => {
     const protein = clampNonNegOneDp(parsed.protein);
     const carbs = clampNonNegOneDp(parsed.carbs);
     const fat = clampNonNegOneDp(parsed.fat);
+    const fiber = clampNonNegOneDp(parsed.fiber);
     const portion = typeof parsed.portion === 'string' && parsed.portion.trim() ? parsed.portion.trim() : '1 serving';
     const reasoning =
       typeof parsed.reasoning === 'string' && parsed.reasoning.trim()
         ? parsed.reasoning.trim()
         : 'Estimate based on typical nutritional values for this food.';
 
-    const result: EstimateResponse = { calories, protein, carbs, fat, portion, reasoning };
+    const result: EstimateResponse = { calories, protein, carbs, fat, fiber, portion, reasoning };
     res.json(result);
   } catch (err) {
     logger.error('[ai/estimate-food] failed:', err);

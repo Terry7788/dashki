@@ -24,6 +24,7 @@ import {
   getPreferences,
   updatePreferences,
 } from '@/lib/api';
+import type { HomeMetric } from '@/lib/api';
 import type { Goals } from '@/lib/types';
 import { useSocketEvent } from '@/lib/useSocketEvent';
 
@@ -33,6 +34,7 @@ const DEFAULT_GOALS: Goals = {
   protein: 150,
   carbs: null,
   fat: null,
+  fiber: null,
   steps: 10000,
   weight_kg: null,
   weight_journey_start_date: null,
@@ -176,6 +178,12 @@ export default function SettingsPage() {
   const [notif, setNotif] = useState(true);
   const [voice, setVoice] = useState(false);
   const [savingDisplayName, setSavingDisplayName] = useState(false);
+  // Which optional tiles render on the home dashboard. Calories is always on.
+  const [homeMetrics, setHomeMetrics] = useState<HomeMetric[]>([
+    'protein',
+    'steps',
+    'weight',
+  ]);
 
   useEffect(() => {
     getGoals().then(setGoals).catch(() => {});
@@ -183,9 +191,20 @@ export default function SettingsPage() {
       .then((p) => {
         setDisplayName(p.display_name ?? '');
         setTheme(p.theme);
+        if (p.home_metrics) setHomeMetrics(p.home_metrics);
       })
       .catch(() => {});
   }, []);
+
+  function toggleHomeMetric(metric: HomeMetric) {
+    setHomeMetrics((prev) => {
+      const next = prev.includes(metric)
+        ? prev.filter((m) => m !== metric)
+        : [...prev, metric];
+      updatePreferences({ home_metrics: next }).catch(() => {});
+      return next;
+    });
+  }
 
   useSocketEvent('goals-updated', () => {
     getGoals().then(setGoals).catch(() => {});
@@ -361,6 +380,17 @@ export default function SettingsPage() {
             }
           />
           <Row
+            label="Fibre"
+            hint="Target daily dietary fibre."
+            control={
+              <NumInput
+                value={goals.fiber ?? ''}
+                onChange={(v) => saveGoal('fiber', v || null)}
+                unit="g"
+              />
+            }
+          />
+          <Row
             label="Weight"
             hint="Long-term target."
             control={
@@ -380,6 +410,65 @@ export default function SettingsPage() {
                 onChange={(v) => saveGoal('steps', v)}
                 unit="steps"
                 width={140}
+              />
+            }
+          />
+        </CardShell>
+      </div>
+
+      {/* Home dashboard — toggle which optional tiles appear on the home page */}
+      <div style={{ marginTop: 16 }}>
+        <CardShell
+          title="Home dashboard"
+          icon={<Target style={{ width: 14, height: 14, strokeWidth: 2.25 }} />}
+          hint={
+            <span
+              style={{
+                fontSize: 12,
+                color: 'var(--color-muted-foreground)',
+              }}
+            >
+              Calories is always shown. Toggle the rest.
+            </span>
+          }
+        >
+          <Row
+            label="Protein bar"
+            hint="Daily protein progress alongside calories."
+            control={
+              <Switch
+                checked={homeMetrics.includes('protein')}
+                onChange={() => toggleHomeMetric('protein')}
+              />
+            }
+          />
+          <Row
+            label="Fibre bar"
+            hint="Daily fibre intake progress."
+            control={
+              <Switch
+                checked={homeMetrics.includes('fiber')}
+                onChange={() => toggleHomeMetric('fiber')}
+              />
+            }
+          />
+          <Row
+            label="Steps tile"
+            hint="Today's step count + goal."
+            control={
+              <Switch
+                checked={homeMetrics.includes('steps')}
+                onChange={() => toggleHomeMetric('steps')}
+              />
+            }
+          />
+          <Row
+            label="Weight tile"
+            hint="Latest weight + goal direction."
+            control={
+              <Switch
+                checked={homeMetrics.includes('weight')}
+                onChange={() => toggleHomeMetric('weight')}
               />
             }
           />

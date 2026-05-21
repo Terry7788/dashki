@@ -25,11 +25,13 @@ export interface FoodForNutrition {
   serving_size_g: number | null;
   calories: number;           // kcal per (base_amount × base_unit)
   protein: number | null;     // g protein per (base_amount × base_unit)
+  fiber?: number | null;      // g fibre per (base_amount × base_unit) — optional, default 0
 }
 
 export interface NutritionResult {
   calories: number;           // rounded to integer
   protein: number;            // rounded to 1dp
+  fiber: number;              // rounded to 1dp
 }
 
 /**
@@ -88,6 +90,7 @@ export function nutritionFor(
   return {
     calories: Math.round(food.calories * ratio),
     protein: Math.round((food.protein ?? 0) * ratio * 10) / 10,
+    fiber: Math.round((food.fiber ?? 0) * ratio * 10) / 10,
   };
 }
 

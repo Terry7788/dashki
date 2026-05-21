@@ -21,6 +21,8 @@ export interface Food {
   carbs_per_100g: number;
   /** g fat per 100g (legacy) */
   fat_per_100g: number;
+  /** g fibre per 100g (legacy) — DSHKI-44 */
+  fiber_per_100g?: number;
   /** RAW serving_size_g column value if set (or fallback for legacy callsites) */
   serving_size_g?: number | null;
   // Canonical base unit fields (camelCase + snake_case both available from API):
@@ -31,6 +33,9 @@ export interface Food {
   /** Per-base-amount nutrition (the source of truth for the math helper) */
   calories?: number;
   protein?: number | null;
+  carbs?: number | null;
+  fat?: number | null;
+  fiber?: number | null;
   /** Available unit options for the picker (always at least one element) */
   units?: FoodUnitOption[];
   recently_used?: boolean;
@@ -96,6 +101,7 @@ export interface JournalEntry {
   servings?: number;
   calories_snapshot: number;
   protein_snapshot: number;
+  fiber_snapshot?: number;
   /** Optional: server may embed the food's units[] for the Edit modal */
   food_units?: FoodUnitOption[];
 }
@@ -126,6 +132,7 @@ export interface Goals {
   protein: number;
   carbs: number | null;
   fat: number | null;
+  fiber: number | null;
   steps: number;
   weight_kg: number | null;
   weight_journey_start_date: string | null;
@@ -156,6 +163,7 @@ export interface DailySummary {
   date: string;
   calories: number;
   protein: number;
+  fiber: number;
   entries: JournalEntry[];
 }
 

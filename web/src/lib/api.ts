@@ -301,6 +301,7 @@ export function updateGoals(data: {
   protein?: number | null;
   carbs?: number | null;
   fat?: number | null;
+  fiber?: number | null;
   steps?: number | null;
   weight_kg?: number | null;
   weight_journey_start_date?: string | null;
@@ -314,9 +315,14 @@ export function updateGoals(data: {
 
 // ─── Preferences ─────────────────────────────────────────────────────────────
 
+// Calories isn't in this list — it's always shown as the primary metric on
+// the home dashboard. The user can toggle any of these to show/hide its tile.
+export type HomeMetric = 'protein' | 'fiber' | 'steps' | 'weight';
+
 export interface Preferences {
   theme: 'dark' | 'light';
   display_name: string | null;
+  home_metrics: HomeMetric[];
 }
 
 export function getPreferences(): Promise<Preferences> {
@@ -324,7 +330,11 @@ export function getPreferences(): Promise<Preferences> {
 }
 
 export function updatePreferences(
-  data: Partial<{ theme: 'dark' | 'light'; display_name: string | null }>
+  data: Partial<{
+    theme: 'dark' | 'light';
+    display_name: string | null;
+    home_metrics: HomeMetric[];
+  }>
 ): Promise<Preferences> {
   return request<Preferences>('/api/preferences', {
     method: 'PUT',
@@ -339,6 +349,7 @@ export interface FoodEstimate {
   protein: number;
   carbs: number;
   fat: number;
+  fiber: number;
   portion: string;
   reasoning: string;
 }

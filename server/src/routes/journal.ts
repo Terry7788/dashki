@@ -21,7 +21,7 @@ function todayStr(): string {
 const SELECT_ENTRY_SQL = `
   SELECT id, date, meal_type, logged_at, food_id, food_name_snapshot,
          quantity, unit,
-         calories_snapshot, protein_snapshot, created_at
+         calories_snapshot, protein_snapshot, fiber_snapshot, created_at
   FROM JournalEntries
 `;
 
@@ -64,10 +64,11 @@ router.get('/today-summary', (req: Request, res: Response) => {
 
   db.get(
     `SELECT COALESCE(SUM(calories_snapshot), 0) AS calories,
-            COALESCE(SUM(protein_snapshot), 0)  AS protein
+            COALESCE(SUM(protein_snapshot), 0)  AS protein,
+            COALESCE(SUM(fiber_snapshot), 0)    AS fiber
      FROM JournalEntries WHERE date = ?`,
     [date],
-    (err, summary: { calories: number; protein: number } | undefined) => {
+    (err, summary: { calories: number; protein: number; fiber: number } | undefined) => {
       if (err) {
         console.error('[error] GET /api/journal/today-summary', err);
         return res.status(500).json({ error: 'Failed to fetch today summary' });
@@ -85,6 +86,7 @@ router.get('/today-summary', (req: Request, res: Response) => {
             date,
             calories: summary?.calories ?? 0,
             protein: summary?.protein ?? 0,
+            fiber: summary?.fiber ?? 0,
             entries: entries || [],
           });
         }
@@ -100,10 +102,11 @@ router.get('/summary', (req: Request, res: Response) => {
 
   db.get(
     `SELECT COALESCE(SUM(calories_snapshot), 0) AS calories,
-            COALESCE(SUM(protein_snapshot), 0)  AS protein
+            COALESCE(SUM(protein_snapshot), 0)  AS protein,
+            COALESCE(SUM(fiber_snapshot), 0)    AS fiber
      FROM JournalEntries WHERE date = ?`,
     [date],
-    (err, summary: { calories: number; protein: number } | undefined) => {
+    (err, summary: { calories: number; protein: number; fiber: number } | undefined) => {
       if (err) {
         console.error('[error] GET /api/journal/summary', err);
         return res.status(500).json({ error: 'Failed to fetch journal summary' });
@@ -112,6 +115,7 @@ router.get('/summary', (req: Request, res: Response) => {
         date,
         calories: summary?.calories ?? 0,
         protein: summary?.protein ?? 0,
+        fiber: summary?.fiber ?? 0,
       });
     }
   );
@@ -134,6 +138,7 @@ router.post('/', (req: Request, res: Response) => {
     // Quick Add (food_id absent) only:
     calories_snapshot: clientCalories,
     protein_snapshot: clientProtein,
+    fiber_snapshot: clientFiber,
   } = req.body || {};
 
   if (!date || !meal_type || !food_name_snapshot) {
@@ -168,16 +173,16 @@ router.post('/', (req: Request, res: Response) => {
   // Compute snapshots:
   //   - food_id absent (Quick Add): trust client-supplied snapshots
   //   - food_id present: look up the food, compute via nutritionFor
-  const finishInsert = (caloriesNum: number, proteinNum: number | null) => {
+  const finishInsert = (caloriesNum: number, proteinNum: number | null, fiberNum: number | null) => {
     db.run(
       `INSERT INTO JournalEntries
          (date, meal_type, logged_at, food_id, food_name_snapshot,
           quantity, unit,
-          calories_snapshot, protein_snapshot)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          calories_snapshot, protein_snapshot, fiber_snapshot)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [date, meal_type, loggedAt, foodIdVal, food_name_snapshot,
        quantity, unit,
-       caloriesNum, proteinNum],
+       caloriesNum, proteinNum, fiberNum],
       function (this: { lastID: number }, err) {
         if (err) {
           console.error('[error] POST /api/journal', err);
@@ -207,13 +212,14 @@ router.post('/', (req: Request, res: Response) => {
     // Quick Add path
     const cal = toNumber(clientCalories, 0)!;
     const pro = toNumber(clientProtein, null);
-    finishInsert(cal, pro);
+    const fib = toNumber(clientFiber, null);
+    finishInsert(cal, pro, fib);
     return;
   }
 
   // food_id path: look up the food, compute via nutritionFor
   db.get(
-    `SELECT base_amount, base_unit, serving_size_g, calories, protein
+    `SELECT base_amount, base_unit, serving_size_g, calories, protein, fiber
      FROM Foods WHERE id = ?`,
     [foodIdVal],
     (err, foodRow: any) => {
@@ -229,11 +235,12 @@ router.post('/', (req: Request, res: Response) => {
           serving_size_g: foodRow.serving_size_g,
           calories: foodRow.calories,
           protein: foodRow.protein,
+          fiber: foodRow.fiber,
         };
-        const { calories, protein } = nutritionFor(food, quantity!, unit);
+        const { calories, protein, fiber } = nutritionFor(food, quantity!, unit);
         // Legacy `servings` column is computed as the unit-less ratio so an
         // unmigrated frontend reading the row still gets a sensible value.
-        finishInsert(calories, protein);
+        finishInsert(calories, protein, fiber);
       } catch (e: any) {
         return res.status(400).json({ error: e?.message || 'Invalid quantity/unit' });
       }
@@ -255,6 +262,7 @@ router.put('/:id', (req: Request, res: Response) => {
     logged_at,
     calories_snapshot,
     protein_snapshot,
+    fiber_snapshot,
   } = req.body || {};
 
   // First fetch the existing row so we know food_id (for snapshot recompute).
@@ -296,7 +304,7 @@ router.put('/:id', (req: Request, res: Response) => {
       // fields/params are scoped INSIDE finishUpdate now so a hypothetical
       // re-invocation (retry, future refactor) can't double-append clauses
       // from a prior call's leftover state.
-      const finishUpdate = (calForCol: number | null, proForCol: number | null) => {
+      const finishUpdate = (calForCol: number | null, proForCol: number | null, fibForCol: number | null) => {
         const fields: string[] = [];
         const params: unknown[] = [];
 
@@ -314,6 +322,7 @@ router.put('/:id', (req: Request, res: Response) => {
         if (logged_at !== undefined) { fields.push('logged_at = ?'); params.push(logged_at); }
         if (calForCol !== null) { fields.push('calories_snapshot = ?'); params.push(calForCol); }
         if (proForCol !== null) { fields.push('protein_snapshot = ?'); params.push(proForCol); }
+        if (fibForCol !== null) { fields.push('fiber_snapshot = ?'); params.push(fibForCol); }
 
         if (fields.length === 0) return res.status(400).json({ error: 'No fields to update' });
 
@@ -347,7 +356,7 @@ router.put('/:id', (req: Request, res: Response) => {
       if (quantityOrUnitChanged && !isQuickAdd) {
         // Recompute snapshots from the food.
         db.get(
-          `SELECT base_amount, base_unit, serving_size_g, calories, protein
+          `SELECT base_amount, base_unit, serving_size_g, calories, protein, fiber
            FROM Foods WHERE id = ?`,
           [existing.food_id],
           (foodErr, foodRow: any) => {
@@ -363,9 +372,10 @@ router.put('/:id', (req: Request, res: Response) => {
                 serving_size_g: foodRow.serving_size_g,
                 calories: foodRow.calories,
                 protein: foodRow.protein,
+                fiber: foodRow.fiber,
               };
-              const { calories, protein } = nutritionFor(food, finalQuantity, finalUnit);
-              finishUpdate(calories, protein);
+              const { calories, protein, fiber } = nutritionFor(food, finalQuantity, finalUnit);
+              finishUpdate(calories, protein, fiber);
             } catch (e: any) {
               return res.status(400).json({ error: e?.message || 'Invalid quantity/unit' });
             }
@@ -375,7 +385,8 @@ router.put('/:id', (req: Request, res: Response) => {
         // Quick Add or unrelated PUT — accept client-supplied snapshots.
         const cal = calories_snapshot !== undefined ? toNumber(calories_snapshot, 0)! : null;
         const pro = protein_snapshot !== undefined ? toNumber(protein_snapshot, null) : null;
-        finishUpdate(cal, pro);
+        const fib = fiber_snapshot !== undefined ? toNumber(fiber_snapshot, null) : null;
+        finishUpdate(cal, pro, fib);
       }
     }
   );
