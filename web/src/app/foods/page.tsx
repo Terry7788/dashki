@@ -96,6 +96,28 @@ interface FormErrors {
   calories_per_100g?: string;
 }
 
+// Canonical food-labelling conversion factor. Some labels round to 4.2,
+// but 4.184 is what AU/EU labelling regulations specify and the round-trip
+// of typical serving values is rounding-stable enough at integer kJ.
+const KJ_PER_KCAL = 4.184;
+
+function kcalToKjStr(kcalStr: string): string {
+  if (!kcalStr || !kcalStr.trim()) return '';
+  const n = Number(kcalStr);
+  if (!Number.isFinite(n) || n < 0) return '';
+  return String(Math.round(n * KJ_PER_KCAL));
+}
+
+function kjToKcalStr(kjStr: string): string {
+  if (!kjStr || !kjStr.trim()) return '';
+  const n = Number(kjStr);
+  if (!Number.isFinite(n) || n < 0) return '';
+  // 1-decimal precision — same precision as Protein/Carbs/Fat. Keeps the
+  // round-trip from kcal → kJ → kcal within ±0.5 kcal for typical serving
+  // sizes, which is well below the noise floor of food labelling itself.
+  return String(Math.round((n / KJ_PER_KCAL) * 10) / 10);
+}
+
 // Shared style for native <select>s in this file — matches GlassInput's
 // shape so the modal dropdowns sit next to other fields without looking
 // out of place. appearance-none + custom ChevronDown so the closed
@@ -159,6 +181,13 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
   const [aiEstimating, setAiEstimating] = useState(false);
   const [aiError, setAiError] = useState('');
   const [aiResult, setAiResult] = useState<{ portion: string; reasoning: string } | null>(null);
+  // kJ field state — DB stores kcal only. kjDraft holds the literal string
+  // the user typed into the kJ input so that round-trip rounding doesn't
+  // overwrite their keystrokes mid-edit. kjFromUser flips on when the kJ
+  // field becomes the source of truth; any edit to the kcal field flips it
+  // back off so kJ re-derives from kcal.
+  const [kjDraft, setKjDraft] = useState('');
+  const [kjFromUser, setKjFromUser] = useState(false);
 
   useEffect(() => {
     if (editingFood) {
@@ -200,6 +229,8 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
     setAiResult(null);
     setAiError('');
     setAiEstimating(false);
+    setKjDraft('');
+    setKjFromUser(false);
   }, [editingFood, isOpen]);
 
   function set(field: keyof FoodFormData, value: string) {
@@ -226,6 +257,7 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
         carbs_per_100g: String(r.carbs),
         fat_per_100g: String(r.fat),
       }));
+      setKjFromUser(false); // kJ re-derives from the AI-filled kcal
       setAiResult({ portion: r.portion, reasoning: r.reasoning });
     } catch (e: unknown) {
       setAiError(e instanceof Error ? e.message : 'Could not estimate this food');
@@ -467,6 +499,9 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
           </div>
         </div>
 
+        {/* Energy row — kcal is canonical (saved to DB), kJ is a paired UI
+            calculator for AU/EU labels that only print kilojoules. Both
+            fields stay in sync; only kcal persists. */}
         <div className="grid grid-cols-2 gap-2 sm:gap-3">
           <div className="relative">
             <GlassInput
@@ -474,7 +509,10 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
               type="number"
               inputMode="decimal"
               value={form.calories_per_100g}
-              onChange={(e) => set('calories_per_100g', e.target.value)}
+              onChange={(e) => {
+                set('calories_per_100g', e.target.value);
+                setKjFromUser(false); // kJ re-derives from kcal
+              }}
               min={0}
               step={0.1}
               placeholder="0"
@@ -482,7 +520,11 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
             {form.calories_per_100g && (
               <button
                 type="button"
-                onClick={() => set('calories_per_100g', '')}
+                onClick={() => {
+                  set('calories_per_100g', '');
+                  setKjDraft('');
+                  setKjFromUser(false);
+                }}
                 className="absolute right-3 top-9 text-white/40 hover:text-white"
               >
                 ×
@@ -492,6 +534,39 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
               <p className="text-xs text-red-400 mt-1 pl-1">{errors.calories_per_100g}</p>
             )}
           </div>
+          <div className="relative">
+            <GlassInput
+              label={`Energy (kJ, per ${formatBaseLabel(form.base_unit, form.base_amount)})`}
+              type="number"
+              inputMode="decimal"
+              value={kjFromUser ? kjDraft : kcalToKjStr(form.calories_per_100g)}
+              onChange={(e) => {
+                const v = e.target.value;
+                setKjDraft(v);
+                setKjFromUser(true);
+                set('calories_per_100g', kjToKcalStr(v));
+              }}
+              min={0}
+              step={1}
+              placeholder="0"
+            />
+            {(kjFromUser ? kjDraft : kcalToKjStr(form.calories_per_100g)) && (
+              <button
+                type="button"
+                onClick={() => {
+                  set('calories_per_100g', '');
+                  setKjDraft('');
+                  setKjFromUser(false);
+                }}
+                className="absolute right-3 top-9 text-white/40 hover:text-white"
+              >
+                ×
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 sm:gap-3">
           <div className="relative">
             <GlassInput
               label={`Protein (per ${formatBaseLabel(form.base_unit, form.base_amount)})`}
@@ -513,9 +588,6 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
               </button>
             )}
           </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2 sm:gap-3">
           <div className="relative">
             <GlassInput
               label={`Carbs (per ${formatBaseLabel(form.base_unit, form.base_amount)})`}
@@ -537,6 +609,9 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
               </button>
             )}
           </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 sm:gap-3">
           <div className="relative">
             <GlassInput
               label={`Fat (per ${formatBaseLabel(form.base_unit, form.base_amount)})`}
@@ -558,27 +633,26 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
               </button>
             )}
           </div>
-        </div>
-
-        <div className="relative">
-          <GlassInput
-            label="Serving Size (g) — optional"
-            type="number"
-            inputMode="decimal"
-            value={form.serving_size_g}
-            onChange={(e) => set('serving_size_g', e.target.value)}
-            min={1}
-            placeholder="e.g. 30 for 1 slice"
-          />
-          {form.serving_size_g && (
-            <button
-              type="button"
-              onClick={() => set('serving_size_g', '')}
-              className="absolute right-3 top-9 text-white/40 hover:text-white"
-            >
-              ×
-            </button>
-          )}
+          <div className="relative">
+            <GlassInput
+              label="Serving Size (g) — optional"
+              type="number"
+              inputMode="decimal"
+              value={form.serving_size_g}
+              onChange={(e) => set('serving_size_g', e.target.value)}
+              min={1}
+              placeholder="e.g. 30 for 1 slice"
+            />
+            {form.serving_size_g && (
+              <button
+                type="button"
+                onClick={() => set('serving_size_g', '')}
+                className="absolute right-3 top-9 text-white/40 hover:text-white"
+              >
+                ×
+              </button>
+            )}
+          </div>
         </div>
 
         {serverError && (
