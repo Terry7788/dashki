@@ -73,6 +73,7 @@ function mapFood(row: Record<string, unknown>): Record<string, unknown> {
   const protein = (row.protein as number | undefined) ?? 0;
   const carbs = (row.carbs as number | undefined) ?? 0;
   const fat = (row.fat as number | undefined) ?? 0;
+  const fiber = (row.fiber as number | undefined) ?? 0;
   const rawServingSizeG = (row.serving_size_g as number | null | undefined) ?? null;
 
   // Per-100g view (legacy field — the frontend still uses these).
@@ -80,6 +81,7 @@ function mapFood(row: Record<string, unknown>): Record<string, unknown> {
   let proteinPer100 = protein;
   let carbsPer100 = carbs;
   let fatPer100 = fat;
+  let fiberPer100 = fiber;
 
   if (baseUnit === 'g' && baseAmount !== 100) {
     const factor = baseAmount / 100;
@@ -87,6 +89,7 @@ function mapFood(row: Record<string, unknown>): Record<string, unknown> {
     proteinPer100 = Math.round(protein * factor * 10) / 10;
     carbsPer100 = Math.round((carbs ?? 0) * factor * 10) / 10;
     fatPer100 = Math.round((fat ?? 0) * factor * 10) / 10;
+    fiberPer100 = Math.round((fiber ?? 0) * factor * 10) / 10;
   }
 
   return {
@@ -96,6 +99,7 @@ function mapFood(row: Record<string, unknown>): Record<string, unknown> {
     protein_per_100g: proteinPer100,
     carbs_per_100g: carbsPer100,
     fat_per_100g: fatPer100,
+    fiber_per_100g: fiberPer100,
     // serving_size_g: keep the legacy fallback for old frontend code paths that
     // still read it, but units[] uses the raw column value.
     serving_size_g: rawServingSizeG ?? (baseUnit === 'g' ? baseAmount : null),
@@ -103,6 +107,7 @@ function mapFood(row: Record<string, unknown>): Record<string, unknown> {
     protein,
     carbs,
     fat,
+    fiber,
     baseAmount,
     baseUnit,                          // canonical now ('g' not 'grams')
     base_amount: baseAmount,           // snake_case alias for spec consumers
@@ -113,7 +118,7 @@ function mapFood(row: Record<string, unknown>): Record<string, unknown> {
 }
 
 const SELECT_SQL = `
-  SELECT id, name, base_amount, base_unit, calories, protein, carbs, fat, serving_size_g, created_at
+  SELECT id, name, base_amount, base_unit, calories, protein, carbs, fat, fiber, serving_size_g, created_at
   FROM Foods
 `;
 
@@ -141,7 +146,7 @@ router.get('/', (req: Request, res: Response) => {
   db.all(
     `SELECT
        f.id, f.name, f.base_amount, f.base_unit,
-       f.calories, f.protein, f.carbs, f.fat,
+       f.calories, f.protein, f.carbs, f.fat, f.fiber,
        f.serving_size_g, f.created_at,
        (SELECT MAX(logged_at) FROM JournalEntries WHERE food_id = f.id) AS last_used
      FROM Foods f
@@ -217,6 +222,7 @@ router.post('/', (req: Request, res: Response) => {
   const protein = toNumber(body.protein_per_100g ?? body.protein, null);
   const carbs = toNumber(body.carbs_per_100g ?? body.carbs, null);
   const fat = toNumber(body.fat_per_100g ?? body.fat, null);
+  const fiber = toNumber(body.fiber_per_100g ?? body.fiber, null);
   const serving_size_g = toNumber(body.serving_size_g, null);
 
   if (!name || calories === null) {
@@ -224,9 +230,9 @@ router.post('/', (req: Request, res: Response) => {
   }
 
   db.run(
-    `INSERT INTO Foods (name, base_amount, base_unit, calories, protein, carbs, fat, serving_size_g)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [name, baseAmount, unit, calories, protein, carbs, fat, serving_size_g],
+    `INSERT INTO Foods (name, base_amount, base_unit, calories, protein, carbs, fat, fiber, serving_size_g)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [name, baseAmount, unit, calories, protein, carbs, fat, fiber, serving_size_g],
     function (this: { lastID: number }, err) {
       if (err) {
         console.error('[error] POST /api/foods', err);
@@ -299,6 +305,12 @@ router.put('/:id', (req: Request, res: Response) => {
     fields.push('fat = ?'); params.push(v);
   }
 
+  const rawFiber = body.fiber_per_100g ?? body.fiber;
+  if (rawFiber !== undefined) {
+    const v = toNumber(rawFiber, null);
+    fields.push('fiber = ?'); params.push(v);
+  }
+
   if (body.serving_size_g !== undefined) {
     const v = toNumber(body.serving_size_g, null);
     fields.push('serving_size_g = ?'); params.push(v);
@@ -345,6 +357,7 @@ router.put('/:id', (req: Request, res: Response) => {
                 serving_size_g: (mapped.serving_size_g as number | null),
                 calories: mapped.calories as number,
                 protein: mapped.protein as number | null,
+                fiber: mapped.fiber as number | null,
               };
 
               let remaining = (rows || []).length;
@@ -356,12 +369,12 @@ router.put('/:id', (req: Request, res: Response) => {
               for (const row of rows || []) {
                 try {
                   const u = (row.unit ?? 'serving') as 'g'|'ml'|'serving';
-                  const { calories, protein } = nutritionFor(foodForCalc, row.quantity ?? 1, u);
+                  const { calories, protein, fiber } = nutritionFor(foodForCalc, row.quantity ?? 1, u);
                   db.run(
                     `UPDATE JournalEntries
-                     SET calories_snapshot = ?, protein_snapshot = ?, food_name_snapshot = ?
+                     SET calories_snapshot = ?, protein_snapshot = ?, fiber_snapshot = ?, food_name_snapshot = ?
                      WHERE id = ?`,
-                    [calories, protein, mapped.name, row.id],
+                    [calories, protein, fiber, mapped.name, row.id],
                     (updErr) => {
                       if (updErr) console.error('[error] journal resync row', row.id, updErr);
                       if (--remaining === 0) {

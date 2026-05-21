@@ -31,7 +31,7 @@ import { nutritionFor, formatQuantity } from '@/lib/nutrition';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const DEFAULT_GOALS = { calories: 2000, protein: 150 };
+const DEFAULT_GOALS = { calories: 2000, protein: 150, fiber: null as number | null };
 
 const MEAL_TYPES: MealType[] = ['breakfast', 'lunch', 'snack', 'dinner'];
 const MEAL_LABELS: Record<MealType, string> = {
@@ -2742,13 +2742,15 @@ function MealSection({
 function JournalSummaryCard({
   calories,
   protein,
+  fiber,
   entries,
   goals,
 }: {
   calories: number;
   protein: number;
+  fiber: number;
   entries: number;
-  goals: { calories: number; protein: number };
+  goals: { calories: number; protein: number; fiber: number | null };
 }) {
   return (
     <div
@@ -2790,6 +2792,21 @@ function JournalSummaryCard({
           unit="g"
           tone={protein >= goals.protein ? 'success' : 'primary'}
         />
+        {goals.fiber != null && (
+          <MacroBar
+            label="Fibre"
+            value={Math.round(fiber * 10) / 10}
+            target={goals.fiber}
+            unit="g"
+            tone={fiber >= goals.fiber ? 'success' : 'primary'}
+          />
+        )}
+        {goals.fiber == null && fiber > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+            <MicroLabel>Fibre today</MicroLabel>
+            <MonoNum size={14}>{Math.round(fiber * 10) / 10}g</MonoNum>
+          </div>
+        )}
       </div>
       <div
         style={{
@@ -3117,7 +3134,9 @@ export default function JournalPage() {
 
   useEffect(() => {
     getGoals()
-      .then((g) => setGoals({ calories: g.calories, protein: g.protein }))
+      .then((g) =>
+        setGoals({ calories: g.calories, protein: g.protein, fiber: g.fiber ?? null })
+      )
       .catch(() => {});
   }, []);
 
@@ -3126,7 +3145,11 @@ export default function JournalPage() {
     protein: number;
   }) {
     const updated = await updateGoals(newGoals);
-    setGoals({ calories: updated.calories, protein: updated.protein });
+    setGoals({
+      calories: updated.calories,
+      protein: updated.protein,
+      fiber: updated.fiber ?? null,
+    });
   }
 
   const dateStr = toISODate(currentDate);
@@ -3222,6 +3245,7 @@ export default function JournalPage() {
 
   const totalCalories = entries.reduce((a, e) => a + e.calories_snapshot, 0);
   const totalProtein = entries.reduce((a, e) => a + e.protein_snapshot, 0);
+  const totalFiber = entries.reduce((a, e) => a + (e.fiber_snapshot ?? 0), 0);
 
   const byMeal: Record<MealType, JournalEntry[]> = {
     breakfast: [],
@@ -3397,6 +3421,7 @@ export default function JournalPage() {
           <JournalSummaryCard
             calories={totalCalories}
             protein={totalProtein}
+            fiber={totalFiber}
             entries={entries.length}
             goals={goals}
           />

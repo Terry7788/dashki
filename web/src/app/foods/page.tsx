@@ -57,6 +57,7 @@ interface FoodFormData {
   protein_per_100g: string;
   carbs_per_100g: string;
   fat_per_100g: string;
+  fiber_per_100g: string;
   serving_size_g: string;
 }
 
@@ -78,6 +79,7 @@ const defaultForm = (): FoodFormData => ({
   protein_per_100g: '',
   carbs_per_100g: '',
   fat_per_100g: '',
+  fiber_per_100g: '',
   serving_size_g: '',
 });
 
@@ -200,7 +202,8 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
       // the API returns them, and the canonical Unit doesn't include the
       // legacy DB string 'grams' which we still defensively handle.
       const f = editingFood as Food & {
-        carbs?: number; fat?: number; baseUnit?: string; base_unit?: string;
+        carbs?: number; fat?: number; fiber?: number;
+        baseUnit?: string; base_unit?: string;
       };
       const rawBaseUnit = (f.baseUnit ?? f.base_unit ?? 'g') as string;
       const dbUnit: BaseUnit =
@@ -216,6 +219,7 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
         protein_per_100g: String(f.protein ?? f.protein_per_100g ?? ''),
         carbs_per_100g: String(f.carbs ?? f.carbs_per_100g ?? ''),
         fat_per_100g: String(f.fat ?? f.fat_per_100g ?? ''),
+        fiber_per_100g: String(f.fiber ?? f.fiber_per_100g ?? ''),
         serving_size_g: f.serving_size_g != null ? String(f.serving_size_g) : '',
       });
     } else {
@@ -256,6 +260,7 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
         protein_per_100g: String(r.protein),
         carbs_per_100g: String(r.carbs),
         fat_per_100g: String(r.fat),
+        fiber_per_100g: String(r.fiber),
       }));
       setKjFromUser(false); // kJ re-derives from the AI-filled kcal
       setAiResult({ portion: r.portion, reasoning: r.reasoning });
@@ -288,6 +293,7 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
       protein_per_100g: Number(form.protein_per_100g) || 0,
       carbs_per_100g: Number(form.carbs_per_100g) || 0,
       fat_per_100g: Number(form.fat_per_100g) || 0,
+      fiber_per_100g: Number(form.fiber_per_100g) || 0,
       serving_size_g: form.serving_size_g ? Number(form.serving_size_g) : undefined,
     } as unknown as Omit<Food, 'id' | 'created_at'>;
 
@@ -635,24 +641,46 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
           </div>
           <div className="relative">
             <GlassInput
-              label="Serving Size (g) — optional"
+              label={`Fibre (per ${formatBaseLabel(form.base_unit, form.base_amount)})`}
               type="number"
               inputMode="decimal"
-              value={form.serving_size_g}
-              onChange={(e) => set('serving_size_g', e.target.value)}
-              min={1}
-              placeholder="e.g. 30 for 1 slice"
+              value={form.fiber_per_100g}
+              onChange={(e) => set('fiber_per_100g', e.target.value)}
+              min={0}
+              step={0.1}
+              placeholder="0"
             />
-            {form.serving_size_g && (
+            {form.fiber_per_100g && (
               <button
                 type="button"
-                onClick={() => set('serving_size_g', '')}
+                onClick={() => set('fiber_per_100g', '')}
                 className="absolute right-3 top-9 text-white/40 hover:text-white"
               >
                 ×
               </button>
             )}
           </div>
+        </div>
+
+        <div className="relative">
+          <GlassInput
+            label="Serving Size (g) — optional"
+            type="number"
+            inputMode="decimal"
+            value={form.serving_size_g}
+            onChange={(e) => set('serving_size_g', e.target.value)}
+            min={1}
+            placeholder="e.g. 30 for 1 slice"
+          />
+          {form.serving_size_g && (
+            <button
+              type="button"
+              onClick={() => set('serving_size_g', '')}
+              className="absolute right-3 top-9 text-white/40 hover:text-white"
+            >
+              ×
+            </button>
+          )}
         </div>
 
         {serverError && (

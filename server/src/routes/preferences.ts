@@ -7,13 +7,35 @@ const router = Router();
 interface PreferencesRow {
   theme: string | null;
   display_name: string | null;
+  home_metrics: string | null;
+}
+
+// Default set of home-dashboard metrics shown when the user hasn't customised.
+// Calories is always shown — it's the primary metric and isn't toggleable.
+const VALID_HOME_METRICS = ['protein', 'fiber', 'steps', 'weight'] as const;
+type HomeMetric = (typeof VALID_HOME_METRICS)[number];
+const DEFAULT_HOME_METRICS: HomeMetric[] = ['protein', 'steps', 'weight'];
+
+function parseHomeMetrics(raw: string | null): HomeMetric[] {
+  if (!raw) return DEFAULT_HOME_METRICS;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return DEFAULT_HOME_METRICS;
+    const filtered = parsed.filter(
+      (k): k is HomeMetric =>
+        typeof k === 'string' && (VALID_HOME_METRICS as readonly string[]).includes(k)
+    );
+    return filtered;
+  } catch {
+    return DEFAULT_HOME_METRICS;
+  }
 }
 
 // ─── GET / — fetch current preferences ───────────────────────────────────────
 
 router.get('/', (_req: Request, res: Response) => {
   db.get(
-    `SELECT theme, display_name FROM UserPreferences WHERE id = 1`,
+    `SELECT theme, display_name, home_metrics FROM UserPreferences WHERE id = 1`,
     [],
     (err, row: PreferencesRow | undefined) => {
       if (err) {
@@ -24,6 +46,7 @@ router.get('/', (_req: Request, res: Response) => {
       res.json({
         theme: row?.theme ?? 'dark',
         display_name: row?.display_name ?? null,
+        home_metrics: parseHomeMetrics(row?.home_metrics ?? null),
       });
     }
   );
@@ -31,9 +54,10 @@ router.get('/', (_req: Request, res: Response) => {
 
 // ─── PUT / — update preferences ──────────────────────────────────────────────
 //
-// Partial update — only fields present in the body are written. Pass either
-// or both of `theme` and `display_name`. Empty string or null on
-// display_name resets it (greeting falls back to a generic form).
+// Partial update — only fields present in the body are written. Accepts:
+//   theme:         'dark' | 'light'
+//   display_name:  string | null   (null/'' resets to default greeting)
+//   home_metrics:  string[]        (whitelist filtered; persisted as JSON text)
 
 router.put('/', (req: Request, res: Response) => {
   const body = req.body || {};
@@ -63,6 +87,18 @@ router.put('/', (req: Request, res: Response) => {
     params.push(name);
   }
 
+  if (body.home_metrics !== undefined) {
+    if (!Array.isArray(body.home_metrics)) {
+      return res.status(400).json({ error: 'home_metrics must be an array of metric keys' });
+    }
+    const filtered = body.home_metrics.filter(
+      (k: unknown): k is HomeMetric =>
+        typeof k === 'string' && (VALID_HOME_METRICS as readonly string[]).includes(k)
+    );
+    updates.push('home_metrics = ?');
+    params.push(JSON.stringify(filtered));
+  }
+
   if (updates.length === 0) {
     return res.status(400).json({ error: 'No valid fields to update' });
   }
@@ -77,7 +113,7 @@ router.put('/', (req: Request, res: Response) => {
       }
 
       db.get(
-        `SELECT theme, display_name FROM UserPreferences WHERE id = 1`,
+        `SELECT theme, display_name, home_metrics FROM UserPreferences WHERE id = 1`,
         [],
         (selErr, row: PreferencesRow | undefined) => {
           if (selErr) {
@@ -88,6 +124,7 @@ router.put('/', (req: Request, res: Response) => {
           const result = {
             theme: row?.theme ?? 'dark',
             display_name: row?.display_name ?? null,
+            home_metrics: parseHomeMetrics(row?.home_metrics ?? null),
           };
 
           try {

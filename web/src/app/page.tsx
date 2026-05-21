@@ -34,6 +34,7 @@ import {
   getGoals,
   getPreferences,
 } from '@/lib/api';
+import type { HomeMetric } from '@/lib/api';
 import { useSocketEvent } from '@/lib/useSocketEvent';
 import type {
   DailySummary,
@@ -94,6 +95,7 @@ const DEFAULT_GOALS: Goals = {
   protein: 150,
   carbs: null,
   fat: null,
+  fiber: null,
   steps: 10000,
   weight_kg: null,
   weight_journey_start_date: null,
@@ -124,6 +126,14 @@ export default function DashboardPage() {
   const [weightHistory, setWeightHistory] = useState<WeightEntry[]>([]);
   const [goals, setGoals] = useState<Goals>(DEFAULT_GOALS);
   const [displayName, setDisplayName] = useState<string | null>(null);
+  // Which optional metric tiles render on the dashboard. Calories is always
+  // shown. Defaults match server's DEFAULT_HOME_METRICS so first paint
+  // (before preferences hydrate) matches the saved config for the common case.
+  const [homeMetrics, setHomeMetrics] = useState<HomeMetric[]>([
+    'protein',
+    'steps',
+    'weight',
+  ]);
   const [weekJournal, setWeekJournal] = useState<
     { date: string; cal: number; protein: number; partial?: boolean }[]
   >([]);
@@ -235,6 +245,7 @@ export default function DashboardPage() {
     try {
       const prefs = await getPreferences();
       setDisplayName(prefs.display_name);
+      if (prefs.home_metrics) setHomeMetrics(prefs.home_metrics);
     } catch {
       /* silent */
     }
@@ -272,6 +283,7 @@ export default function DashboardPage() {
 
   const calories = summary ? Math.round(summary.calories) : 0;
   const protein = summary ? Math.round(summary.protein) : 0;
+  const fiber = summary ? Math.round((summary.fiber ?? 0) * 10) / 10 : 0;
   const todaySteps = steps?.steps ?? 0;
   const lastWeight = weightHistory[0] ?? null; // API returns newest first
   const prevWeight = weightHistory[7] ?? weightHistory[weightHistory.length - 1] ?? null;
@@ -359,11 +371,13 @@ export default function DashboardPage() {
           summary={summary}
           calories={calories}
           protein={protein}
+          fiber={fiber}
           todaySteps={todaySteps}
           lastWeight={lastWeight}
           prevWeight={prevWeight}
           weightHistory={weightHistory}
           goals={goals}
+          homeMetrics={homeMetrics}
         />
       ) : (
         <WeekVariant
@@ -511,22 +525,30 @@ function TodayVariant({
   summary,
   calories,
   protein,
+  fiber,
   todaySteps,
   lastWeight,
   prevWeight,
   weightHistory,
   goals,
+  homeMetrics,
 }: {
   loading: boolean;
   summary: DailySummary | null;
   calories: number;
   protein: number;
+  fiber: number;
   todaySteps: number;
   lastWeight: WeightEntry | null;
   prevWeight: WeightEntry | null;
   weightHistory: WeightEntry[];
   goals: Goals;
+  homeMetrics: HomeMetric[];
 }) {
+  const showProtein = homeMetrics.includes('protein');
+  const showFiber = homeMetrics.includes('fiber');
+  const showSteps = homeMetrics.includes('steps');
+  const showWeight = homeMetrics.includes('weight');
   const entries = summary?.entries ?? [];
   const weightDelta =
     lastWeight && prevWeight
@@ -601,15 +623,27 @@ function TodayVariant({
           >
             <CalorieRing value={calories} target={goals.calories} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <MacroBar label="Protein" value={protein} target={goals.protein} />
-              <MacroBar
-                label="Steps"
-                value={todaySteps}
-                target={goals.steps}
-                unit=""
-                tone="success"
-              />
-              {lastWeight && (
+              {showProtein && (
+                <MacroBar label="Protein" value={protein} target={goals.protein} />
+              )}
+              {showFiber && (
+                <MacroBar
+                  label="Fibre"
+                  value={fiber}
+                  target={goals.fiber ?? 30}
+                  unit="g"
+                />
+              )}
+              {showSteps && (
+                <MacroBar
+                  label="Steps"
+                  value={todaySteps}
+                  target={goals.steps}
+                  unit=""
+                  tone="success"
+                />
+              )}
+              {showWeight && lastWeight && (
                 <MacroBar
                   label="Weight"
                   value={lastWeight.weight_kg}
@@ -641,6 +675,7 @@ function TodayVariant({
 
       {/* RIGHT — side rail */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {showWeight && (
         <GlassCard padding={false} className="p-4">
           <MicroLabel>
             <Scale
@@ -714,7 +749,9 @@ function TodayVariant({
             </div>
           )}
         </GlassCard>
+        )}
 
+        {showSteps && (
         <GlassCard padding={false} className="p-4">
           <MicroLabel>
             <Footprints
@@ -754,7 +791,9 @@ function TodayVariant({
             />
           </div>
         </GlassCard>
+        )}
 
+        {showProtein && (
         <CardShell
           title="Today's protein"
           icon={
@@ -788,6 +827,39 @@ function TodayVariant({
             />
           </div>
         </CardShell>
+        )}
+
+        {showFiber && (
+        <CardShell
+          title="Today's fibre"
+          icon={
+            <Utensils style={{ width: 14, height: 14, strokeWidth: 2.25 }} />
+          }
+        >
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <MonoNum size={28}>{fiber}</MonoNum>
+            <span
+              style={{
+                color: 'var(--color-muted-foreground)',
+                fontSize: 12,
+              }}
+            >
+              {goals.fiber
+                ? `of ${goals.fiber}g · ${Math.round((fiber / goals.fiber) * 100)}%`
+                : 'g today'}
+            </span>
+          </div>
+          {goals.fiber != null && (
+            <div style={{ marginTop: 10 }}>
+              <ProgressBar
+                value={fiber}
+                max={goals.fiber}
+                tone={fiber >= goals.fiber ? 'success' : 'primary'}
+              />
+            </div>
+          )}
+        </CardShell>
+        )}
       </div>
 
       <style jsx>{`

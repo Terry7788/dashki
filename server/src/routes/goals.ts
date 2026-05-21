@@ -10,6 +10,7 @@ export interface Goals {
   protein: number | null;
   carbs: number | null;
   fat: number | null;
+  fiber: number | null;
   steps: number | null;
   weight_kg: number | null;
   weight_journey_start_date: string | null;
@@ -23,6 +24,7 @@ const DEFAULT_GOALS = {
   protein: 150,
   carbs: null,
   fat: null,
+  fiber: null,
   steps: 10000,
   weight_kg: null,
   weight_journey_start_date: null,
@@ -33,7 +35,7 @@ const DEFAULT_GOALS = {
 
 router.get('/', (_req: Request, res: Response) => {
   db.get(
-    `SELECT id, calories, protein, carbs, fat, steps, weight_kg,
+    `SELECT id, calories, protein, carbs, fat, fiber, steps, weight_kg,
             weight_journey_start_date, tdee_calories, updated_at
      FROM Goals WHERE id = 1`,
     [],
@@ -53,6 +55,7 @@ router.get('/', (_req: Request, res: Response) => {
         protein: row.protein ?? DEFAULT_GOALS.protein,
         carbs: row.carbs ?? DEFAULT_GOALS.carbs,
         fat: row.fat ?? DEFAULT_GOALS.fat,
+        fiber: row.fiber ?? DEFAULT_GOALS.fiber,
         steps: row.steps ?? DEFAULT_GOALS.steps,
         weight_kg: row.weight_kg ?? DEFAULT_GOALS.weight_kg,
         weight_journey_start_date: row.weight_journey_start_date ?? null,
@@ -68,7 +71,7 @@ router.get('/', (_req: Request, res: Response) => {
 // ─── PUT / — update goals ───────────────────────────────────────────────────
 
 router.put('/', (req: Request, res: Response) => {
-  const { calories, protein, carbs, fat, steps, weight_kg, weight_journey_start_date, tdee_calories } =
+  const { calories, protein, carbs, fat, fiber, steps, weight_kg, weight_journey_start_date, tdee_calories } =
     req.body || {};
 
   // Validate inputs - all fields are optional but must be valid numbers if provided
@@ -108,6 +111,15 @@ router.put('/', (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Invalid fat value' });
     }
     updates.push('fat = ?');
+    params.push(val);
+  }
+
+  if (fiber !== undefined) {
+    const val = fiber === null ? null : Number(fiber);
+    if (val !== null && (!Number.isFinite(val) || val <= 0)) {
+      return res.status(400).json({ error: 'Invalid fiber value' });
+    }
+    updates.push('fiber = ?');
     params.push(val);
   }
 
@@ -167,7 +179,7 @@ router.put('/', (req: Request, res: Response) => {
 
     // Fetch the updated goals
     db.get(
-      `SELECT id, calories, protein, carbs, fat, steps, weight_kg,
+      `SELECT id, calories, protein, carbs, fat, fiber, steps, weight_kg,
               weight_journey_start_date, tdee_calories, updated_at
        FROM Goals WHERE id = 1`,
       [],
@@ -183,6 +195,7 @@ router.put('/', (req: Request, res: Response) => {
           protein: row!.protein ?? DEFAULT_GOALS.protein,
           carbs: row!.carbs ?? DEFAULT_GOALS.carbs,
           fat: row!.fat ?? DEFAULT_GOALS.fat,
+          fiber: row!.fiber ?? DEFAULT_GOALS.fiber,
           steps: row!.steps ?? DEFAULT_GOALS.steps,
           weight_kg: row!.weight_kg ?? DEFAULT_GOALS.weight_kg,
           weight_journey_start_date: row!.weight_journey_start_date ?? null,

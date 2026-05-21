@@ -12,6 +12,7 @@ export interface FoodForNutrition {
   serving_size_g: number | null;
   calories: number;
   protein: number | null;
+  fiber?: number | null;
 }
 
 export function computeRatio(food: FoodForNutrition, quantity: number, unit: Unit): number {
@@ -33,6 +34,7 @@ export function nutritionFor(food: FoodForNutrition, quantity: number, unit: Uni
   return {
     calories: Math.round(food.calories * ratio),
     protein: Math.round((food.protein ?? 0) * ratio * 10) / 10,
+    fiber: Math.round((food.fiber ?? 0) * ratio * 10) / 10,
   };
 }
 

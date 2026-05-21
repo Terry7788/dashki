@@ -32,6 +32,7 @@ export function initDb(): Promise<void> {
           protein      REAL,
           carbs        REAL,
           fat          REAL,
+          fiber        REAL,
           serving_size_g REAL,
           created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
         )
@@ -167,7 +168,9 @@ export function initDb(): Promise<void> {
       // Insert default goals row (singleton)
       db.run(`INSERT OR IGNORE INTO Goals (id) VALUES (1)`);
 
-      // ── Migration: add weight_journey_start_date + tdee_calories to Goals (DSHKI-24) ──
+      // ── Migration: add weight_journey_start_date + tdee_calories + fiber to Goals ──
+      // weight_journey_start_date / tdee_calories: DSHKI-24
+      // fiber:                                    DSHKI-44 (fibre tracking)
       db.all(`PRAGMA table_info(Goals)`, [], (pragmaErr, columns: Array<{ name: string }>) => {
         if (pragmaErr) return;
         const existingCols = new Set(columns.map((c) => c.name));
@@ -179,6 +182,9 @@ export function initDb(): Promise<void> {
         if (!existingCols.has('tdee_calories')) {
           migrations.push('ALTER TABLE Goals ADD COLUMN tdee_calories REAL');
         }
+        if (!existingCols.has('fiber')) {
+          migrations.push('ALTER TABLE Goals ADD COLUMN fiber REAL');
+        }
 
         for (const sql of migrations) {
           db.run(sql, [], (err) => {
@@ -188,15 +194,56 @@ export function initDb(): Promise<void> {
         }
       });
 
+      // ── Migration: add fiber to Foods (DSHKI-44) ─────────────────────────────
+      db.all(`PRAGMA table_info(Foods)`, [], (pragmaErr, columns: Array<{ name: string }>) => {
+        if (pragmaErr) return;
+        const existingCols = new Set(columns.map((c) => c.name));
+        if (!existingCols.has('fiber')) {
+          db.run('ALTER TABLE Foods ADD COLUMN fiber REAL', [], (err) => {
+            if (err) console.error('[db] migration error (Foods.fiber):', err.message);
+            else console.log('[db] ran migration: ALTER TABLE Foods ADD COLUMN fiber');
+          });
+        }
+      });
+
+      // ── Migration: add fiber_snapshot to JournalEntries (DSHKI-44) ───────────
+      db.all(`PRAGMA table_info(JournalEntries)`, [], (pragmaErr, columns: Array<{ name: string }>) => {
+        if (pragmaErr) return;
+        const existingCols = new Set(columns.map((c) => c.name));
+        if (!existingCols.has('fiber_snapshot')) {
+          db.run('ALTER TABLE JournalEntries ADD COLUMN fiber_snapshot REAL', [], (err) => {
+            if (err) console.error('[db] migration error (JournalEntries.fiber_snapshot):', err.message);
+            else console.log('[db] ran migration: ALTER TABLE JournalEntries ADD COLUMN fiber_snapshot');
+          });
+        }
+      });
+
       // ── User Preferences ───────────────────────────────────────────────────
+      // home_metrics is a JSON-encoded array of metric keys to show on the
+      // home dashboard (e.g. ["protein","fiber","steps","weight"]). Calories
+      // is always shown — it's the primary metric and isn't toggleable.
+      // Stored as TEXT because SQLite has no native JSON column type.
       db.run(`
         CREATE TABLE IF NOT EXISTS UserPreferences (
-          id    INTEGER PRIMARY KEY CHECK (id = 1),
-          theme TEXT NOT NULL DEFAULT 'dark'
+          id            INTEGER PRIMARY KEY CHECK (id = 1),
+          theme         TEXT NOT NULL DEFAULT 'dark',
+          home_metrics  TEXT
         )
       `);
 
       db.run(`INSERT OR IGNORE INTO UserPreferences (id) VALUES (1)`);
+
+      // ── Migration: add home_metrics to UserPreferences (DSHKI-44) ────────────
+      db.all(`PRAGMA table_info(UserPreferences)`, [], (pragmaErr, columns: Array<{ name: string }>) => {
+        if (pragmaErr) return;
+        const existingCols = new Set(columns.map((c) => c.name));
+        if (!existingCols.has('home_metrics')) {
+          db.run('ALTER TABLE UserPreferences ADD COLUMN home_metrics TEXT', [], (err) => {
+            if (err) console.error('[db] migration error (UserPreferences.home_metrics):', err.message);
+            else console.log('[db] ran migration: ALTER TABLE UserPreferences ADD COLUMN home_metrics');
+          });
+        }
+      });
 
       // ── Calendar Tokens ────────────────────────────────────────────────────
       db.run(`
