@@ -360,3 +360,24 @@ export function estimateFood(name: string): Promise<FoodEstimate> {
     body: JSON.stringify({ name }),
   });
 }
+
+export interface ScannedLabel {
+  name: string;
+  baseAmount: number;
+  baseUnit: 'grams' | 'ml' | 'servings';
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber: number;
+  servingSize: number | null;
+  confidence: 'high' | 'medium' | 'low';
+  reasoning: string;
+}
+
+export function scanFoodLabel(imageDataUrl: string): Promise<ScannedLabel> {
+  return request<ScannedLabel>('/api/ai/scan-label', {
+    method: 'POST',
+    body: JSON.stringify({ image: imageDataUrl }),
+  });
+}

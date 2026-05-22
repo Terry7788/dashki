@@ -83,7 +83,10 @@ app.locals.io = io;
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
 
-app.use(express.json());
+// Bumped from the 100kb default so /api/ai/scan-label can accept a
+// base64-encoded nutrition-label photo. Client resizes before upload
+// (typical payload ~200-600KB); 10mb leaves comfortable headroom.
+app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Request logger (dev-friendly)

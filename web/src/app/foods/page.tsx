@@ -19,6 +19,7 @@ import {
   Cookie,
   Sparkles,
   Loader2,
+  Camera,
 } from 'lucide-react';
 import {
   GlassCard,
@@ -38,7 +39,7 @@ import {
   unitLabel,
 } from '@/lib/foodTags';
 import type { FoodTag } from '@/lib/foodTags';
-import { getFoods, createFood, updateFood, deleteFood, addJournalEntry, estimateFood } from '@/lib/api';
+import { getFoods, createFood, updateFood, deleteFood, addJournalEntry, estimateFood, scanFoodLabel } from '@/lib/api';
 import type { Food, MealType } from '@/lib/types';
 import { useSocketEvent } from '@/lib/useSocketEvent';
 import { useIsNarrow } from '@/lib/useIsNarrow';
@@ -149,6 +150,43 @@ function validate(form: FoodFormData): FormErrors {
   return errors;
 }
 
+// ─── Label-scan helpers ───────────────────────────────────────────────────────
+
+// Resize a captured image to keep the upload payload small (and the vision
+// API call fast/cheap) without losing label legibility. Max edge 1280px,
+// JPEG q=0.82 typically lands ~150-500KB even for big phone cameras.
+const SCAN_MAX_EDGE = 1280;
+const SCAN_JPEG_QUALITY = 0.82;
+
+async function fileToResizedJpegDataUrl(file: File): Promise<string> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(String(fr.result));
+    fr.onerror = () => reject(new Error('Could not read the selected file'));
+    fr.readAsDataURL(file);
+  });
+
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const el = new Image();
+    el.onload = () => resolve(el);
+    el.onerror = () => reject(new Error('Could not decode the image'));
+    el.src = dataUrl;
+  });
+
+  const { naturalWidth: w, naturalHeight: h } = img;
+  const scale = Math.min(1, SCAN_MAX_EDGE / Math.max(w, h));
+  const dw = Math.max(1, Math.round(w * scale));
+  const dh = Math.max(1, Math.round(h * scale));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = dw;
+  canvas.height = dh;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas not supported');
+  ctx.drawImage(img, 0, 0, dw, dh);
+  return canvas.toDataURL('image/jpeg', SCAN_JPEG_QUALITY);
+}
+
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 
 function FoodSkeleton() {
@@ -183,6 +221,14 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
   const [aiEstimating, setAiEstimating] = useState(false);
   const [aiError, setAiError] = useState('');
   const [aiResult, setAiResult] = useState<{ portion: string; reasoning: string } | null>(null);
+  // Label-scan state — same lifecycle as AI estimate, separate UI panel.
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState('');
+  const [scanResult, setScanResult] = useState<{
+    confidence: 'high' | 'medium' | 'low';
+    reasoning: string;
+  } | null>(null);
+  const scanInputRef = useRef<HTMLInputElement | null>(null);
   // kJ field state — DB stores kcal only. kjDraft holds the literal string
   // the user typed into the kJ input so that round-trip rounding doesn't
   // overwrite their keystrokes mid-edit. kjFromUser flips on when the kJ
@@ -233,6 +279,9 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
     setAiResult(null);
     setAiError('');
     setAiEstimating(false);
+    setScanResult(null);
+    setScanError('');
+    setScanning(false);
     setKjDraft('');
     setKjFromUser(false);
   }, [editingFood, isOpen]);
@@ -241,6 +290,39 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
     setForm((prev) => ({ ...prev, [field]: value }));
     if (errors[field as keyof FormErrors]) {
       setErrors((prev) => ({ ...prev, [field]: undefined }));
+    }
+  }
+
+  async function handleScanFile(file: File) {
+    if (scanning) return;
+    setScanning(true);
+    setScanError('');
+    setScanResult(null);
+    try {
+      const dataUrl = await fileToResizedJpegDataUrl(file);
+      const r = await scanFoodLabel(dataUrl);
+      // Prefill every field the scan can fill. Leave name as-is if the
+      // user already typed something — they may have a more specific name
+      // in mind than what's printed on the package.
+      setForm((prev) => ({
+        ...prev,
+        name: prev.name.trim() ? prev.name : r.name,
+        base_amount: String(r.baseAmount),
+        base_unit: r.baseUnit,
+        calories_per_100g: String(r.calories),
+        protein_per_100g: String(r.protein),
+        carbs_per_100g: String(r.carbs),
+        fat_per_100g: String(r.fat),
+        fiber_per_100g: String(r.fiber),
+        serving_size_g: r.servingSize != null ? String(r.servingSize) : prev.serving_size_g,
+      }));
+      setKjFromUser(false); // kJ re-derives from the scanned kcal
+      setAiResult(null);    // a fresh scan supersedes any prior AI estimate panel
+      setScanResult({ confidence: r.confidence, reasoning: r.reasoning });
+    } catch (e: unknown) {
+      setScanError(e instanceof Error ? e.message : 'Could not scan that label');
+    } finally {
+      setScanning(false);
     }
   }
 
@@ -348,6 +430,117 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
 
         {!editingFood && (
           <>
+            {/* Hidden file input — `capture="environment"` makes mobile
+                browsers open the rear camera directly; on desktop it
+                falls back to a normal file picker. */}
+            <input
+              ref={scanInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleScanFile(f);
+                // Reset so picking the same file twice still fires onChange.
+                e.target.value = '';
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => scanInputRef.current?.click()}
+              disabled={scanning}
+              className="cursor-pointer w-full"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                padding: '10px 14px',
+                background: 'var(--color-surface-warm)',
+                border: '1px dashed var(--color-border)',
+                borderRadius: 6,
+                color: 'var(--color-foreground)',
+                fontSize: 13,
+                fontWeight: 600,
+                fontFamily: 'inherit',
+                opacity: scanning ? 0.55 : 1,
+              }}
+            >
+              {scanning ? (
+                <>
+                  <Loader2 className="animate-spin" style={{ width: 14, height: 14 }} />
+                  <span>Reading the label…</span>
+                </>
+              ) : (
+                <>
+                  <Camera style={{ width: 14, height: 14, color: 'var(--color-primary)' }} />
+                  <span>Scan nutrition label</span>
+                </>
+              )}
+            </button>
+            {scanError && (
+              <div
+                style={{
+                  fontSize: 12,
+                  color: 'var(--color-critical)',
+                  background: 'rgba(201,28,43,0.10)',
+                  border: '1px solid rgba(201,28,43,0.25)',
+                  padding: '8px 10px',
+                  borderRadius: 4,
+                }}
+              >
+                {scanError}
+              </div>
+            )}
+            {scanResult && !scanError && (
+              <div
+                style={{
+                  background: 'var(--color-surface-warm)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 6,
+                  padding: '10px 12px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4,
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    color: 'var(--color-muted-foreground)',
+                  }}
+                >
+                  <Camera style={{ width: 11, height: 11, color: 'var(--color-primary)' }} />
+                  Scanned label · {scanResult.confidence} confidence
+                </div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: 'var(--color-foreground)',
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {scanResult.reasoning}
+                </div>
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: 'var(--color-muted-foreground)',
+                    fontStyle: 'italic',
+                    marginTop: 2,
+                  }}
+                >
+                  Review every field below before saving — OCR is not perfect.
+                </div>
+              </div>
+            )}
             <button
               type="button"
               onClick={handleAiGuess}
