@@ -72,10 +72,14 @@ function formatBaseLabel(unit: BaseUnit, amount: string | number): string {
 }
 
 
+// New foods default to "per 1 serving" — most users add a packaged item
+// and just want to type/scan the per-serve values straight from the
+// label without doing per-100g math. Edits still load whatever base the
+// food was originally saved with.
 const defaultForm = (): FoodFormData => ({
   name: '',
-  base_amount: '100',
-  base_unit: 'grams',
+  base_amount: '1',
+  base_unit: 'servings',
   calories_per_100g: '',
   protein_per_100g: '',
   carbs_per_100g: '',
@@ -301,14 +305,14 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
     try {
       const dataUrl = await fileToResizedJpegDataUrl(file);
       const r = await scanFoodLabel(dataUrl);
-      // Prefill every field the scan can fill. Leave name as-is if the
-      // user already typed something — they may have a more specific name
-      // in mind than what's printed on the package.
+      // Scan results are always per 1 serving. Lock the base to that so
+      // the field labels say "per 1 serving" and the values map 1:1.
+      // Name is intentionally NOT prefilled — labels rarely give a clean
+      // product name and the user always wants to write their own.
       setForm((prev) => ({
         ...prev,
-        name: prev.name.trim() ? prev.name : r.name,
-        base_amount: String(r.baseAmount),
-        base_unit: r.baseUnit,
+        base_amount: '1',
+        base_unit: 'servings',
         calories_per_100g: String(r.calories),
         protein_per_100g: String(r.protein),
         carbs_per_100g: String(r.carbs),
@@ -316,7 +320,18 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
         fiber_per_100g: String(r.fiber),
         serving_size_g: r.servingSize != null ? String(r.servingSize) : prev.serving_size_g,
       }));
-      setKjFromUser(false); // kJ re-derives from the scanned kcal
+      // Energy: if the label only printed kJ (typical AU/EU label),
+      // treat the printed kJ as source-of-truth so the saved value
+      // matches the label exactly. The kcal field then derives from it.
+      // Otherwise (label printed kcal/Cal, or both), kcal is the truth
+      // and kJ derives.
+      if (r.energyPrintedAs === 'kj' && r.kj != null) {
+        setKjDraft(String(r.kj));
+        setKjFromUser(true);
+      } else {
+        setKjDraft('');
+        setKjFromUser(false);
+      }
       setAiResult(null);    // a fresh scan supersedes any prior AI estimate panel
       setScanResult({ confidence: r.confidence, reasoning: r.reasoning });
     } catch (e: unknown) {
@@ -432,18 +447,49 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
           <>
             {/* Hidden file input — `capture="environment"` makes mobile
                 browsers open the rear camera directly; on desktop it
-                falls back to a normal file picker. */}
+                falls back to a normal file picker.
+
+                NOTE on iOS: do NOT use `display: none` here. With the
+                modal's body scroll lock (position:fixed) active, iOS
+                Safari briefly suspends pointer events on the modal
+                after the camera dismisses if the triggering input was
+                `display: none`. The visually-hidden pattern below
+                keeps the input in the layout (so iOS finishes its
+                focus transition cleanly) while being invisible. We
+                also defer the value reset out of the onChange tick
+                for the same reason. */}
             <input
               ref={scanInputRef}
               type="file"
               accept="image/*"
               capture="environment"
-              style={{ display: 'none' }}
+              tabIndex={-1}
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                width: 1,
+                height: 1,
+                padding: 0,
+                margin: -1,
+                overflow: 'hidden',
+                clip: 'rect(0,0,0,0)',
+                whiteSpace: 'nowrap',
+                border: 0,
+                opacity: 0,
+                pointerEvents: 'none',
+              }}
               onChange={(e) => {
-                const f = e.target.files?.[0];
+                const target = e.target;
+                const f = target.files?.[0];
                 if (f) handleScanFile(f);
-                // Reset so picking the same file twice still fires onChange.
-                e.target.value = '';
+                // Defer the value reset and the blur to the next tick so
+                // iOS finishes dismissing the camera UI and releasing
+                // focus before we poke the input. Resetting synchronously
+                // here is what leaves the modal unresponsive on iOS.
+                setTimeout(() => {
+                  target.value = '';
+                  target.blur();
+                }, 0);
               }}
             />
             <button

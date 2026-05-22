@@ -362,14 +362,19 @@ export function estimateFood(name: string): Promise<FoodEstimate> {
 }
 
 export interface ScannedLabel {
-  name: string;
-  baseAmount: number;
-  baseUnit: 'grams' | 'ml' | 'servings';
+  /** kcal per ONE serving — printed directly if the label has kcal/Cal,
+   *  otherwise server-derived from kj via kj/4.184. */
   calories: number;
+  /** Printed kJ per ONE serving, or null if the label only printed kcal/Cal.
+   *  When energyPrintedAs === 'kj' the client uses this as source-of-truth
+   *  for the Energy (kJ) input. */
+  kj: number | null;
+  energyPrintedAs: 'kcal' | 'kj' | 'both';
   protein: number;
   carbs: number;
   fat: number;
   fiber: number;
+  /** Printed serving weight in g (solids) or ml (liquids). null if absent. */
   servingSize: number | null;
   confidence: 'high' | 'medium' | 'low';
   reasoning: string;

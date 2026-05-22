@@ -49,14 +49,24 @@ function clampNonNegOneDp(n: unknown): number {
 }
 
 interface ScanLabelResponse {
-  name: string;
-  baseAmount: number;
-  baseUnit: 'grams' | 'ml' | 'servings';
+  /** kcal per ONE serving — printed directly if a kcal/Cal value is on
+   *  the label; otherwise derived from kJ via kJ/4.184. */
   calories: number;
+  /** Printed kJ per ONE serving, or null if the label only shows kcal/Cal.
+   *  When present and energyPrintedAs === 'kj' the client uses this as
+   *  the source-of-truth for the Energy (kJ) field instead of deriving
+   *  it from kcal, so what's saved matches the printed label byte-for-byte. */
+  kj: number | null;
+  /** What the label actually printed in the energy row. Drives whether
+   *  the kJ field or the kcal field is treated as source-of-truth on
+   *  the client. */
+  energyPrintedAs: 'kcal' | 'kj' | 'both';
   protein: number;
   carbs: number;
   fat: number;
   fiber: number;
+  /** Printed serving weight in grams (solids) or ml (liquids), e.g.
+   *  "Serving size: 30g" → 30. Null if not printed. */
   servingSize: number | null;
   confidence: 'high' | 'medium' | 'low';
   reasoning: string;
@@ -64,37 +74,36 @@ interface ScanLabelResponse {
 
 const SCAN_LABEL_PROMPT = `You are extracting nutrition data from a photo of a packaged-food nutrition label.
 
+YOUR JOB: Read the "PER SERVE" / "Per Serving" / "Per 1 serving" column. ALWAYS. Even if a "Per 100g" column is also printed alongside it — IGNORE the per-100g column. Every macro you return must be per ONE serving.
+
 Output ONLY valid JSON in this exact shape — no markdown, no commentary:
 {
-  "name":        "<best-guess product name visible on the packaging — brand + product, or empty string if not visible>",
-  "baseAmount":  <number — typically 100 when reading the 'per 100g/100ml' column, OR the serving weight when only per-serving is shown>,
-  "baseUnit":    "<grams|ml|servings>",
-  "calories":    <integer kcal per the chosen base>,
-  "protein":     <number grams per the chosen base, one decimal>,
-  "carbs":       <number grams per the chosen base, one decimal>,
-  "fat":         <number grams per the chosen base, one decimal>,
-  "fiber":       <number grams per the chosen base, one decimal — 0 if not listed>,
-  "servingSize": <optional number — grams in one serving if printed, else null>,
-  "confidence":  "<high|medium|low>",
-  "reasoning":   "<one or two sentences naming what column you used and any conversions you made>"
+  "calories":        <integer kcal PER ONE SERVING — see Rule 2 for kJ-only labels>,
+  "kj":              <integer kJ per ONE serving if the label printed kJ, else null>,
+  "energyPrintedAs": "<one of 'kcal', 'kj', 'both' — what the energy row of the label actually printed>",
+  "protein":         <number grams of protein PER ONE SERVING, one decimal>,
+  "carbs":           <number grams of carbohydrate PER ONE SERVING, one decimal>,
+  "fat":             <number grams of fat PER ONE SERVING, one decimal>,
+  "fiber":           <number grams of dietary fibre PER ONE SERVING, one decimal — 0 if not listed>,
+  "servingSize":     <optional number — printed serving weight in grams (solids) or ml (liquids), e.g. "Serving size: 30g" → 30. null if not printed>,
+  "confidence":      "<high|medium|low>",
+  "reasoning":       "<one or two sentences describing what column you read and any conversions you made>"
 }
 
 Rules:
-1. PREFER the "per 100g" (or "per 100ml" for liquids) column when present — it's the most useful base for the database. Set baseAmount=100 and baseUnit="grams" or "ml". If only per-serving is shown (common on US labels), use that and set baseUnit="servings", baseAmount=1, and put the serving weight in servingSize.
-2. Energy: if the label shows kJ but not kcal, divide kJ by 4.184 and round to the nearest integer kcal. If both are shown, use the printed kcal value.
-3. For liquids (drinks, milks, oils) prefer ml. For solids prefer grams.
-4. Fibre may be labelled "Fibre", "Dietary Fibre", or "Fiber" — extract whichever is shown. If absent, use 0.
-5. Carbs: prefer "Total Carbohydrate" / "Carbohydrate" (not "of which sugars").
-6. Fat: prefer "Total Fat" / "Fat" (not "Saturated").
-7. Product name: combine brand and product when both are visible (e.g. "Vita-Weat Original"). Leave empty if uncertain.
-8. If the image is NOT a nutrition label (blurry, wrong subject, unreadable), set confidence="low", all macros to 0, baseAmount=100, baseUnit="grams", and explain in reasoning.
-9. If the image IS a label but a specific value is missing or unreadable, set that value to 0 and mention it in reasoning.
+1. EVERY macro number must be the PER-SERVING value. If the label ONLY has a "Per 100g" column (no per-serve column at all), derive per-serve by multiplying by (printed_serving_size / 100). If no serving size is printed either, set confidence='low' and explain.
+2. Energy handling — read it carefully:
+   - If the energy row prints kcal (or "Cal" / "Calories" on US labels): use that integer as "calories". Set energyPrintedAs='kcal' if no kJ is printed, or 'both' if kJ is also there.
+   - If the energy row prints ONLY kJ (common on AU/EU labels): set kj = the printed kJ integer, set energyPrintedAs='kj', and ALSO compute calories = round(kj / 4.184). The client uses the printed kJ as source-of-truth in this case.
+   - "kj" is null whenever the label did not print a kJ value.
+3. Carbohydrate: prefer "Total Carbohydrate" / "Carbohydrate" (NOT "of which sugars" / "Sugars").
+4. Fat: prefer "Total Fat" / "Fat" (NOT "Saturated Fat").
+5. Fibre may be labelled "Fibre", "Dietary Fibre", or "Fiber" — extract whichever appears. If absent from the label, return 0.
+6. servingSize: the printed serving weight in g (solids) or ml (liquids). Examples: "Serving size: 30g" → 30, "Per serve (250ml)" → 250. null if not printed.
+7. If the image is NOT a nutrition label (blurry, wrong subject, unreadable): set confidence='low', all macros 0, calories=0, kj=null, energyPrintedAs='kcal', servingSize=null, and explain in reasoning.
+8. If the image IS a label but a specific value is unreadable: set that value to 0 (or kj=null) and mention it in reasoning.
 
 Return JSON only.`;
-
-function isValidBaseUnit(s: unknown): s is 'grams' | 'ml' | 'servings' {
-  return s === 'grams' || s === 'ml' || s === 'servings';
-}
 
 router.post('/scan-label', async (req: Request, res: Response) => {
   if (!openai) {
@@ -136,18 +145,30 @@ router.post('/scan-label', async (req: Request, res: Response) => {
     const raw = completion.choices[0]?.message?.content ?? '{}';
     const parsed = JSON.parse(raw) as Partial<ScanLabelResponse>;
 
-    const calories = Number.isFinite(parsed.calories) ? Math.max(0, Math.round(Number(parsed.calories))) : 0;
+    const kjRaw = Number(parsed.kj);
+    const kj = Number.isFinite(kjRaw) && kjRaw > 0 ? Math.round(kjRaw) : null;
+    const energyPrintedAs: 'kcal' | 'kj' | 'both' =
+      parsed.energyPrintedAs === 'kcal' || parsed.energyPrintedAs === 'kj' || parsed.energyPrintedAs === 'both'
+        ? parsed.energyPrintedAs
+        : (kj != null ? 'kj' : 'kcal');
+
+    // If the label only printed kJ, trust kj as source-of-truth and
+    // re-derive calories from it server-side. This guards against the
+    // model returning a kcal that doesn't match its own kJ.
+    let calories: number;
+    if (energyPrintedAs === 'kj' && kj != null) {
+      calories = Math.max(0, Math.round(kj / 4.184));
+    } else {
+      calories = Number.isFinite(parsed.calories) ? Math.max(0, Math.round(Number(parsed.calories))) : 0;
+    }
+
     const protein = clampNonNegOneDp(parsed.protein);
     const carbs = clampNonNegOneDp(parsed.carbs);
     const fat = clampNonNegOneDp(parsed.fat);
     const fiber = clampNonNegOneDp(parsed.fiber);
-    const baseUnit: 'grams' | 'ml' | 'servings' = isValidBaseUnit(parsed.baseUnit) ? parsed.baseUnit : 'grams';
-    const baseAmountRaw = Number(parsed.baseAmount);
-    const baseAmount = Number.isFinite(baseAmountRaw) && baseAmountRaw > 0 ? baseAmountRaw : (baseUnit === 'servings' ? 1 : 100);
     const servingSize = Number.isFinite(Number(parsed.servingSize)) && Number(parsed.servingSize) > 0
       ? Number(parsed.servingSize)
       : null;
-    const name = typeof parsed.name === 'string' ? parsed.name.trim() : '';
     const confidence: 'high' | 'medium' | 'low' =
       parsed.confidence === 'high' || parsed.confidence === 'medium' || parsed.confidence === 'low'
         ? parsed.confidence
@@ -158,7 +179,7 @@ router.post('/scan-label', async (req: Request, res: Response) => {
         : 'Extracted from nutrition label.';
 
     const result: ScanLabelResponse = {
-      name, baseAmount, baseUnit, calories, protein, carbs, fat, fiber,
+      calories, kj, energyPrintedAs, protein, carbs, fat, fiber,
       servingSize, confidence, reasoning,
     };
     res.json(result);
