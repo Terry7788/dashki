@@ -124,11 +124,14 @@ const SELECT_SQL = `
 
 // ─── GET / — list foods ───────────────────────────────────────────────────────
 //
-// Sorting: the 20 most-recently-used foods (by latest JournalEntries.logged_at
-// for that food_id) are returned first in recency order, then everything
-// else is appended in alphabetical name order. Each row carries a boolean
-// `recently_used` flag so the frontend can render a divider between the two
-// groups.
+// Sorting: the 20 most-recently-touched foods are returned first in recency
+// order, then everything else is appended in alphabetical name order. Each
+// row carries a boolean `recently_used` flag so the frontend can render a
+// divider between the two groups.
+//
+// "Recency" = COALESCE(MAX(JournalEntries.logged_at), Foods.created_at).
+// Falling back to created_at means newly added foods land in the recents
+// group right away rather than waiting for their first journal entry.
 //
 // Why JS post-processing rather than a single SQL query: SQLite's lack of
 // NULLS LAST + the "first N by recency, then everything else alpha" rule
@@ -141,14 +144,19 @@ router.get('/', (req: Request, res: Response) => {
   const search = ((req.query.search as string) || '').trim();
   const pattern = search ? `%${search}%` : '%';
 
-  // Pull the food row + its latest journal-entry timestamp via a correlated
-  // subquery. last_used is null for foods that have never been logged.
+  // Pull the food row + a recency signal: the latest journal-entry timestamp
+  // when present, otherwise the food's creation timestamp. This ensures
+  // newly created foods are treated as "recent" until something newer
+  // displaces them.
   db.all(
     `SELECT
        f.id, f.name, f.base_amount, f.base_unit,
        f.calories, f.protein, f.carbs, f.fat, f.fiber,
        f.serving_size_g, f.created_at,
-       (SELECT MAX(logged_at) FROM JournalEntries WHERE food_id = f.id) AS last_used
+       COALESCE(
+         (SELECT MAX(logged_at) FROM JournalEntries WHERE food_id = f.id),
+         f.created_at
+       ) AS last_used
      FROM Foods f
      WHERE f.name LIKE ?`,
     [pattern],
