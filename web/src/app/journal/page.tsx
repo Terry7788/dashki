@@ -2654,15 +2654,13 @@ function MealSection({
               flexShrink: 0,
             }}
           >
-            {/* Per-meal totals — hidden on narrow viewports so the + Add
-                button stays clickable. The Day-summary card on the right
-                already aggregates these numbers. */}
-            {!isNarrow && entries.length > 0 && (
+            {entries.length > 0 && (
               <span
                 style={{
                   fontFamily: 'var(--font-mono)',
-                  fontSize: 12,
+                  fontSize: isNarrow ? 11 : 12,
                   color: 'var(--color-muted-foreground)',
+                  whiteSpace: 'nowrap',
                 }}
               >
                 <span
@@ -2681,8 +2679,8 @@ function MealSection({
                   }}
                 >
                   {Math.round(totals.protein)}g
-                </span>{' '}
-                P
+                </span>
+                {!isNarrow && ' P'}
               </span>
             )}
             <button
