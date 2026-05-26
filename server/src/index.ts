@@ -31,6 +31,9 @@ const server = http.createServer(app);
 const allowedOrigins: (string | RegExp)[] = [
   process.env.FRONTEND_ORIGIN || 'http://localhost:3000',
   'http://localhost:3001',
+  'http://localhost:5173', // Vite dev server for mobile/
+  'capacitor://localhost', // iOS Capacitor WebView origin
+  'http://localhost', // Android Capacitor WebView default origin
   /\.vercel\.app$/,
 ];
 
