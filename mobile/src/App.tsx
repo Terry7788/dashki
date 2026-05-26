@@ -7,6 +7,7 @@ import {
   useLocation,
 } from 'react-router-dom';
 import { AuthProvider, useAuth, type AuthStatus } from './lib/auth-context';
+import AppShell from './components/AppShell';
 
 // Auth screens — synchronous so the sign-in screen feels instant.
 import SignInScreen from './screens/SignInScreen';
@@ -18,6 +19,28 @@ import OnboardingScreen from './screens/OnboardingScreen';
 // Main app screens — code-split so the auth bundle stays small.
 const HomeScreen = lazy(() => import('./screens/HomeScreen'));
 const SettingsScreen = lazy(() => import('./screens/SettingsScreen'));
+const MoreScreen = lazy(() => import('./screens/MoreScreen'));
+
+// Stub screens for tabs ported in subsequent sessions.
+const StubsModule = () => import('./screens/stubs');
+const JournalScreen = lazy(() =>
+  StubsModule().then((m) => ({ default: m.JournalScreen })),
+);
+const WeightScreen = lazy(() =>
+  StubsModule().then((m) => ({ default: m.WeightScreen })),
+);
+const StepsScreen = lazy(() =>
+  StubsModule().then((m) => ({ default: m.StepsScreen })),
+);
+const MealsScreen = lazy(() =>
+  StubsModule().then((m) => ({ default: m.MealsScreen })),
+);
+const FoodsScreen = lazy(() =>
+  StubsModule().then((m) => ({ default: m.FoodsScreen })),
+);
+const CalendarScreen = lazy(() =>
+  StubsModule().then((m) => ({ default: m.CalendarScreen })),
+);
 
 function LoadingSplash() {
   return (
@@ -38,10 +61,6 @@ function LoadingSplash() {
   );
 }
 
-/**
- * Gate that scrolls to top on route change. Mobile WebViews preserve scroll
- * position across navigation, which is jarring inside an app.
- */
 function ScrollToTop() {
   const location = useLocation();
   useEffect(() => {
@@ -63,7 +82,6 @@ function ProtectedRoute({
   if (!allowed.includes(status)) {
     return <Navigate to="/sign-in" replace />;
   }
-  // After sign-up, force the user through onboarding once.
   if (
     status === 'signed-in' &&
     user &&
@@ -84,7 +102,26 @@ function PublicOnlyRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * Wraps protected routes that should show the bottom tab bar.
+ * Settings + Onboarding are deliberately NOT tabbed — they're full-bleed pages.
+ */
+function TabbedRoute({
+  children,
+  allowed,
+}: {
+  children: React.ReactNode;
+  allowed: AuthStatus[];
+}) {
+  return (
+    <ProtectedRoute allowed={allowed}>
+      <AppShell>{children}</AppShell>
+    </ProtectedRoute>
+  );
+}
+
 function AppRoutes() {
+  const tabbed: AuthStatus[] = ['signed-in', 'guest'];
   return (
     <Suspense fallback={<LoadingSplash />}>
       <Routes>
@@ -122,31 +159,89 @@ function AppRoutes() {
           }
         />
 
-        {/* Onboarding — signed-in users only */}
+        {/* Onboarding wizard — no tab bar */}
         <Route
           path="/onboarding"
           element={
-            <ProtectedRoute allowed={['signed-in', 'guest']}>
+            <ProtectedRoute allowed={tabbed}>
               <OnboardingScreen />
             </ProtectedRoute>
           }
         />
 
-        {/* Protected (signed-in OR guest) */}
+        {/* Full-bleed protected pages (no tab bar) */}
         <Route
           path="/settings"
           element={
-            <ProtectedRoute allowed={['signed-in', 'guest']}>
+            <ProtectedRoute allowed={tabbed}>
               <SettingsScreen />
             </ProtectedRoute>
           }
         />
+
+        {/* Tabbed routes — share the bottom tab bar */}
         <Route
           path="/"
           element={
-            <ProtectedRoute allowed={['signed-in', 'guest']}>
+            <TabbedRoute allowed={tabbed}>
               <HomeScreen />
-            </ProtectedRoute>
+            </TabbedRoute>
+          }
+        />
+        <Route
+          path="/journal"
+          element={
+            <TabbedRoute allowed={tabbed}>
+              <JournalScreen />
+            </TabbedRoute>
+          }
+        />
+        <Route
+          path="/weight"
+          element={
+            <TabbedRoute allowed={tabbed}>
+              <WeightScreen />
+            </TabbedRoute>
+          }
+        />
+        <Route
+          path="/steps"
+          element={
+            <TabbedRoute allowed={tabbed}>
+              <StepsScreen />
+            </TabbedRoute>
+          }
+        />
+        <Route
+          path="/more"
+          element={
+            <TabbedRoute allowed={tabbed}>
+              <MoreScreen />
+            </TabbedRoute>
+          }
+        />
+        <Route
+          path="/meals"
+          element={
+            <TabbedRoute allowed={tabbed}>
+              <MealsScreen />
+            </TabbedRoute>
+          }
+        />
+        <Route
+          path="/foods"
+          element={
+            <TabbedRoute allowed={tabbed}>
+              <FoodsScreen />
+            </TabbedRoute>
+          }
+        />
+        <Route
+          path="/calendar"
+          element={
+            <TabbedRoute allowed={tabbed}>
+              <CalendarScreen />
+            </TabbedRoute>
           }
         />
 
