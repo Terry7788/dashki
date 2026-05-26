@@ -1,0 +1,426 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+ * Dashki — Dashko Design Tokens
+ * Notion-inspired warm-neutral palette + Inter / JetBrains Mono.
+ * Light by default; .dark toggle overrides at the bottom.
+ *
+ * NOTE: this file is a verbatim copy of web/src/app/globals.css.
+ * Drift between the two is expected over time; keep them in sync
+ * for the same release until shared package extraction.
+ * ============================================================ */
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
+
+:root {
+  /* ── Core surfaces ─────────────────────────────────────── */
+  --color-background: #ffffff;
+  --color-foreground: rgba(0, 0, 0, 0.95);
+  --color-surface: #ffffff;
+  --color-surface-warm: #f6f5f4;
+
+  /* ── Text scale ────────────────────────────────────────── */
+  --color-muted: #f6f5f4;
+  --color-muted-foreground: #615d59;
+  --color-placeholder: #a39e98;
+
+  /* ── Division ──────────────────────────────────────────── */
+  --color-border: rgba(0, 0, 0, 0.1);
+  --color-input: #dddddd;
+  --color-ring: #097fe8;
+
+  /* ── Accent (Notion Blue) ─────────────────────────────── */
+  --color-primary: #0075de;
+  --color-primary-foreground: #ffffff;
+  --color-primary-hover: #005bab;
+  --color-link: #0075de;
+  --color-focus: #097fe8;
+  --color-badge-bg: #f2f9ff;
+  --color-badge-text: #097fe8;
+
+  /* ── Semantic accents ─────────────────────────────────── */
+  --color-success: #1aae39;
+  --color-warning: #dd5b00;
+  --color-critical: #c91c2b;
+  --color-teal: #2a9d99;
+  --color-pink: #ff64c8;
+  --color-purple: #391c57;
+  --color-brown: #523410;
+
+  /* ── Warm neutrals ────────────────────────────────────── */
+  --color-warm-dark: #31302e;
+  --color-warm-gray-500: #615d59;
+  --color-warm-gray-300: #a39e98;
+
+  /* ── Brand secondary ──────────────────────────────────── */
+  --color-navy: #213183;
+
+  /* ── Soft (translucent) surfaces ──────────────────────── */
+  --color-soft: rgba(0, 0, 0, 0.05);
+  --color-soft-strong: rgba(0, 0, 0, 0.08);
+
+  /* ── Typography ───────────────────────────────────────── */
+  --font-sans:
+    "Inter", -apple-system, system-ui, "Segoe UI", Helvetica,
+    "Apple Color Emoji", Arial, "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
+  --font-mono:
+    "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo,
+    Consolas, "Liberation Mono", monospace;
+
+  /* ── Radii ────────────────────────────────────────────── */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 9999px;
+
+  /* ── Shadows (multi-layer, "whisper") ─────────────────── */
+  --shadow-card:
+    rgba(0, 0, 0, 0.04) 0px 4px 18px,
+    rgba(0, 0, 0, 0.027) 0px 2.025px 7.84688px,
+    rgba(0, 0, 0, 0.02) 0px 0.8px 2.925px,
+    rgba(0, 0, 0, 0.01) 0px 0.175px 1.04062px;
+  --shadow-deep:
+    rgba(0, 0, 0, 0.01) 0px 1px 3px,
+    rgba(0, 0, 0, 0.02) 0px 3px 7px,
+    rgba(0, 0, 0, 0.02) 0px 7px 15px,
+    rgba(0, 0, 0, 0.04) 0px 14px 28px,
+    rgba(0, 0, 0, 0.05) 0px 23px 52px;
+
+  /* ── Legacy aliases (preserved so pre-redesign Tailwind classes
+        and inline style references that hardcode the old token
+        names still render with the new palette) ────────────── */
+  --primary-100: #0075de;
+  --primary-200: #097fe8;
+  --primary-300: #2a9d99;
+  --accent-100: #2a9d99;
+  --accent-200: #0075de;
+  --text-100: rgba(0, 0, 0, 0.95);
+  --text-200: #615d59;
+  --bg-100: #ffffff;
+  --bg-200: #f6f5f4;
+  --bg-300: #e9e7e4;
+  --glass-bg: #ffffff;
+  --glass-border: rgba(0, 0, 0, 0.1);
+  --glass-hover: #f6f5f4;
+}
+
+/* ── Dark theme ─ Warm dark grays, near-borderless cards, deeper shadows ── */
+.dark {
+  --color-background: #1a1918;
+  --color-foreground: rgba(255, 255, 255, 0.92);
+  --color-surface: #1a1918;
+  --color-surface-warm: #242422;
+
+  --color-muted: #242422;
+  --color-muted-foreground: rgba(255, 255, 255, 0.55);
+  --color-placeholder: rgba(255, 255, 255, 0.35);
+
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-input: rgba(255, 255, 255, 0.12);
+  --color-ring: #62aef0;
+
+  --color-primary: #2186e5;
+  --color-primary-foreground: #ffffff;
+  --color-primary-hover: #4ea4f0;
+  --color-link: #62aef0;
+  --color-focus: #62aef0;
+  --color-badge-bg: rgba(33, 134, 229, 0.18);
+  --color-badge-text: #9ec9f5;
+
+  --color-success: #4ed16e;
+  --color-warning: #ff8a4f;
+  --color-critical: #ff5b6c;
+  --color-teal: #5fc7c2;
+  --color-pink: #ff89d4;
+
+  --color-warm-dark: #cfcdc8;
+  --color-warm-gray-500: rgba(255, 255, 255, 0.55);
+  --color-warm-gray-300: rgba(255, 255, 255, 0.35);
+
+  --color-navy: #6a7bd4;
+
+  --color-soft: rgba(255, 255, 255, 0.06);
+  --color-soft-strong: rgba(255, 255, 255, 0.1);
+
+  --shadow-card:
+    rgba(0, 0, 0, 0.4) 0px 4px 18px,
+    rgba(0, 0, 0, 0.3) 0px 2.025px 7.84688px,
+    rgba(0, 0, 0, 0.2) 0px 0.8px 2.925px;
+  --shadow-deep:
+    rgba(0, 0, 0, 0.5) 0px 1px 3px,
+    rgba(0, 0, 0, 0.4) 0px 3px 7px,
+    rgba(0, 0, 0, 0.4) 0px 7px 15px,
+    rgba(0, 0, 0, 0.5) 0px 14px 28px,
+    rgba(0, 0, 0, 0.6) 0px 23px 52px;
+
+  /* Legacy aliases — dark variants */
+  --primary-100: #2186e5;
+  --primary-200: #4ea4f0;
+  --primary-300: #5fc7c2;
+  --accent-100: #5fc7c2;
+  --accent-200: #4ea4f0;
+  --text-100: rgba(255, 255, 255, 0.92);
+  --text-200: rgba(255, 255, 255, 0.55);
+  --bg-100: #1a1918;
+  --bg-200: #242422;
+  --bg-300: #2f2e2c;
+  --glass-bg: #1a1918;
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-hover: #242422;
+}
+
+/* ============================================================
+ * Base elements
+ * ============================================================ */
+
+@layer base {
+  *,
+  *::before,
+  *::after { box-sizing: border-box; }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    scroll-behavior: smooth;
+    overflow-x: hidden;
+  }
+
+  body {
+    @apply min-h-screen;
+    background: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    font-feature-settings: "lnum" 1, "locl" 1;
+    overflow-x: hidden;
+  }
+
+  /* Scrollbars — match the whisper aesthetic */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-soft-strong);
+  }
+  ::-webkit-scrollbar-track { background: transparent; }
+  .scrollbar-none::-webkit-scrollbar { display: none; }
+  .scrollbar-none { scrollbar-width: none; }
+
+  /* Selection */
+  ::selection {
+    background: var(--color-badge-bg);
+    color: var(--color-badge-text);
+  }
+
+  /* Focus ring — visible, not hidden */
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 1px;
+    border-radius: 4px;
+  }
+}
+
+/* ============================================================
+ * Legacy class bridge — pages that still ship `text-white/60`,
+ * `bg-white/[0.04]`, `border-white/10`, etc. (from before this
+ * redesign) need to read as the new whisper aesthetic so the
+ * design language is consistent app-wide while individual page
+ * JSX is migrated incrementally.
+ * Only applies in LIGHT mode; dark mode keeps the original
+ * dark-on-white-overlay look the classes were designed for.
+ * ============================================================ */
+
+html:not(.dark) .text-white,
+html:not(.dark) .dark\:text-white {
+  color: var(--color-foreground);
+}
+html:not(.dark) .text-white\/90 { color: var(--color-foreground); }
+html:not(.dark) .text-white\/80 { color: var(--color-foreground); }
+html:not(.dark) .text-white\/70 { color: var(--color-muted-foreground); }
+html:not(.dark) .text-white\/60 { color: var(--color-muted-foreground); }
+html:not(.dark) .text-white\/55 { color: var(--color-muted-foreground); }
+html:not(.dark) .text-white\/50 { color: var(--color-muted-foreground); }
+html:not(.dark) .text-white\/45 { color: var(--color-placeholder); }
+html:not(.dark) .text-white\/40 { color: var(--color-placeholder); }
+html:not(.dark) .text-white\/30 { color: var(--color-placeholder); }
+html:not(.dark) .text-white\/25 { color: var(--color-placeholder); }
+html:not(.dark) .text-white\/20 { color: var(--color-placeholder); }
+
+html:not(.dark) .border-white\/5,
+html:not(.dark) .border-white\/10,
+html:not(.dark) .border-white\/15,
+html:not(.dark) .border-white\/20,
+html:not(.dark) .border-white\/\[0\.06\],
+html:not(.dark) .border-white\/\[0\.08\],
+html:not(.dark) .border-white\/\[0\.10\],
+html:not(.dark) .border-white\/\[0\.12\],
+html:not(.dark) .divide-white\/\[0\.06\] > * + *,
+html:not(.dark) .divide-white\/10 > * + * { border-color: var(--color-border); }
+
+html:not(.dark) .bg-white\/\[0\.04\],
+html:not(.dark) .bg-white\/\[0\.05\],
+html:not(.dark) .bg-white\/\[0\.06\],
+html:not(.dark) .bg-white\/\[0\.07\],
+html:not(.dark) .bg-white\/\[0\.08\],
+html:not(.dark) .bg-white\/\[0\.09\],
+html:not(.dark) .bg-white\/5 { background-color: var(--color-surface-warm); }
+
+html:not(.dark) .bg-white\/10,
+html:not(.dark) .bg-white\/15,
+html:not(.dark) .bg-white\/20 { background-color: var(--color-soft); }
+
+html:not(.dark) .bg-white\/70,
+html:not(.dark) .bg-white\/95 { background-color: var(--color-surface); }
+
+html:not(.dark) .hover\:bg-white\/5:hover,
+html:not(.dark) .hover\:bg-white\/\[0\.06\]:hover,
+html:not(.dark) .hover\:bg-white\/\[0\.07\]:hover,
+html:not(.dark) .hover\:bg-white\/\[0\.08\]:hover,
+html:not(.dark) .hover\:bg-white\/\[0\.09\]:hover,
+html:not(.dark) .hover\:bg-white\/10:hover,
+html:not(.dark) .hover\:bg-white\/15:hover { background-color: var(--color-soft); }
+
+html:not(.dark) .placeholder-white\/40::placeholder,
+html:not(.dark) .placeholder-white\/30::placeholder { color: var(--color-placeholder); }
+
+/* Black-overlay classes used by Foods/Meals etc. in mixed mode */
+html:not(.dark) .bg-black\/\[0\.04\],
+html:not(.dark) .bg-black\/\[0\.06\],
+html:not(.dark) .bg-black\/10 { background-color: var(--color-surface-warm); }
+
+html:not(.dark) .border-black\/\[0\.06\],
+html:not(.dark) .border-black\/\[0\.08\],
+html:not(.dark) .border-black\/\[0\.10\] { border-color: var(--color-border); }
+
+/* Indigo callouts → primary blue */
+html:not(.dark) .bg-indigo-500\/10,
+html:not(.dark) .bg-indigo-500\/15,
+html:not(.dark) .bg-indigo-500\/20 { background-color: var(--color-badge-bg); }
+html:not(.dark) .border-indigo-400\/20,
+html:not(.dark) .border-indigo-400\/30,
+html:not(.dark) .border-indigo-400\/40,
+html:not(.dark) .border-indigo-400\/50,
+html:not(.dark) .border-indigo-400\/60,
+html:not(.dark) .border-indigo-500\/30 { border-color: var(--color-primary); }
+html:not(.dark) .text-indigo-300,
+html:not(.dark) .text-indigo-400 { color: var(--color-primary); }
+html:not(.dark) .hover\:text-indigo-300:hover { color: var(--color-primary-hover); }
+html:not(.dark) .bg-indigo-500 { background-color: var(--color-primary); color: var(--color-primary-foreground); }
+
+/* Emerald / green accents → success */
+html:not(.dark) .text-emerald-300,
+html:not(.dark) .text-emerald-400,
+html:not(.dark) .text-emerald-500,
+html:not(.dark) .text-\[\#61bc84\],
+html:not(.dark) .dark\:text-\[\#61bc84\] { color: var(--color-success); }
+html:not(.dark) .bg-\[\#2E8B57\]\/20,
+html:not(.dark) .bg-\[\#2E8B57\]\/30,
+html:not(.dark) .border-\[\#2E8B57\]\/30,
+html:not(.dark) .border-\[\#2E8B57\]\/40,
+html:not(.dark) .border-\[\#2E8B57\]\/50 { background-color: rgba(26, 174, 57, 0.15); border-color: rgba(26, 174, 57, 0.3); }
+
+/* Backdrop blur — disable in light mode for the whisper look */
+html:not(.dark) .backdrop-blur,
+html:not(.dark) .backdrop-blur-sm,
+html:not(.dark) .backdrop-blur-md,
+html:not(.dark) .backdrop-blur-xl { backdrop-filter: none; }
+
+/* Force light readable text on inline-styled foregrounds */
+html:not(.dark) [style*="color: var(--text-100)"] { color: var(--color-foreground); }
+
+/* ============================================================
+ * Components / utilities
+ * ============================================================ */
+
+@layer components {
+  /* Skeleton loader */
+  .skeleton {
+    @apply relative overflow-hidden rounded-2xl;
+    background-color: var(--color-surface-warm);
+  }
+  .skeleton::after {
+    content: '';
+    @apply absolute inset-0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(0, 0, 0, 0.04) 50%,
+      transparent 100%
+    );
+    animation: shimmer 1.5s infinite;
+  }
+  .dark .skeleton::after {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.05) 50%,
+      transparent 100%
+    );
+  }
+  @keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+
+  /* Entrance animations */
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes scaleIn {
+    from { opacity: 0; transform: scale(0.96); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  @keyframes slideInLeft {
+    from { opacity: 0; transform: translateX(-16px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+}
+
+/* ── Date pickers ──────────────────────────────────────── */
+input[type="date"] {
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 6px 10px;
+  color: var(--color-foreground);
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+input[type="date"]:hover {
+  background-color: var(--color-surface-warm);
+}
+input[type="date"]:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(0, 117, 222, 0.15);
+}
+.dark input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); opacity: 0.5; }
+input[type="date"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  display: none;
+}
+
+/* ── Lucide icon sizing helper (used by the design's <Icon> primitive) ── */
+i[data-lucide] > svg { width: var(--icon-size, 16px); height: var(--icon-size, 16px); }
+
+/* ── Chart axis helpers (used by inline SVG charts) ── */
+.chart-axis { fill: var(--color-muted-foreground); font: 500 10px/1 var(--font-mono); }
+.chart-grid { stroke: var(--color-border); }
