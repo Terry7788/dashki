@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ChevronLeft, LogOut, Trash2, Target } from 'lucide-react';
+import { ChevronLeft, LogOut, Trash2, Target, Sparkles } from 'lucide-react';
 import {
   GlassCard,
   GlassButton,
@@ -12,11 +12,14 @@ import {
   Pill,
 } from '../components/ui';
 import { useAuth } from '../lib/auth-context';
+import PaywallSheet from '../components/PaywallSheet';
+import { hasPremium } from '../lib/subscription';
 
 export default function SettingsScreen() {
   const navigate = useNavigate();
   const { user, status, signOut, deleteAccount } = useAuth();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [paywallOpen, setPaywallOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -165,6 +168,45 @@ export default function SettingsScreen() {
           </GlassCard>
         )}
 
+        {/* Premium upgrade — only for non-premium users */}
+        {status === 'signed-in' && user && !hasPremium(user) && (
+          <GlassCard onClick={() => setPaywallOpen(true)}>
+            <div className="flex items-center gap-3">
+              <div
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 10,
+                  background: 'rgba(0,117,222,0.12)',
+                  color: 'var(--color-primary)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Sparkles size={18} />
+              </div>
+              <div className="flex-1">
+                <div style={{ fontSize: 14, fontWeight: 600 }}>
+                  Upgrade to Premium
+                </div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: 'var(--color-muted-foreground)',
+                    marginTop: 2,
+                  }}
+                >
+                  Unlimited scans, fibre tracking, recipes, calendar
+                </div>
+              </div>
+              <Pill tone="primary" upper>
+                New
+              </Pill>
+            </div>
+          </GlassCard>
+        )}
+
         {/* Sign out */}
         {(status === 'signed-in' || status === 'guest') && (
           <GlassButton
@@ -191,6 +233,11 @@ export default function SettingsScreen() {
           </GlassButton>
         )}
       </div>
+
+      <PaywallSheet
+        isOpen={paywallOpen}
+        onClose={() => setPaywallOpen(false)}
+      />
 
       <GlassModal
         isOpen={confirmDelete}
