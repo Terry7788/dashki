@@ -351,6 +351,9 @@ export interface FoodEstimate {
   fat: number;
   fiber: number;
   portion: string;
+  /** Weight in g (solids) or ml (liquids) of the assumed portion. null if
+   *  the AI couldn't infer a meaningful single-serving weight. */
+  servingSize: number | null;
   reasoning: string;
 }
 

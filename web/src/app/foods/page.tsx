@@ -358,6 +358,7 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
         carbs_per_100g: String(r.carbs),
         fat_per_100g: String(r.fat),
         fiber_per_100g: String(r.fiber),
+        serving_size_g: r.servingSize != null ? String(r.servingSize) : prev.serving_size_g,
       }));
       setKjFromUser(false); // kJ re-derives from the AI-filled kcal
       setAiResult({ portion: r.portion, reasoning: r.reasoning });

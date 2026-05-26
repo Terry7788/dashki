@@ -15,6 +15,10 @@ interface EstimateResponse {
   fat: number;
   fiber: number;
   portion: string;
+  /** Weight of the assumed portion in grams (solids) or ml (liquids).
+   *  null when the food has no meaningful single-serving weight (e.g. the
+   *  AI couldn't infer one, or the description is too abstract). */
+  servingSize: number | null;
   reasoning: string;
 }
 
@@ -30,6 +34,7 @@ Return ONLY valid JSON in this exact shape — no markdown, no commentary:
   "fat":     <number grams of fat for the entire portion, one decimal place>,
   "fiber":   <number grams of dietary fibre for the entire portion, one decimal place>,
   "portion": "<short human-readable description of the portion you assumed, e.g. '1 medium apple (~180g)' or '2 slices (~250g)'>",
+  "servingSize": <number grams (solids) or ml (liquids) of the assumed portion, integer, or null if you genuinely cannot infer one>,
   "reasoning": "<one or two sentences explaining how you arrived at the numbers — components, density, source rule of thumb. Keep it concise but specific.>"
 }
 
@@ -38,9 +43,10 @@ Rules:
 2. Calories: round to the nearest integer.
 3. Protein / carbs / fat / fiber: round to one decimal place each.
 4. Fibre counts the dietary fibre subset of carbs (not net carbs) — for most refined foods this is 0–2g, for produce/legumes/wholegrains it's higher.
-5. Reasoning must be specific — name the components or the typical macro density. Do not say "based on standard nutritional data".
-6. If the food is wildly ambiguous (e.g. just "food", "snack"), still produce a reasonable best guess and say so in reasoning.
-7. If the input is clearly not food (e.g. "blue car"), return all macros 0, portion="(not a food)", reasoning="That doesn't look like a food item.".
+5. servingSize is the same weight/volume you parenthesise in "portion". Solids → grams, liquids → ml. Round to a whole number. Should match the (~Xg) you wrote in portion. Use null only when no weight makes sense (e.g. "(not a food)").
+6. Reasoning must be specific — name the components or the typical macro density. Do not say "based on standard nutritional data".
+7. If the food is wildly ambiguous (e.g. just "food", "snack"), still produce a reasonable best guess and say so in reasoning.
+8. If the input is clearly not food (e.g. "blue car"), return all macros 0, servingSize=null, portion="(not a food)", reasoning="That doesn't look like a food item.".
 
 Return JSON only.`;
 
@@ -224,12 +230,16 @@ router.post('/estimate-food', async (req: Request, res: Response) => {
     const fat = clampNonNegOneDp(parsed.fat);
     const fiber = clampNonNegOneDp(parsed.fiber);
     const portion = typeof parsed.portion === 'string' && parsed.portion.trim() ? parsed.portion.trim() : '1 serving';
+    const servingSize =
+      Number.isFinite(parsed.servingSize) && Number(parsed.servingSize) > 0
+        ? Math.round(Number(parsed.servingSize))
+        : null;
     const reasoning =
       typeof parsed.reasoning === 'string' && parsed.reasoning.trim()
         ? parsed.reasoning.trim()
         : 'Estimate based on typical nutritional values for this food.';
 
-    const result: EstimateResponse = { calories, protein, carbs, fat, fiber, portion, reasoning };
+    const result: EstimateResponse = { calories, protein, carbs, fat, fiber, portion, servingSize, reasoning };
     res.json(result);
   } catch (err) {
     logger.error('[ai/estimate-food] failed:', err);
