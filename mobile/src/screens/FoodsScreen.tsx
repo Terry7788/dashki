@@ -20,13 +20,14 @@ import {
   Pencil,
   Search,
   Utensils,
+  Camera as CameraIcon,
+  Loader2,
 } from 'lucide-react';
 import {
   GlassCard,
   GlassButton,
   GlassInput,
   GlassModal,
-  Pill,
   MicroLabel,
   MonoNum,
   SegmentedControl,
@@ -37,9 +38,11 @@ import {
   createFood,
   updateFood,
   deleteFood,
+  scanFoodLabel,
 } from '../lib/api';
 import type { Food, Unit } from '../lib/types';
 import PageHeader from '../components/PageHeader';
+import { captureLabel, isNativePlatform } from '../lib/native';
 
 interface NewFoodForm {
   name: string;
@@ -80,6 +83,10 @@ export default function FoodsScreen() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Scanning state
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
+
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchAll = useCallback(async () => {
@@ -114,6 +121,40 @@ export default function FoodsScreen() {
     setForm(EMPTY_FORM);
     setError(null);
     setAddOpen(true);
+  }
+
+  async function handleScanLabel() {
+    setScanning(true);
+    setScanError(null);
+    try {
+      const imageDataUrl = await captureLabel();
+      if (!imageDataUrl) {
+        setScanning(false);
+        return; // user cancelled
+      }
+      const scanned = await scanFoodLabel(imageDataUrl);
+      // Prefill the new-food form with what the AI extracted.
+      setForm({
+        name: '', // user adds the brand/name themselves
+        base_amount: scanned.servingSize ?? 100,
+        base_unit: scanned.servingSize ? 'serving' : 'g',
+        calories: scanned.calories,
+        protein: scanned.protein,
+        carbs: scanned.carbs,
+        fat: scanned.fat,
+        fiber: scanned.fiber,
+        serving_size_g: scanned.servingSize,
+      });
+      setAddOpen(true);
+    } catch (err) {
+      setScanError(
+        err instanceof Error
+          ? err.message
+          : 'Could not scan label. Try again or enter manually.',
+      );
+    } finally {
+      setScanning(false);
+    }
   }
 
   function openEdit(food: Food) {
@@ -195,10 +236,25 @@ export default function FoodsScreen() {
         subtitle={`${foods.length} in your database`}
         back="/more"
         trailing={
-          <GlassButton variant="primary" size="sm" onClick={openAdd}>
-            <Plus size={14} style={{ marginRight: 2 }} />
-            New
-          </GlassButton>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <GlassButton
+              variant="soft"
+              size="sm"
+              onClick={handleScanLabel}
+              disabled={scanning}
+              title="Scan a nutrition label"
+            >
+              {scanning ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <CameraIcon size={14} />
+              )}
+            </GlassButton>
+            <GlassButton variant="primary" size="sm" onClick={openAdd}>
+              <Plus size={14} style={{ marginRight: 2 }} />
+              New
+            </GlassButton>
+          </div>
         }
       />
 
@@ -367,7 +423,7 @@ export default function FoodsScreen() {
           </GlassCard>
         )}
 
-        {/* Camera scan hint */}
+        {/* Camera scan hint + error display */}
         <div
           style={{
             padding: 12,
@@ -379,11 +435,41 @@ export default function FoodsScreen() {
             lineHeight: 1.5,
           }}
         >
-          <strong style={{ color: 'var(--color-foreground)' }}>
-            Camera label scanning
-          </strong>{' '}
-          ships in <Pill tone="primary">DSHKI-62</Pill>. For now, add foods by
-          hand or use the web app at dashki.app.
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+            <CameraIcon
+              size={14}
+              style={{ color: 'var(--color-primary)', marginTop: 1, flexShrink: 0 }}
+            />
+            <div>
+              <strong style={{ color: 'var(--color-foreground)' }}>
+                Tap the camera icon
+              </strong>{' '}
+              to scan a nutrition label. The AI reads the panel and prefills a
+              new food for you.
+              {!isNativePlatform() && (
+                <>
+                  {' '}
+                  In browser dev the file picker opens; on a real device the
+                  camera launches.
+                </>
+              )}
+            </div>
+          </div>
+          {scanError && (
+            <div
+              style={{
+                marginTop: 8,
+                padding: '6px 8px',
+                background: 'rgba(201,28,43,0.08)',
+                border: '1px solid rgba(201,28,43,0.3)',
+                borderRadius: 4,
+                color: 'var(--color-critical)',
+                fontSize: 11,
+              }}
+            >
+              {scanError}
+            </div>
+          )}
         </div>
       </div>
 

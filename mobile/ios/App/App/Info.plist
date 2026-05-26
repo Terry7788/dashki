@@ -47,5 +47,13 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<!-- Camera permission strings (required by @capacitor/camera — DSHKI-62).
+	     Apple rejects the app if these are missing and the camera is invoked. -->
+	<key>NSCameraUsageDescription</key>
+	<string>Dashki uses the camera to scan nutrition labels and add foods automatically.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Dashki uses the photo library when you pick an existing nutrition label image instead of taking a new one.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Dashki saves scanned label photos to your library only when you choose to.</string>
 </dict>
 </plist>
