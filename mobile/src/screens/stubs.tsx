@@ -3,10 +3,10 @@
 // to use web for full functionality until the mobile version ships.
 //
 // Tickets to follow:
-//   - DSHKI-58 Journal page port  ✅ DONE (see JournalScreen.tsx)
-//   - DSHKI-59 Weight page port
-//   - DSHKI-60 Steps page port
-//   - DSHKI-61 Meals + Foods + Calendar ports
+//   - DSHKI-58 Journal page port  ✅ DONE (JournalScreen.tsx)
+//   - DSHKI-59 Weight page port   ✅ DONE (WeightScreen.tsx)
+//   - DSHKI-60 Steps page port    ✅ DONE (StepsScreen.tsx)
+//   - DSHKI-61 Meals + Foods + Calendar ports — what remains here
 
 import type { ReactNode } from 'react';
 import { Construction } from 'lucide-react';
@@ -117,36 +117,6 @@ function ComingSoonScreen({
         </div>
       </div>
     </div>
-  );
-}
-
-export function WeightScreen() {
-  return (
-    <ComingSoonScreen
-      title="Weight"
-      description={
-        <>
-          Weight tracking with trend charts, journey targets, TDEE feedback, and
-          on-track / off-track status.
-        </>
-      }
-      ticket="DSHKI-59"
-    />
-  );
-}
-
-export function StepsScreen() {
-  return (
-    <ComingSoonScreen
-      title="Steps"
-      description={
-        <>
-          Per-day step logs, week / month trends, multiple log entries per day
-          for activity sessions.
-        </>
-      }
-      ticket="DSHKI-60"
-    />
   );
 }
 
