@@ -21,22 +21,13 @@ const HomeScreen = lazy(() => import('./screens/HomeScreen'));
 const SettingsScreen = lazy(() => import('./screens/SettingsScreen'));
 const MoreScreen = lazy(() => import('./screens/MoreScreen'));
 
-// Ported real screens.
+// All real screens — code-split via dynamic imports.
 const JournalScreen = lazy(() => import('./screens/JournalScreen'));
 const WeightScreen = lazy(() => import('./screens/WeightScreen'));
 const StepsScreen = lazy(() => import('./screens/StepsScreen'));
-
-// Stub screens for tabs ported in subsequent sessions.
-const StubsModule = () => import('./screens/stubs');
-const MealsScreen = lazy(() =>
-  StubsModule().then((m) => ({ default: m.MealsScreen })),
-);
-const FoodsScreen = lazy(() =>
-  StubsModule().then((m) => ({ default: m.FoodsScreen })),
-);
-const CalendarScreen = lazy(() =>
-  StubsModule().then((m) => ({ default: m.CalendarScreen })),
-);
+const MealsScreen = lazy(() => import('./screens/MealsScreen'));
+const FoodsScreen = lazy(() => import('./screens/FoodsScreen'));
+const CalendarScreen = lazy(() => import('./screens/CalendarScreen'));
 
 function LoadingSplash() {
   return (
