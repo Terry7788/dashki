@@ -3,12 +3,10 @@
 // to use web for full functionality until the mobile version ships.
 //
 // Tickets to follow:
-//   - DSHKI-58 Journal page port
+//   - DSHKI-58 Journal page port  ✅ DONE (see JournalScreen.tsx)
 //   - DSHKI-59 Weight page port
 //   - DSHKI-60 Steps page port
-//   - DSHKI-61 Meals page port
-//   - DSHKI-62 Foods page port
-//   - DSHKI-63 Calendar page port
+//   - DSHKI-61 Meals + Foods + Calendar ports
 
 import type { ReactNode } from 'react';
 import { Construction } from 'lucide-react';
@@ -119,22 +117,6 @@ function ComingSoonScreen({
         </div>
       </div>
     </div>
-  );
-}
-
-export function JournalScreen() {
-  return (
-    <ComingSoonScreen
-      title="Journal"
-      description={
-        <>
-          Mobile food journal — log meals, edit entries, scan nutrition labels via
-          the phone camera. The biggest page in the web app and the next mobile
-          port priority.
-        </>
-      }
-      ticket="DSHKI-58"
-    />
   );
 }
 

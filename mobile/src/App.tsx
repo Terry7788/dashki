@@ -21,11 +21,11 @@ const HomeScreen = lazy(() => import('./screens/HomeScreen'));
 const SettingsScreen = lazy(() => import('./screens/SettingsScreen'));
 const MoreScreen = lazy(() => import('./screens/MoreScreen'));
 
+// Ported real screens.
+const JournalScreen = lazy(() => import('./screens/JournalScreen'));
+
 // Stub screens for tabs ported in subsequent sessions.
 const StubsModule = () => import('./screens/stubs');
-const JournalScreen = lazy(() =>
-  StubsModule().then((m) => ({ default: m.JournalScreen })),
-);
 const WeightScreen = lazy(() =>
   StubsModule().then((m) => ({ default: m.WeightScreen })),
 );
