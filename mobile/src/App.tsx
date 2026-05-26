@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Sparkles, Smartphone } from 'lucide-react';
+import { Sparkles, Smartphone, Wifi, CheckCircle2, AlertCircle } from 'lucide-react';
 import {
   GlassCard,
   GlassButton,
@@ -12,18 +12,41 @@ import {
   CalorieRing,
   MacroBar,
 } from './components/ui';
+import { getHealth, getBaseUrl } from './lib/api';
+import type { HealthCheck } from './lib/types';
+
+type PingState =
+  | { status: 'idle' }
+  | { status: 'pinging' }
+  | { status: 'ok'; result: HealthCheck }
+  | { status: 'error'; message: string };
 
 /**
- * Hello-Dashki preview screen (DSHKI-48).
+ * Hello-Dashki preview screen (DSHKI-46 / 47 / 48 / 49).
  *
- * Demonstrates the Glass UI primitives + Atoms rendering correctly inside the
- * Capacitor WebView and in browser. Real journal/weight/steps screens land in
- * Phase 3 (DSHKI-52 onwards). This page exists so DSHKI-51 (TestFlight + Play
- * Internal) has something tangible to demo on a real device.
+ * Exercises the Glass UI primitives + Atoms inside the Capacitor WebView
+ * and proves end-to-end network reach to the Dashki backend via the API
+ * client in src/lib/api.ts.
+ *
+ * Real journal/weight/steps/etc. screens land in Phase 3.
  */
 function App() {
   const [modalOpen, setModalOpen] = useState(false);
   const [name, setName] = useState('');
+  const [ping, setPing] = useState<PingState>({ status: 'idle' });
+
+  async function handlePing() {
+    setPing({ status: 'pinging' });
+    try {
+      const result = await getHealth();
+      setPing({ status: 'ok', result });
+    } catch (err) {
+      setPing({
+        status: 'error',
+        message: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
 
   return (
     <div
@@ -74,6 +97,96 @@ function App() {
           </div>
         </GlassCard>
 
+        {/* Backend connectivity card */}
+        <GlassCard muted>
+          <div className="flex items-start gap-3">
+            <Wifi
+              size={20}
+              style={{
+                color:
+                  ping.status === 'ok'
+                    ? 'var(--color-success)'
+                    : ping.status === 'error'
+                      ? 'var(--color-critical)'
+                      : 'var(--color-muted-foreground)',
+                marginTop: 2,
+              }}
+              aria-hidden
+            />
+            <div className="flex-1">
+              <div
+                style={{
+                  fontWeight: 600,
+                  fontSize: 14,
+                  color: 'var(--color-foreground)',
+                }}
+              >
+                Backend connection
+              </div>
+              <div
+                style={{
+                  fontSize: 11,
+                  fontFamily: 'var(--font-mono)',
+                  color: 'var(--color-muted-foreground)',
+                  marginTop: 2,
+                  wordBreak: 'break-all',
+                }}
+              >
+                {getBaseUrl()}
+              </div>
+              <div className="mt-3 flex items-center gap-2 flex-wrap">
+                <GlassButton
+                  variant="primary"
+                  size="sm"
+                  onClick={handlePing}
+                  disabled={ping.status === 'pinging'}
+                >
+                  {ping.status === 'pinging' ? 'Pinging…' : 'Ping /api/health'}
+                </GlassButton>
+                <PingBadge state={ping} />
+              </div>
+              {ping.status === 'ok' && (
+                <div
+                  style={{
+                    marginTop: 10,
+                    padding: 10,
+                    background: 'var(--color-surface)',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 6,
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 11,
+                    color: 'var(--color-muted-foreground)',
+                    lineHeight: 1.55,
+                  }}
+                >
+                  <div>
+                    <span style={{ color: 'var(--color-success)' }}>ok</span>{' '}
+                    · env={ping.result.env}
+                  </div>
+                  <div>uptime: {Math.round(ping.result.uptime)}s</div>
+                  <div>at: {ping.result.timestamp}</div>
+                </div>
+              )}
+              {ping.status === 'error' && (
+                <div
+                  style={{
+                    marginTop: 10,
+                    padding: 10,
+                    background: 'rgba(201,28,43,0.08)',
+                    border: '1px solid rgba(201,28,43,0.3)',
+                    borderRadius: 6,
+                    fontSize: 12,
+                    color: 'var(--color-critical)',
+                    lineHeight: 1.4,
+                  }}
+                >
+                  {ping.message}
+                </div>
+              )}
+            </div>
+          </div>
+        </GlassCard>
+
         {/* Status card */}
         <GlassCard muted>
           <div className="flex items-start gap-3">
@@ -100,14 +213,14 @@ function App() {
                   lineHeight: 1.5,
                 }}
               >
-                Capacitor + Vite + React + Tailwind running. Glass UI primitives
-                rendering. Real screens coming next — see DSHKI-45 epic.
+                Capacitor + Vite + React + Tailwind running. Glass UI rendering.
+                API client wired. Real screens coming next — see DSHKI-45 epic.
               </div>
-              <div className="mt-3 flex items-center gap-2">
+              <div className="mt-3 flex items-center gap-2 flex-wrap">
                 <Pill tone="success" dot>
-                  Phase 0
+                  Phase 0 complete
                 </Pill>
-                <Pill tone="neutral">DSHKI-46/47/48</Pill>
+                <Pill tone="neutral">46 / 47 / 48 / 49</Pill>
               </div>
             </div>
           </div>
@@ -127,12 +240,8 @@ function App() {
 
         {/* Modal demo trigger */}
         <div className="flex justify-center pt-1">
-          <GlassButton
-            variant="primary"
-            size="lg"
-            onClick={() => setModalOpen(true)}
-          >
-            Open demo modal
+          <GlassButton variant="ghost" size="sm" onClick={() => setModalOpen(true)}>
+            Open Glass modal demo
           </GlassButton>
         </div>
 
@@ -198,6 +307,25 @@ function App() {
         </div>
       </GlassModal>
     </div>
+  );
+}
+
+function PingBadge({ state }: { state: PingState }) {
+  if (state.status === 'idle')
+    return <Pill tone="neutral">Not pinged yet</Pill>;
+  if (state.status === 'pinging') return <Pill tone="primary">Sending…</Pill>;
+  if (state.status === 'ok')
+    return (
+      <Pill tone="success">
+        <CheckCircle2 size={11} style={{ marginRight: 2 }} />
+        {Math.round(state.result.uptime)}s uptime
+      </Pill>
+    );
+  return (
+    <Pill tone="critical">
+      <AlertCircle size={11} style={{ marginRight: 2 }} />
+      Failed
+    </Pill>
   );
 }
 
