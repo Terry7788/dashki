@@ -411,6 +411,112 @@ export function initDb(): Promise<void> {
         }
       });
 
+      // ── Users (DSHKI-53, Phase 1) ────────────────────────────────────────
+      // Multi-user auth for the mobile app. The legacy "Terry" user is
+      // implicit (req.user.id defaults to 1 when no Bearer token) and does
+      // not have a row in this table.
+      db.run(`
+        CREATE TABLE IF NOT EXISTS Users (
+          id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+          email                   TEXT NOT NULL UNIQUE,
+          password_hash           TEXT NOT NULL DEFAULT '',
+          display_name            TEXT,
+          created_at              DATETIME DEFAULT CURRENT_TIMESTAMP,
+          subscription_status     TEXT NOT NULL DEFAULT 'free',
+          onboarding_completed_at DATETIME,
+          apple_sub               TEXT UNIQUE
+        )
+      `);
+      db.run(
+        `CREATE INDEX IF NOT EXISTS idx_users_email ON Users(email)`,
+      );
+
+      // Migration: add apple_sub column if upgrading from an older schema
+      db.all(
+        `PRAGMA table_info(Users)`,
+        [],
+        (pragmaErr, columns: Array<{ name: string }>) => {
+          if (pragmaErr) return;
+          const existingCols = new Set(columns.map((c) => c.name));
+          if (!existingCols.has('apple_sub')) {
+            db.run(
+              `ALTER TABLE Users ADD COLUMN apple_sub TEXT`,
+              [],
+              (err) => {
+                if (err)
+                  console.error(
+                    '[db] migration error (Users.apple_sub):',
+                    err.message,
+                  );
+                else console.log('[db] ran migration: ADD COLUMN Users.apple_sub');
+              },
+            );
+          }
+        },
+      );
+
+      // ── Sessions (DSHKI-53) ───────────────────────────────────────────────
+      // JWT tokens are self-validating but we also persist them so /sign-out
+      // can revoke a specific device's token, and so /password-reset can
+      // bulk-invalidate sessions for a user.
+      db.run(`
+        CREATE TABLE IF NOT EXISTS Sessions (
+          id         INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id    INTEGER NOT NULL,
+          token      TEXT NOT NULL UNIQUE,
+          expires_at DATETIME NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES Users(id) ON DELETE CASCADE
+        )
+      `);
+      db.run(
+        `CREATE INDEX IF NOT EXISTS idx_sessions_user ON Sessions(user_id)`,
+      );
+      db.run(
+        `CREATE INDEX IF NOT EXISTS idx_sessions_token ON Sessions(token)`,
+      );
+
+      // ── PasswordResets (DSHKI-53) ─────────────────────────────────────────
+      db.run(`
+        CREATE TABLE IF NOT EXISTS PasswordResets (
+          id         INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id    INTEGER NOT NULL,
+          token      TEXT NOT NULL UNIQUE,
+          expires_at DATETIME NOT NULL,
+          used_at    DATETIME,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES Users(id) ON DELETE CASCADE
+        )
+      `);
+      db.run(
+        `CREATE INDEX IF NOT EXISTS idx_password_resets_token ON PasswordResets(token)`,
+      );
+
+      // ── UserGoals (DSHKI-53) ──────────────────────────────────────────────
+      // One row per user. Populated by the onboarding wizard (Phase 2.5)
+      // and editable from Settings → Goals. Sensible defaults so a user
+      // who skips onboarding still has reasonable targets.
+      db.run(`
+        CREATE TABLE IF NOT EXISTS UserGoals (
+          user_id                 INTEGER PRIMARY KEY,
+          primary_goal            TEXT,
+          sex                     TEXT,
+          age                     INTEGER,
+          height_cm               REAL,
+          weight_kg               REAL,
+          target_weight_kg        REAL,
+          activity_level          TEXT,
+          pace                    TEXT,
+          kcal_target             INTEGER NOT NULL DEFAULT 2000,
+          protein_target_g        INTEGER NOT NULL DEFAULT 100,
+          fibre_target_g          INTEGER NOT NULL DEFAULT 30,
+          steps_target            INTEGER NOT NULL DEFAULT 8000,
+          enabled_tiles           TEXT,
+          onboarding_completed_at DATETIME,
+          FOREIGN KEY (user_id) REFERENCES Users(id) ON DELETE CASCADE
+        )
+      `);
+
       // ── Sentinel to confirm serialization completed ────────────────────────
       db.run('SELECT 1', (err) => {
         if (err) reject(err);

@@ -8,6 +8,7 @@ import { logger } from './logger';
 
 import { initDb, db } from './db';
 import { setIo } from './socket';
+import { authMiddleware } from './auth';
 import foodsRouter from './routes/foods';
 import mealsRouter from './routes/meals';
 import currentMealRouter from './routes/currentMeal';
@@ -20,6 +21,8 @@ import preferencesRouter from './routes/preferences';
 import migrationRouter from './routes/migration';
 import botRouter from './routes/bot';
 import aiRouter from './routes/ai';
+import authRouter from './routes/auth';
+import userGoalsRouter from './routes/userGoals';
 
 // ─── App Setup ────────────────────────────────────────────────────────────────
 
@@ -100,6 +103,12 @@ if (process.env.NODE_ENV !== 'production') {
   });
 }
 
+// ─── Auth Middleware (DSHKI-53) ──────────────────────────────────────────────
+// Populates req.user on every request. Falls back to user_id=1 (Terry) when
+// no Bearer token is present so the existing web app continues to work
+// without sign-in. Real authenticated requests (mobile) get their actual id.
+app.use(authMiddleware);
+
 // ─── Health Check ─────────────────────────────────────────────────────────────
 
 app.get('/api/health', (_req, res) => {
@@ -119,13 +128,20 @@ const openai = process.env.OPENAI_API_KEY
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
+// Auth routes take precedence on /api/auth. The legacy alias of /api/auth →
+// calendarRouter is preserved AFTER authRouter so any pre-existing Google
+// OAuth callback URLs (e.g. /api/auth/google/callback) keep working —
+// authRouter exposes /sign-up, /sign-in, /me, etc. which don't overlap with
+// calendarRouter's /google, /google/callback, /events.
+app.use('/api/auth', authRouter);
+app.use('/api/auth', calendarRouter); // legacy alias preserved for OAuth callback URL
+app.use('/api/user', userGoalsRouter);
 app.use('/api/foods', foodsRouter);
 app.use('/api/meals/saved', mealsRouter);
 app.use('/api/meals/current', currentMealRouter);
 app.use('/api/journal', journalRouter);
 app.use('/api/weight', weightRouter);
 app.use('/api/steps', stepsRouter);
-app.use('/api/auth', calendarRouter);
 app.use('/api/calendar', calendarRouter);
 app.use('/api/goals', goalsRouter);
 app.use('/api/preferences', preferencesRouter);
