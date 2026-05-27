@@ -1284,11 +1284,13 @@ function FoodDetail({
   food,
   onAddToJournal,
   onEdit,
+  onDelete,
   onQuickLog,
 }: {
   food: Food | null;
   onAddToJournal: (food: Food) => void;
   onEdit: (food: Food) => void;
+  onDelete: (food: Food) => void;
   onQuickLog: (food: Food, servings: number) => Promise<void>;
 }) {
   const [logging, setLogging] = useState<number | null>(null);
@@ -1496,6 +1498,10 @@ function FoodDetail({
         <GlassButton variant="outline" size="sm" onClick={() => onEdit(food)}>
           <Pencil style={{ width: 14, height: 14, strokeWidth: 2 }} />
           Edit
+        </GlassButton>
+        <GlassButton variant="danger" size="sm" onClick={() => onDelete(food)}>
+          <Trash2 style={{ width: 14, height: 14, strokeWidth: 2 }} />
+          Delete
         </GlassButton>
       </div>
     </div>
@@ -1898,6 +1904,7 @@ export default function FoodsPage() {
           food={selectedFood}
           onAddToJournal={(f) => setJournalFood(f)}
           onEdit={(f) => handleEdit(f)}
+          onDelete={(f) => setDeletingFood(f)}
           onQuickLog={async (f, servings) => {
             const today = new Date().toLocaleString('en-CA').split(',')[0];
             await addJournalEntry({
