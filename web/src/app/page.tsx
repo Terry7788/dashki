@@ -8,6 +8,7 @@ import {
   Utensils,
   Calendar as CalendarIcon,
   Search,
+  Flame,
 } from 'lucide-react';
 import {
   GlassCard,
@@ -79,6 +80,69 @@ function formatToday(): string {
     month: 'long',
     year: 'numeric',
   });
+}
+
+// ─── Logging streak ─────────────────────────────────────────────────────────
+// A day counts if at least one food was logged — going over the calorie
+// goal doesn't break it. Today not logged yet keeps yesterday's streak
+// alive (the badge says "log today to keep it").
+
+const STREAK_LOOKBACK_DAYS = 365;
+
+function isoDaysAgo(n: number): string {
+  const d = new Date();
+  d.setHours(12, 0, 0, 0); // midday so DST changes never skip a day
+  d.setDate(d.getDate() - n);
+  return d.toLocaleString('en-CA').split(',')[0];
+}
+
+function computeStreak(loggedDates: Set<string>): { days: number; today: boolean } {
+  const today = loggedDates.has(isoDaysAgo(0));
+  let days = 0;
+  for (let i = today ? 0 : 1; i <= STREAK_LOOKBACK_DAYS; i++) {
+    if (!loggedDates.has(isoDaysAgo(i))) break;
+    days++;
+  }
+  return { days, today };
+}
+
+function StreakBadge({ streak }: { streak: { days: number; today: boolean } | null }) {
+  if (!streak) return null;
+  const { days, today } = streak;
+  const text =
+    days === 0
+      ? 'No streak yet · log a food to start one'
+      : `${days}-day streak${today ? '' : ' · log today to keep it'}`;
+  return (
+    <div
+      style={{
+        marginTop: 10,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '4px 10px',
+        fontSize: 12,
+        fontWeight: 600,
+        borderRadius: 999,
+        border: '1px solid var(--color-border)',
+        background: 'var(--color-surface-warm)',
+        color:
+          days > 0 && today
+            ? 'var(--color-foreground)'
+            : 'var(--color-muted-foreground)',
+      }}
+      aria-label={text}
+    >
+      <Flame
+        style={{
+          width: 14,
+          height: 14,
+          color: days > 0 && today ? '#F97316' : 'var(--color-muted-foreground)',
+        }}
+      />
+      {text}
+    </div>
+  );
 }
 
 // Look back N days for the small weight-trend sparkline.
@@ -233,6 +297,25 @@ export default function DashboardPage() {
     fetchAll();
   }, [fetchAll]);
 
+  const [streak, setStreak] = useState<{ days: number; today: boolean } | null>(null);
+  const fetchStreak = useCallback(async () => {
+    try {
+      const entries = await getJournalEntries({
+        startDate: isoDaysAgo(STREAK_LOOKBACK_DAYS),
+        endDate: today,
+      });
+      setStreak(computeStreak(new Set(entries.map((e) => e.date))));
+    } catch {
+      // Leave the badge hidden if the API is unreachable.
+    }
+  }, [today]);
+
+  useEffect(() => {
+    fetchStreak();
+  }, [fetchStreak]);
+  useSocketEvent('journal-entry-created', fetchStreak);
+  useSocketEvent('journal-entry-deleted', fetchStreak);
+
   useSocketEvent('journal-entry-created', fetchAll);
   useSocketEvent('journal-entry-updated', fetchAll);
   useSocketEvent('journal-entry-deleted', fetchAll);
@@ -364,6 +447,8 @@ export default function DashboardPage() {
           ))}
         </div>
       </div>
+
+      <StreakBadge streak={streak} />
 
       {variant === 'today' ? (
         <TodayVariant
