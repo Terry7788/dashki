@@ -165,14 +165,14 @@ export default function GlassModal({
       >
         {/* Header */}
         <div
-          className="flex-shrink-0 flex items-center"
+          className="flex-shrink-0 flex flex-wrap sm:flex-nowrap items-center"
           style={{
             padding: '14px 20px',
             borderBottom: '1px solid var(--color-border)',
             gap: 10,
           }}
         >
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="order-1" style={{ flex: 1, minWidth: 0 }}>
             <h2
               id="modal-title"
               style={{
@@ -197,11 +197,17 @@ export default function GlassModal({
               </div>
             )}
           </div>
-          {headerTrailing}
+          {headerTrailing && (
+            // Phones: its own full-width row under the title (segmented
+            // controls stretch); from sm up it sits between title and X.
+            <div className="order-3 basis-full sm:order-2 sm:basis-auto flex-shrink-0 [&>*]:w-full sm:[&>*]:w-auto [&>*>button]:flex-1 sm:[&>*>button]:flex-none">
+              {headerTrailing}
+            </div>
+          )}
           {showCloseButton && (
             <button
               onClick={onClose}
-              className="cursor-pointer flex items-center justify-center"
+              className="order-2 sm:order-3 cursor-pointer flex items-center justify-center"
               style={{
                 width: 28,
                 height: 28,
