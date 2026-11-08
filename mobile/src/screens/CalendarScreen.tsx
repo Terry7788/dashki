@@ -5,22 +5,16 @@
 //     OAuth flow that's specific to web — defer for now)
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
-import {
-  GlassCard,
-  GlassButton,
-  Pill,
-  MonoNum,
-  EmptyState,
-  GlassModal,
-} from '../components/ui';
 import {
   getJournalEntries,
+  getGoals,
   getWeightEntries,
   getSteps,
 } from '../lib/api';
+import { useNavigate } from 'react-router-dom';
 import { toISODate } from '../lib/nutrition';
-import PageHeader from '../components/PageHeader';
+import type { JournalEntry } from '../lib/types';
+import { FoldHead, FoldRing, PAGE_WEEK } from '../components/Fold';
 
 interface DayData {
   date: string;
@@ -62,8 +56,11 @@ export default function CalendarScreen() {
     new Date(today.getFullYear(), today.getMonth(), 1),
   );
   const [data, setData] = useState<Record<string, DayData>>({});
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [entriesByDay, setEntriesByDay] = useState<Record<string, JournalEntry[]>>({});
+  const [calGoal, setCalGoal] = useState(2000);
+  const navigate = useNavigate();
 
   const monthDays = useMemo(
     () => getMonthDays(cursor.getFullYear(), cursor.getMonth()),
@@ -84,7 +81,11 @@ export default function CalendarScreen() {
 
       const map: Record<string, DayData> = {};
 
+      getGoals().then((g) => setCalGoal(g.calories)).catch(() => {});
       if (journalRes.status === 'fulfilled') {
+        const byDay: Record<string, JournalEntry[]> = {};
+        for (const e of journalRes.value) (byDay[e.date] ??= []).push(e);
+        setEntriesByDay(byDay);
         for (const e of journalRes.value) {
           if (!map[e.date]) {
             map[e.date] = { date: e.date, calories: 0, steps: 0, weight_kg: null };
@@ -128,310 +129,52 @@ export default function CalendarScreen() {
   });
 
   const todayISO = toISODate(today);
+  const selected = selectedDay ?? todayISO;
+  const day = data[selected];
+  const dayEntries = entriesByDay[selected] ?? [];
 
   return (
-    <div style={{ background: 'var(--color-background)', minHeight: '100vh' }}>
-      <PageHeader title="Calendar" subtitle={monthLabel} back="/more" />
-
-      <div
-        style={{
-          padding: '0 1rem 1rem 1rem',
-          maxWidth: 480,
-          margin: '0 auto',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 12,
-        }}
-      >
-        {/* Month nav */}
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => shiftMonth(-1)}
-            aria-label="Previous month"
-            className="cursor-pointer"
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 4,
-              background: 'var(--color-soft)',
-              border: 0,
-              color: 'var(--color-foreground)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <ChevronLeft size={16} />
-          </button>
-          <div
-            style={{
-              flex: 1,
-              textAlign: 'center',
-              fontSize: 14,
-              fontWeight: 600,
-              padding: '8px 0',
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 4,
-            }}
-          >
-            {monthLabel}
+    <>
+      <main className="fd-page">
+        <FoldHead
+          title="Calendar"
+          sub={<><span className="fd-wide">Green under {calGoal.toLocaleString()} kcal · orange over</span><span className="fd-narrow">{monthLabel}</span></>}
+          right={<>
+            <button type="button" className="fd-btn" aria-label="Previous month" onClick={() => shiftMonth(-1)}>‹</button>
+            <b className="fd-wide" style={{ fontSize: 14, whiteSpace: 'nowrap' }}>{monthLabel}</b>
+            <button type="button" className="fd-btn" aria-label="Next month" onClick={() => shiftMonth(1)}>›</button>
+          </>}
+        />
+        <div className="fd-calwrap">
+          <div className="fd-calmain">
+            <div className="fd-days" style={{ flex: 'none', gap: 4 }}>{PAGE_WEEK.map((n) => <span key={n} className="fd-mute" style={{ fontSize: 11, fontWeight: 600 }}>{n}</span>)}</div>
+            <div className="fd-cal">
+              {monthDays.map((d) => {
+                const key = toISODate(d);
+                const inMonth = d.getMonth() === cursor.getMonth();
+                const c = Math.round(data[key]?.calories ?? 0);
+                const cls = key === selected ? 'sel' : !inMonth ? 'out' : c > calGoal ? 'over' : c > 0 ? 'under' : '';
+                return <button key={key} type="button" className={cls} aria-pressed={key === selected} onClick={() => setSelectedDay(key)}><span>{d.getDate()}</span>{c > 0 && inMonth ? <b>{c.toLocaleString()}</b> : null}</button>;
+              })}
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={() => shiftMonth(1)}
-            aria-label="Next month"
-            className="cursor-pointer"
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 4,
-              background: 'var(--color-soft)',
-              border: 0,
-              color: 'var(--color-foreground)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <ChevronRight size={16} />
-          </button>
+          <section className="fd-panel" style={{ overflow: 'hidden' }}>
+            <b style={{ fontSize: 15 }}>{new Date(selected + 'T00:00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}</b>
+            <div className="fd-wide fd-flex" style={{ justifyContent: 'center' }}><FoldRing value={Math.round(day?.calories ?? 0)} goal={calGoal} size={120} /></div>
+            <div className="fd-narrow" style={{ fontSize: 13 }}><b className="fd-mono">{Math.round(day?.calories ?? 0).toLocaleString()} kcal</b></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}><span className="fd-mute">Protein</span><b className="fd-mono">{Math.round(dayEntries.reduce((a, e) => a + (e.protein_snapshot ?? 0), 0))} g</b></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}><span className="fd-mute">Steps</span><b className="fd-mono">{(day?.steps ?? 0).toLocaleString()}</b></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}><span className="fd-mute">Weight</span><b className="fd-mono">{day?.weight_kg ? `${day.weight_kg.toFixed(1)} kg` : '—'}</b></div>
+            <div className="fd-meal-list">
+              {dayEntries.map((e) => <div key={e.id} style={{ paddingTop: 6, marginTop: 6, borderTop: '1px solid #34312E', fontSize: 12, display: 'flex', justifyContent: 'space-between', gap: 6 }}><span>{e.food_name_snapshot}</span><b className="fd-mono" style={{ flex: 'none' }}>{Math.round(e.calories_snapshot)}</b></div>)}
+            </div>
+            <button type="button" className="fd-btn primary" style={{ width: '100%', flex: 'none' }} onClick={() => navigate(`/journal?date=${selected}`)}>Open journal</button>
+          </section>
         </div>
+      </main>
 
-        {/* Day-of-week header */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(7, 1fr)',
-            gap: 2,
-            fontSize: 10,
-            fontWeight: 600,
-            textTransform: 'uppercase',
-            letterSpacing: '0.06em',
-            color: 'var(--color-muted-foreground)',
-            textAlign: 'center',
-            paddingBottom: 4,
-          }}
-        >
-          {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
-            <div key={i}>{d}</div>
-          ))}
-        </div>
 
-        {/* Month grid */}
-        <GlassCard padding={false}>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(7, 1fr)',
-              gap: 2,
-              padding: 4,
-            }}
-          >
-            {monthDays.map((d, i) => {
-              const iso = toISODate(d);
-              const dayData = data[iso];
-              const inMonth = d.getMonth() === cursor.getMonth();
-              const isToday = iso === todayISO;
-              const isFuture = iso > todayISO;
-              const hasData = dayData != null;
-              return (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => setSelectedDay(iso)}
-                  disabled={!inMonth || isFuture}
-                  className="cursor-pointer"
-                  style={{
-                    aspectRatio: '1',
-                    padding: 4,
-                    background: isToday
-                      ? 'var(--color-badge-bg)'
-                      : 'var(--color-surface)',
-                    border: `1px solid ${
-                      isToday ? 'var(--color-primary)' : 'var(--color-border)'
-                    }`,
-                    borderRadius: 4,
-                    color: inMonth
-                      ? 'var(--color-foreground)'
-                      : 'var(--color-placeholder)',
-                    fontFamily: 'inherit',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 2,
-                    opacity: isFuture ? 0.3 : 1,
-                    position: 'relative',
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: 13,
-                      fontWeight: isToday ? 700 : 500,
-                    }}
-                  >
-                    {d.getDate()}
-                  </span>
-                  {/* Activity dot */}
-                  {hasData && inMonth && (
-                    <div
-                      style={{
-                        width: 4,
-                        height: 4,
-                        borderRadius: 4,
-                        background: 'var(--color-primary)',
-                      }}
-                    />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </GlassCard>
-
-        {loading && (
-          <div
-            style={{
-              fontSize: 12,
-              color: 'var(--color-muted-foreground)',
-              textAlign: 'center',
-            }}
-          >
-            Loading month…
-          </div>
-        )}
-
-        {/* Legend */}
-        <div
-          style={{
-            display: 'flex',
-            gap: 12,
-            fontSize: 11,
-            color: 'var(--color-muted-foreground)',
-            justifyContent: 'center',
-          }}
-        >
-          <span className="flex items-center gap-1">
-            <div
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: 6,
-                background: 'var(--color-primary)',
-              }}
-            />
-            Activity logged
-          </span>
-        </div>
-      </div>
-
-      {/* Day detail modal */}
-      <GlassModal
-        isOpen={selectedDay !== null}
-        onClose={() => setSelectedDay(null)}
-        title={
-          selectedDay
-            ? new Date(selectedDay + 'T00:00:00').toLocaleDateString('en-AU', {
-                weekday: 'long',
-                day: 'numeric',
-                month: 'long',
-              })
-            : ''
-        }
-        size="sm"
-        footer={
-          <GlassButton variant="primary" onClick={() => setSelectedDay(null)}>
-            Done
-          </GlassButton>
-        }
-      >
-        {selectedDay && (
-          <div className="flex flex-col gap-3">
-            {data[selectedDay] ? (
-              <>
-                <DayStat
-                  label="Calories"
-                  value={Math.round(data[selectedDay].calories)}
-                  unit="kcal"
-                />
-                <DayStat
-                  label="Steps"
-                  value={data[selectedDay].steps}
-                  unit=""
-                />
-                {data[selectedDay].weight_kg != null && (
-                  <DayStat
-                    label="Weight"
-                    value={data[selectedDay].weight_kg!}
-                    unit="kg"
-                    decimals={1}
-                  />
-                )}
-                {data[selectedDay].calories === 0 &&
-                  data[selectedDay].steps === 0 &&
-                  data[selectedDay].weight_kg == null && (
-                    <EmptyState>Nothing logged on this day.</EmptyState>
-                  )}
-              </>
-            ) : (
-              <EmptyState>
-                <CalendarDays
-                  size={20}
-                  style={{
-                    color: 'var(--color-muted-foreground)',
-                    marginBottom: 8,
-                  }}
-                />
-                <div>Nothing logged on this day.</div>
-              </EmptyState>
-            )}
-          </div>
-        )}
-      </GlassModal>
-    </div>
-  );
-}
-
-function DayStat({
-  label,
-  value,
-  unit,
-  decimals = 0,
-}: {
-  label: string;
-  value: number;
-  unit: string;
-  decimals?: number;
-}) {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'baseline',
-        justifyContent: 'space-between',
-        gap: 8,
-        padding: '10px 12px',
-        background: 'var(--color-surface-warm)',
-        borderRadius: 6,
-      }}
-    >
-      <Pill tone="primary">{label}</Pill>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-        <MonoNum size={20}>{value.toFixed(decimals)}</MonoNum>
-        {unit && (
-          <span
-            style={{
-              fontSize: 11,
-              color: 'var(--color-muted-foreground)',
-            }}
-          >
-            {unit}
-          </span>
-        )}
-      </div>
-    </div>
+        </>
   );
 }
 

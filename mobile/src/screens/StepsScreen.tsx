@@ -6,23 +6,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ChevronLeft,
-  ChevronRight,
-  Plus,
   Trash2,
-  Pencil,
-  Footprints,
 } from 'lucide-react';
 import {
-  GlassCard,
   GlassButton,
   GlassInput,
   GlassModal,
-  CardShell,
-  MicroLabel,
-  MonoNum,
-  ProgressBar,
-  EmptyState,
 } from '../components/ui';
 import {
   getStepLogs,
@@ -34,7 +23,7 @@ import {
 } from '../lib/api';
 import type { StepLogEntry, Goals } from '../lib/types';
 import { toISODate } from '../lib/nutrition';
-import PageHeader from '../components/PageHeader';
+import { FoldHead, FoldBar } from '../components/Fold';
 import {
   HEALTH_NOTE,
   healthSupported,
@@ -105,10 +94,12 @@ export default function StepsScreen() {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      // Last 7 days inclusive of selected date
+      // Monday to Sunday of the selected day's week
+      const monday = new Date(date);
+      monday.setDate(date.getDate() - ((date.getDay() + 6) % 7));
       const week = Array.from({ length: 7 }, (_, i) => {
-        const d = new Date(date);
-        d.setDate(d.getDate() - (6 - i));
+        const d = new Date(monday);
+        d.setDate(monday.getDate() + i);
         return toISODate(d);
       });
       const earliest = week[0];
@@ -116,7 +107,7 @@ export default function StepsScreen() {
       const [logsData, goalsData, weekData] = await Promise.allSettled([
         getStepLogs(iso),
         getGoals(),
-        getSteps({ startDate: earliest, endDate: iso }),
+        getSteps({ startDate: earliest, endDate: week[6] }),
       ]);
       if (logsData.status === 'fulfilled') setDayLogs(logsData.value);
       if (goalsData.status === 'fulfilled') setGoals(goalsData.value);
@@ -235,398 +226,57 @@ export default function StepsScreen() {
   );
 
   return (
-    <div style={{ background: 'var(--color-background)', minHeight: '100vh' }}>
-      <PageHeader
-        title="Steps"
-        subtitle={formatNavLabel(iso)}
-        trailing={
-          <GlassButton variant="primary" size="sm" onClick={openAdd}>
-            <Plus size={14} style={{ marginRight: 2 }} />
-            Log
-          </GlassButton>
-        }
-      />
-
-      <div
-        style={{
-          padding: '0 1rem 1rem 1rem',
-          maxWidth: 480,
-          margin: '0 auto',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 12,
-        }}
-      >
-        {/* Date navigator */}
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => shiftDate(-1)}
-            aria-label="Previous day"
-            className="cursor-pointer"
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 4,
-              background: 'var(--color-soft)',
-              border: 0,
-              color: 'var(--color-foreground)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <ChevronLeft size={16} />
-          </button>
-          <input
-            type="date"
-            value={iso}
-            onChange={(e) => jumpToDate(e.target.value)}
-            max={toISODate(new Date())}
-            style={{
-              flex: 1,
-              padding: '8px 10px',
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 4,
-              color: 'var(--color-foreground)',
-              fontFamily: 'inherit',
-              fontSize: 14,
-              textAlign: 'center',
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => shiftDate(1)}
-            disabled={iso >= toISODate(new Date())}
-            aria-label="Next day"
-            className="cursor-pointer"
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 4,
-              background: 'var(--color-soft)',
-              border: 0,
-              color: 'var(--color-foreground)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              opacity: iso >= toISODate(new Date()) ? 0.4 : 1,
-            }}
-          >
-            <ChevronRight size={16} />
-          </button>
+    <>
+      <main className="fd-page">
+        <FoldHead
+          title="Steps"
+          sub={<>{formatNavLabel(iso)}{iso === toISODate(new Date()) ? ` · ${date.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })}` : ''}</>}
+          right={<>
+            <button type="button" className="fd-btn line" aria-label="Previous day" onClick={() => shiftDate(-1)}>‹</button>
+            <button type="button" className="fd-btn line" aria-label="Next day" disabled={iso >= toISODate(new Date())} onClick={() => shiftDate(1)}>›</button>
+            <button type="button" className="fd-btn primary" onClick={openAdd}>+ Log</button>
+          </>}
+        />
+        <div className="fd-grid2 fd-steps-top" style={{ flex: 'none' }}>
+          <section className="fd-panel" style={{ gridColumn: 'var(--fd-span)' }}>
+            <span className="fd-label">DAY TOTAL</span>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}><b className="fd-mono" style={{ fontSize: 36 }}>{dayTotal.toLocaleString()}</b><span className="fd-mute" style={{ fontSize: 13, flex: 1 }}>of {goals.steps.toLocaleString()}</span><span className="fd-mute" style={{ fontSize: 13 }}>{Math.round((dayTotal / (goals.steps || 1)) * 100)}%</span></div>
+            <FoldBar pct={(dayTotal / (goals.steps || 1)) * 100} />
+          </section>
+          {healthSupported() && iso === toISODate(new Date()) ? <SamsungHealthCard /> : null}
         </div>
-
-        {/* Day total card */}
-        <GlassCard>
-          <MicroLabel>
-            <Footprints
-              size={11}
-              style={{ marginRight: 4, verticalAlign: '-1px' }}
-            />
-            Day total
-          </MicroLabel>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'baseline',
-              gap: 8,
-              marginTop: 8,
-            }}
-          >
-            <MonoNum size={32}>{dayTotal.toLocaleString()}</MonoNum>
-            <span style={{ color: 'var(--color-muted-foreground)', fontSize: 13 }}>
-              of {goals.steps.toLocaleString()}
-            </span>
-            <span
-              style={{
-                marginLeft: 'auto',
-                fontFamily: 'var(--font-mono)',
-                fontSize: 11,
-                color: 'var(--color-muted-foreground)',
-                fontWeight: 600,
-              }}
-            >
-              {Math.round((dayTotal / goals.steps) * 100)}%
-            </span>
-          </div>
-          <div style={{ marginTop: 10 }}>
-            <ProgressBar
-              value={dayTotal}
-              max={goals.steps}
-              tone={dayTotal >= goals.steps ? 'success' : 'primary'}
-            />
-          </div>
-        </GlassCard>
-
-        {healthSupported() && iso === toISODate(new Date()) && <SamsungHealthCard />}
-
-        {/* Week bar chart */}
-        <CardShell title="This week">
-          {loading ? (
-            <div
-              className="skeleton"
-              style={{ height: 120, borderRadius: 8 }}
-            />
-          ) : (
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(7, 1fr)',
-                gap: 6,
-                alignItems: 'end',
-                marginTop: 4,
-              }}
-            >
-              {weekSummary.map((d) => {
-                const pct = (d.steps / weekMax) * 100;
-                const isSelected = d.date === iso;
-                const isAtGoal = d.steps >= goals.steps;
-                const fill = isAtGoal
-                  ? 'var(--color-success)'
-                  : 'var(--color-primary)';
+        <div className="fd-3-2">
+          <section className="fd-panel">
+            <b className="fd-title">This week</b>
+            <div style={{ flex: 1, minHeight: 110, display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 8, alignItems: 'end' }}>
+              {weekSummary.map((d) => (
+                <button key={d.date} type="button" aria-label={`${formatDayShort(d.date)}: ${d.steps} steps`} onClick={() => jumpToDate(d.date)} style={{ height: `${Math.max(2, (d.steps / weekMax) * 100)}%`, minHeight: 3, borderRadius: 5, border: 0, padding: 0, cursor: 'pointer', background: d.date === iso ? '#2F7FE6' : '#3A4A63' }} />
+              ))}
+            </div>
+            <div style={{ flex: 'none', display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 8, fontSize: 11, textAlign: 'center' }} className="fd-mute">
+              {weekSummary.map((d) => <span key={d.date}>{formatDayShort(d.date)}</span>)}
+            </div>
+          </section>
+          <section className="fd-panel" style={{ overflow: 'hidden' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span className="fd-label">ENTRIES</span><span className="fd-mute" style={{ fontSize: 12 }}>{dayLogs.length}</span></div>
+            <div className="fd-meal-list">
+              {dayLogs.length === 0 && <p className="fd-mute" style={{ fontSize: 13, margin: '6px 0' }}>{loading ? 'Loading…' : 'Nothing logged for this day'}</p>}
+              {dayLogs.map((entry) => {
+                const auto = healthSupported() && entry.note === HEALTH_NOTE;
                 return (
-                  <button
-                    key={d.date}
-                    type="button"
-                    onClick={() => jumpToDate(d.date)}
-                    className="cursor-pointer"
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: 4,
-                      background: 'transparent',
-                      border: 0,
-                      padding: 0,
-                      fontFamily: 'inherit',
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: 10,
-                        color: isSelected
-                          ? 'var(--color-primary)'
-                          : 'var(--color-muted-foreground)',
-                        fontWeight: isSelected ? 700 : 500,
-                      }}
-                    >
-                      {d.steps >= 1000 ? `${(d.steps / 1000).toFixed(1)}k` : d.steps || '—'}
-                    </div>
-                    <div
-                      style={{
-                        width: '100%',
-                        height: 92,
-                        background: isSelected
-                          ? 'var(--color-badge-bg)'
-                          : 'var(--color-surface-warm)',
-                        border: `1px solid ${
-                          isSelected ? 'var(--color-primary)' : 'var(--color-border)'
-                        }`,
-                        borderRadius: 6,
-                        position: 'relative',
-                        overflow: 'hidden',
-                      }}
-                    >
-                      <div
-                        style={{
-                          position: 'absolute',
-                          left: 0,
-                          right: 0,
-                          bottom: 0,
-                          height: `${pct}%`,
-                          background: fill,
-                          opacity: 0.85,
-                          transition: 'height 240ms ease-out',
-                        }}
-                      />
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 10,
-                        color: isSelected
-                          ? 'var(--color-primary)'
-                          : 'var(--color-muted-foreground)',
-                        fontWeight: isSelected ? 700 : 500,
-                      }}
-                    >
-                      {formatDayShort(d.date)}
-                    </div>
+                  <button key={entry.id} type="button" className="fd-row fd-tap" disabled={auto} onClick={() => openEdit(entry)} style={{ paddingTop: 8, paddingBottom: 8 }}>
+                    <span className="fd-col"><b className="fd-mono" style={{ fontSize: 16 }}>{entry.steps.toLocaleString()} steps</b><span className="fd-row-sub">{entry.note || (entry.logged_at || '').slice(11, 16)}</span></span>
+                    {auto && <span className="fd-mono fd-mute" style={{ fontSize: 11 }}>synced</span>}
                   </button>
                 );
               })}
             </div>
-          )}
-        </CardShell>
+          </section>
+        </div>
+      </main>
 
-        {/* Day's log entries */}
-        <GlassCard padding={false}>
-          <div
-            style={{
-              padding: '12px 14px',
-              borderBottom:
-                dayLogs.length > 0 ? '1px solid var(--color-border)' : 'none',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-            }}
-          >
-            <MicroLabel>Entries</MicroLabel>
-            <span
-              style={{
-                fontSize: 11,
-                color: 'var(--color-muted-foreground)',
-              }}
-            >
-              {dayLogs.length}
-            </span>
-          </div>
 
-          {loading ? (
-            <div style={{ padding: 14 }}>
-              <div className="skeleton" style={{ height: 44, borderRadius: 6 }} />
-            </div>
-          ) : dayLogs.length === 0 ? (
-            <div style={{ padding: 14 }}>
-              <EmptyState>
-                No step entries yet for this day.
-              </EmptyState>
-            </div>
-          ) : (
-            <ul
-              style={{
-                listStyle: 'none',
-                padding: '4px 6px 6px 6px',
-                margin: 0,
-              }}
-            >
-              {dayLogs.map((entry) => {
-                const time = (entry.logged_at || '').slice(11, 16);
-                // The automatic Samsung Health entry is rewritten on every sync, so it isn't edited by hand.
-                const auto = healthSupported() && entry.note === HEALTH_NOTE;
-                return (
-                  <li key={entry.id}>
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 10,
-                        padding: '10px 10px',
-                        borderRadius: 6,
-                      }}
-                    >
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div
-                          style={{
-                            display: 'flex',
-                            alignItems: 'baseline',
-                            gap: 6,
-                          }}
-                        >
-                          <MonoNum size={16}>
-                            {entry.steps.toLocaleString()}
-                          </MonoNum>
-                          <span
-                            style={{
-                              fontSize: 11,
-                              color: 'var(--color-muted-foreground)',
-                            }}
-                          >
-                            steps
-                          </span>
-                          {time && (
-                            <span
-                              style={{
-                                fontSize: 11,
-                                color: 'var(--color-muted-foreground)',
-                                fontFamily: 'var(--font-mono)',
-                                marginLeft: 6,
-                              }}
-                            >
-                              {time}
-                            </span>
-                          )}
-                        </div>
-                        {entry.note && (
-                          <div
-                            style={{
-                              fontSize: 12,
-                              color: 'var(--color-muted-foreground)',
-                              marginTop: 2,
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            {entry.note}
-                          </div>
-                        )}
-                      </div>
-                      {auto ? (
-                        <span
-                          style={{
-                            fontSize: 11,
-                            color: 'var(--color-muted-foreground)',
-                            fontFamily: 'var(--font-mono)',
-                          }}
-                        >
-                          synced
-                        </span>
-                      ) : (
-                        <>
-                        <button
-                          type="button"
-                          onClick={() => openEdit(entry)}
-                          aria-label="Edit"
-                          className="cursor-pointer"
-                          style={{
-                            width: 26,
-                            height: 26,
-                            borderRadius: 4,
-                            background: 'transparent',
-                            border: 0,
-                            color: 'var(--color-muted-foreground)',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          }}
-                        >
-                          <Pencil size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setConfirmDelete(entry)}
-                          aria-label="Delete"
-                          className="cursor-pointer"
-                          style={{
-                            width: 26,
-                            height: 26,
-                            borderRadius: 4,
-                            background: 'transparent',
-                            border: 0,
-                            color: 'var(--color-muted-foreground)',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          }}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                        </>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </GlassCard>
-      </div>
-
-      {/* Add modal */}
-      <GlassModal
+<GlassModal
         isOpen={addOpen}
         onClose={() => setAddOpen(false)}
         title="Add step entry"
@@ -737,7 +387,7 @@ export default function StepsScreen() {
           )}
         </p>
       </GlassModal>
-    </div>
+    </>
   );
 }
 
@@ -832,41 +482,22 @@ function SamsungHealthCard() {
     : null;
 
   return (
-    <GlassCard>
-      <MicroLabel>Samsung Health</MicroLabel>
+    <section className="fd-panel">
+      <span className="fd-label">SAMSUNG HEALTH</span>
       {!status.available ? (
-        <p style={{ fontSize: 13, color: 'var(--color-muted-foreground)', marginTop: 8 }}>
-          Health Connect isn't available on this phone.
-        </p>
+        <span className="fd-mute" style={{ fontSize: 13 }}>Health Connect isn't available on this phone.</span>
       ) : !status.granted ? (
-        <div style={{ marginTop: 8 }}>
-          <p style={{ fontSize: 13, color: 'var(--color-muted-foreground)', marginBottom: 10 }}>
-            Fill in today's steps automatically from Samsung Health.
-          </p>
-          <GlassButton onClick={connect} disabled={busy}>
-            {busy ? 'Opening…' : 'Connect Samsung Health'}
-          </GlassButton>
-        </div>
+        <>
+          <span style={{ fontSize: 14, color: '#CFCAC2' }}>Fill in today's steps automatically.</span>
+          <button type="button" className="fd-btn" style={{ alignSelf: 'flex-start' }} onClick={connect} disabled={busy}>{busy ? 'Opening…' : 'Connect Samsung Health'}</button>
+        </>
       ) : (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
-          <div style={{ flex: 1, fontSize: 13, color: 'var(--color-muted-foreground)' }}>
-            {last ? (
-              <>
-                <MonoNum size={16}>{(status.today ?? 0).toLocaleString()}</MonoNum> steps · synced {last}
-              </>
-            ) : (
-              'Connected'
-            )}
-            {!status.background && (
-              <div style={{ fontSize: 11, marginTop: 2 }}>Updates when you open Dashki</div>
-            )}
-          </div>
-          <GlassButton onClick={syncNow} disabled={busy}>
-            {busy ? 'Syncing…' : 'Sync now'}
-          </GlassButton>
-        </div>
+        <>
+          <span style={{ fontSize: 14, color: '#CFCAC2' }}>{last ? <><b className="fd-mono">{(status.today ?? 0).toLocaleString()}</b> steps · synced {last}</> : 'Connected'}</span>
+          <button type="button" className="fd-btn" style={{ alignSelf: 'flex-start' }} onClick={syncNow} disabled={busy}>{busy ? 'Syncing…' : 'Sync now'}</button>
+        </>
       )}
-      {note && <p style={{ fontSize: 12, color: 'var(--color-critical)', marginTop: 8 }}>{note}</p>}
-    </GlassCard>
+      {note && <span style={{ fontSize: 12, color: '#F0A46C' }}>{note}</span>}
+    </section>
   );
 }

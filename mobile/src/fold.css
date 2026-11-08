@@ -1,0 +1,103 @@
+/* Galaxy Z Fold 8 layouts, matching the "Fold 8 apps" design canvas.
+   Folded = cover screen, normal page scrolling. Unfolded (>= 700px) = everything fits
+   the screen, with long lists paged instead of scrolled. */
+:root.dark, .dark {
+  --color-background: #1a1918;
+  --color-surface: #232120;
+  --color-surface-warm: #232120;
+  --color-border: #34312e;
+  --color-foreground: #f2f0ec;
+  --color-muted-foreground: #a8a39b;
+}
+html, body { background: #1a1918; overflow-x: hidden; }
+.fd-page { box-sizing: border-box; display: flex; flex-direction: column; gap: 10px; padding: 8px 14px 16px; color: #f2f0ec; font-family: var(--font-sans); }
+.fd-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.fd-head h1 { margin: 0; font-size: 24px; font-weight: 700; line-height: 1.2; }
+.fd-head small { display: block; font-size: 13px; color: #a8a39b; }
+.fd-head-r { display: flex; align-items: center; gap: 6px; flex: none; }
+.fd-panel { box-sizing: border-box; background: #232120; border: 1px solid #34312e; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; }
+.fd-tap { cursor: pointer; text-align: left; color: inherit; font: inherit; }
+.fd-label { font-size: 11px; letter-spacing: .12em; color: #a8a39b; font-weight: 600; }
+.fd-title { font-size: 16px; font-weight: 700; }
+.fd-mono { font-family: var(--font-mono); }
+.fd-mute { color: #a8a39b; }
+.fd-btn { height: 44px; padding: 0 14px; border-radius: 10px; border: 0; background: #34312e; color: #f2f0ec; font: 600 14px var(--font-sans); flex: none; cursor: pointer; white-space: nowrap; }
+.fd-btn.primary { background: #2f7fe6; color: #fff; }
+.fd-btn.line { background: transparent; border: 1px solid #34312e; }
+.fd-btn:disabled { opacity: .55; }
+.fd-chip { min-height: 44px; display: inline-flex; align-items: center; padding: 0 13px; border-radius: 22px; border: 1px solid #34312e; background: #232120; color: #cfcac2; font-size: 13px; cursor: pointer; }
+.fd-chip.on { background: #2f7fe6; border-color: #2f7fe6; color: #fff; font-weight: 600; }
+.fd-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.fd-bar { height: 8px; border-radius: 4px; background: #34312e; overflow: hidden; }
+.fd-bar > div { height: 100%; border-radius: 4px; background: #2f7fe6; }
+.fd-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; border-top: 1px solid #34312e; width: 100%; background: transparent; border-left: 0; border-right: 0; border-bottom: 0; padding: 0; }
+.fd-row-title { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fd-row-sub { font-size: 12px; color: #a8a39b; }
+.fd-col { flex: 1; min-width: 0; display: flex; flex-direction: column; text-align: left; }
+.fd-pager { flex: none; display: flex; align-items: center; justify-content: center; gap: 6px; font-family: var(--font-mono); font-size: 12px; color: #a8a39b; }
+.fd-pager button { width: 44px; height: 44px; background: transparent; border: 0; color: #cfcac2; font-size: 18px; cursor: pointer; }
+.fd-pager button:disabled { opacity: .3; }
+.fd-input { box-sizing: border-box; flex: none; height: 44px; width: 100%; border: 1px solid #34312e; border-radius: 10px; background: transparent; padding: 0 12px; color: #f2f0ec; font-size: 14px; }
+.fd-grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.fd-grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.fd-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.fd-day { min-width: 0; height: 46px; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 10px; background: #232120; border: 1px solid #34312e; color: #f2f0ec; font-size: 11px; cursor: pointer; padding: 0; }
+.fd-day.on { background: #2f7fe6; border-color: #2f7fe6; color: #fff; }
+.fd-wide { display: none !important; }
+@media (max-width: 699px) { .fd-only-wide { display: none; } .fd-steps-top { grid-template-columns: minmax(0, 1fr); } }
+.fd-meal-stack { display: flex; flex-direction: column; gap: 10px; }
+.fd-home-top, .fd-home-bot { display: flex; flex-direction: column; gap: 10px; }
+.fd-week { display: flex; gap: 8px; height: 150px; }
+.fd-week > div { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; }
+.fd-week b { font-family: var(--font-mono); font-size: 11px; font-weight: 400; color: #a8a39b; }
+.fd-week i { display: block; width: 100%; border-radius: 5px; background: #3a4a63; }
+.fd-week span { font-size: 11px; color: #a8a39b; }
+.fd-cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+.fd-cal button { height: 54px; min-width: 0; border-radius: 8px; background: #1a1918; border: 1px solid #34312e; padding: 4px; text-align: left; font-family: var(--font-mono); font-size: 10px; line-height: 1.3; color: #a8a39b; cursor: pointer; vertical-align: top; display: flex; flex-direction: column; align-items: flex-start; }
+.fd-cal button.out { color: #55524d; }
+.fd-cal button.under { background: #1f3a2b; border-color: #2c5a40; color: #9be3be; }
+.fd-cal button.over { background: #3d2a1e; border-color: #62422c; color: #f0a46c; }
+.fd-cal button.sel { background: #2c3a50; border-color: #2f7fe6; color: #dce9fb; }
+.fd-cal b { font-size: 10px; font-weight: 600; }
+
+/* Bottom tabs: words only, as drawn */
+.dk-tabbar { background: #232120 !important; border-top: 1px solid #34312e !important; }
+
+@media (max-width: 699px) { .dk-tab-icon { display: none; } .dk-tab { font-size: 11px !important; } }
+:root.dark { --color-primary: #2f7fe6; }
+
+@media (min-width: 700px) {
+  html, body, #root { height: 100%; overflow: hidden; }
+  .dk-main { min-height: 0 !important; height: 100dvh; padding-left: 64px !important; padding-bottom: 0 !important; box-sizing: border-box; overflow: hidden; }
+  .dk-content { max-width: none !important; margin: 0 !important; height: 100%; }
+  .dk-tabbar { width: 64px !important; background: #1a1918 !important; border-top: 0 !important; border-right: 1px solid #34312e !important; padding-top: 8px !important; gap: 2px !important; }
+  .fd-page { height: 100%; overflow: hidden; padding: 8px 14px 10px; gap: 8px; }
+  .fd-page.fd-scroll { overflow-y: auto; }
+  .fd-narrow { display: none !important; }
+  .fd-wide { display: revert !important; }
+  .fd-wide.fd-grid3 { display: grid !important; }
+  .fd-wide.fd-flex { display: flex !important; }
+  .fd-head h1 { font-size: 22px; }
+  .fd-head small { font-size: 12px; }
+  .fd-panel { padding: 10px 12px; gap: 6px; }
+  .fd-fill { flex: 1; min-height: 0; }
+  .fd-grid3 { gap: 8px; }
+  .fd-grid2 { gap: 8px; }
+  .fd-home-side { grid-template-columns: minmax(0, 1fr) !important; }
+  .fd-home-top { flex: none; display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 8px; }
+  .fd-home-bot { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 8px; }
+  .fd-week { flex: 1; height: auto; min-height: 0; gap: 10px; }
+  .fd-2-1 { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 8px; }
+  .fd-3-2 { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 8px; }
+  .fd-meals { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .fd-meals .fd-panel { overflow: hidden; }
+  .fd-meal-list { flex: 1; min-height: 0; overflow-y: auto; }
+  .fd-calwrap { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 200px; gap: 8px; }
+  .fd-calmain { display: flex; flex-direction: column; gap: 4px; min-height: 0; }
+  .fd-cal { flex: 1; min-height: 0; gap: 4px; grid-auto-rows: minmax(0, 1fr); }
+  .fd-cal button { height: auto; min-height: 0; padding: 5px 6px; font-size: 11px; }
+  .fd-cal b { font-size: 12px; }
+  .fd-two { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .fd-two > * { min-height: 0; display: flex; flex-direction: column; }
+  .fd-list { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+}

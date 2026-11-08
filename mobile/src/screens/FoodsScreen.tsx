@@ -15,23 +15,12 @@ import {
   type ChangeEvent,
 } from 'react';
 import {
-  Plus,
-  Trash2,
-  Pencil,
-  Search,
-  Utensils,
-  Camera as CameraIcon,
-  Loader2,
-} from 'lucide-react';
-import {
-  GlassCard,
   GlassButton,
   GlassInput,
   GlassModal,
   MicroLabel,
   MonoNum,
   SegmentedControl,
-  EmptyState,
 } from '../components/ui';
 import {
   getFoods,
@@ -41,8 +30,8 @@ import {
   scanFoodLabel,
 } from '../lib/api';
 import type { Food, Unit } from '../lib/types';
-import PageHeader from '../components/PageHeader';
-import { captureLabel, isNativePlatform } from '../lib/native';
+import { FoldPager, paged } from '../components/Fold';
+import { captureLabel, } from '../lib/native';
 
 interface NewFoodForm {
   name: string;
@@ -72,6 +61,7 @@ export default function FoodsScreen() {
   const [foods, setFoods] = useState<Food[]>([]);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(0);
 
   // Modals
   const [addOpen, setAddOpen] = useState(false);
@@ -108,6 +98,8 @@ export default function FoodsScreen() {
     if (!q) return foods;
     return foods.filter((f) => f.name.toLowerCase().includes(q));
   }, [foods, query]);
+
+  const rows = paged(filtered, page, 9);
 
   // Debounce — only filters client-side so no server hit needed
   function handleQuery(e: ChangeEvent<HTMLInputElement>) {
@@ -230,251 +222,25 @@ export default function FoodsScreen() {
   }
 
   return (
-    <div style={{ background: 'var(--color-background)', minHeight: '100vh' }}>
-      <PageHeader
-        title="Foods"
-        subtitle={`${foods.length} in your database`}
-        back="/more"
-        trailing={
-          <div style={{ display: 'flex', gap: 6 }}>
-            <GlassButton
-              variant="soft"
-              size="sm"
-              onClick={handleScanLabel}
-              disabled={scanning}
-              title="Scan a nutrition label"
-            >
-              {scanning ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
-                <CameraIcon size={14} />
-              )}
-            </GlassButton>
-            <GlassButton variant="primary" size="sm" onClick={openAdd}>
-              <Plus size={14} style={{ marginRight: 2 }} />
-              New
-            </GlassButton>
-          </div>
-        }
-      />
-
-      <div
-        style={{
-          padding: '0 1rem 1rem 1rem',
-          maxWidth: 480,
-          margin: '0 auto',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 12,
-        }}
-      >
-        {/* Search */}
-        <div style={{ position: 'relative' }}>
-          <Search
-            size={14}
-            style={{
-              position: 'absolute',
-              left: 10,
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: 'var(--color-placeholder)',
-            }}
-          />
-          <input
-            type="text"
-            value={query}
-            onChange={handleQuery}
-            placeholder="Search foods…"
-            style={{
-              width: '100%',
-              padding: '10px 10px 10px 32px',
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 4,
-              color: 'var(--color-foreground)',
-              fontFamily: 'inherit',
-              fontSize: 14,
-            }}
-          />
+    <>
+      <section className="fd-panel fd-fill" style={{ overflow: 'hidden' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flex: 'none', gap: 6 }}><b className="fd-title" style={{ flex: 1 }}>Foods</b><button type="button" className="fd-btn line" onClick={handleScanLabel} disabled={scanning}>{scanning ? 'Scanning…' : 'Scan'}</button><button type="button" className="fd-btn primary" onClick={openAdd}>+ New</button></div>
+        {scanError && <span style={{ fontSize: 12, color: '#F0A46C' }}>{scanError}</span>}
+        <input className="fd-input" aria-label="Search foods" placeholder="Search foods" value={query} onChange={(e) => { handleQuery(e); setPage(0); }} />
+        <div className="fd-list">
+          {filtered.length === 0 && <p className="fd-mute" style={{ fontSize: 13 }}>{loading ? 'Loading…' : 'No foods found'}</p>}
+          {rows.slice.map((food) => (
+            <button key={food.id} type="button" className="fd-row fd-tap" onClick={() => openEdit(food)}>
+              <span className="fd-col"><span className="fd-row-title" style={{ fontSize: 13 }}>{food.name}</span><span className="fd-row-sub" style={{ fontSize: 11 }}>{Math.round(food.protein ?? food.protein_per_100g ?? 0)} g protein</span></span>
+              <span className="fd-mono" style={{ flex: 'none', fontSize: 12 }}>{Math.round(food.calories ?? food.calories_per_100g ?? 0)} kcal</span>
+            </button>
+          ))}
         </div>
+        <FoldPager page={rows.page} pages={rows.pages} total={filtered.length} from={rows.from} to={rows.to} onPage={setPage} />
+      </section>
 
-        {/* List */}
-        {loading ? (
-          <div className="flex flex-col gap-2">
-            {[0, 1, 2, 3].map((i) => (
-              <div
-                key={i}
-                className="skeleton"
-                style={{ height: 60, borderRadius: 8 }}
-              />
-            ))}
-          </div>
-        ) : filtered.length === 0 ? (
-          <EmptyState>
-            {query.trim() ? 'No foods match.' : 'Your database is empty.'} Tap{' '}
-            <strong>New</strong> to add one.
-          </EmptyState>
-        ) : (
-          <GlassCard padding={false}>
-            <ul
-              style={{
-                listStyle: 'none',
-                padding: 0,
-                margin: 0,
-                display: 'flex',
-                flexDirection: 'column',
-              }}
-            >
-              {filtered.map((food, idx) => (
-                <li key={food.id}>
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 10,
-                      padding: '12px 14px',
-                      borderTop:
-                        idx === 0 ? 'none' : '1px solid var(--color-border)',
-                    }}
-                  >
-                    <Utensils
-                      size={16}
-                      style={{
-                        color: 'var(--color-muted-foreground)',
-                        flexShrink: 0,
-                      }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => openEdit(food)}
-                      className="cursor-pointer text-left"
-                      style={{
-                        flex: 1,
-                        minWidth: 0,
-                        background: 'transparent',
-                        border: 0,
-                        padding: 0,
-                        fontFamily: 'inherit',
-                        color: 'var(--color-foreground)',
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: 13,
-                          fontWeight: 600,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {food.name}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 11,
-                          color: 'var(--color-muted-foreground)',
-                          fontFamily: 'var(--font-mono)',
-                          marginTop: 2,
-                        }}
-                      >
-                        {Math.round(food.calories ?? food.calories_per_100g ?? 0)} kcal ·{' '}
-                        {(food.protein ?? food.protein_per_100g ?? 0).toFixed(1)}g protein
-                        {' · per '}
-                        {food.base_amount ?? food.baseAmount ?? 100}{' '}
-                        {food.base_unit ?? food.baseUnit ?? 'g'}
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => openEdit(food)}
-                      aria-label="Edit"
-                      className="cursor-pointer"
-                      style={{
-                        width: 26,
-                        height: 26,
-                        borderRadius: 4,
-                        background: 'transparent',
-                        border: 0,
-                        color: 'var(--color-muted-foreground)',
-                      }}
-                    >
-                      <Pencil size={14} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setConfirmDelete(food)}
-                      aria-label="Delete"
-                      className="cursor-pointer"
-                      style={{
-                        width: 26,
-                        height: 26,
-                        borderRadius: 4,
-                        background: 'transparent',
-                        border: 0,
-                        color: 'var(--color-muted-foreground)',
-                      }}
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </GlassCard>
-        )}
 
-        {/* Camera scan hint + error display */}
-        <div
-          style={{
-            padding: 12,
-            background: 'var(--color-surface-warm)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 8,
-            fontSize: 12,
-            color: 'var(--color-muted-foreground)',
-            lineHeight: 1.5,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-            <CameraIcon
-              size={14}
-              style={{ color: 'var(--color-primary)', marginTop: 1, flexShrink: 0 }}
-            />
-            <div>
-              <strong style={{ color: 'var(--color-foreground)' }}>
-                Tap the camera icon
-              </strong>{' '}
-              to scan a nutrition label. The AI reads the panel and prefills a
-              new food for you.
-              {!isNativePlatform() && (
-                <>
-                  {' '}
-                  In browser dev the file picker opens; on a real device the
-                  camera launches.
-                </>
-              )}
-            </div>
-          </div>
-          {scanError && (
-            <div
-              style={{
-                marginTop: 8,
-                padding: '6px 8px',
-                background: 'rgba(201,28,43,0.08)',
-                border: '1px solid rgba(201,28,43,0.3)',
-                borderRadius: 4,
-                color: 'var(--color-critical)',
-                fontSize: 11,
-              }}
-            >
-              {scanError}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Add / edit modal — same form */}
-      <FoodFormModal
+<FoodFormModal
         isOpen={addOpen || editFood !== null}
         title={editFood ? 'Edit food' : 'New food'}
         form={form}
@@ -487,6 +253,7 @@ export default function FoodsScreen() {
           setError(null);
         }}
         onSave={handleSave}
+        onDelete={editFood ? () => { const f = editFood; setEditFood(null); setConfirmDelete(f); } : undefined}
       />
 
       {/* Delete confirmation */}
@@ -529,7 +296,7 @@ export default function FoodsScreen() {
           )}
         </p>
       </GlassModal>
-    </div>
+    </>
   );
 }
 
@@ -542,6 +309,7 @@ function FoodFormModal({
   saving,
   onCancel,
   onSave,
+  onDelete,
 }: {
   isOpen: boolean;
   title: string;
@@ -551,6 +319,7 @@ function FoodFormModal({
   saving: boolean;
   onCancel: () => void;
   onSave: () => void;
+  onDelete?: () => void;
 }) {
   function patch<K extends keyof NewFoodForm>(k: K, v: NewFoodForm[K]) {
     setForm({ ...form, [k]: v });
@@ -564,6 +333,7 @@ function FoodFormModal({
       mobileFullscreen
       footer={
         <>
+          {onDelete && <GlassButton variant="danger" onClick={onDelete} disabled={saving}>Delete</GlassButton>}
           <GlassButton variant="ghost" onClick={onCancel} disabled={saving}>
             Cancel
           </GlassButton>

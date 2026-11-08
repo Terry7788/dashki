@@ -23,7 +23,9 @@ const config: CapacitorConfig = {
     backgroundColor: '#1a1918',
     allowMixedContent: false, // prod: HTTPS only
   },
+  backgroundColor: '#1a1918',
   plugins: {
+    SystemBars: { style: 'DARK' },
     // Plugin configuration will be filled in by DSHKI-48+ tickets
     // (camera for label scan, push notifications, splash screen, etc.)
   },

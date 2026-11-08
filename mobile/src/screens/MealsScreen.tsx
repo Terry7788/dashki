@@ -10,13 +10,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Plus,
   Trash2,
-  Salad,
-  ChevronRight,
   Search,
   X,
 } from 'lucide-react';
 import {
-  GlassCard,
   GlassButton,
   GlassInput,
   GlassModal,
@@ -32,7 +29,7 @@ import {
   deleteSavedMeal,
 } from '../lib/api';
 import type { SavedMeal, Food, Unit } from '../lib/types';
-import PageHeader from '../components/PageHeader';
+import { FoldPager, paged } from '../components/Fold';
 
 interface DraftItem {
   food: Food;
@@ -43,6 +40,8 @@ interface DraftItem {
 export default function MealsScreen() {
   const [meals, setMeals] = useState<SavedMeal[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(0);
   const [openMeal, setOpenMeal] = useState<SavedMeal | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<SavedMeal | null>(null);
@@ -114,6 +113,20 @@ export default function MealsScreen() {
     );
   }
 
+  const shown = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return q ? meals.filter((m) => m.name.toLowerCase().includes(q)) : meals;
+  }, [meals, search]);
+  const rows = paged(shown, page, 9);
+
+  function mealKcal(meal: SavedMeal): number {
+    return Math.round((meal.items ?? []).reduce((sum, it) => {
+      const qty = it.quantity ?? it.servings ?? it.baseAmount;
+      const per = it.baseAmount > 0 && it.quantity != null && it.unit === it.baseUnit ? qty / it.baseAmount : it.servings ?? qty / (it.baseAmount || 1);
+      return sum + (it.calories ?? 0) * per;
+    }, 0));
+  }
+
   async function handleSaveMeal() {
     if (!draftName.trim()) {
       setError('Give the meal a name');
@@ -158,108 +171,24 @@ export default function MealsScreen() {
   }
 
   return (
-    <div style={{ background: 'var(--color-background)', minHeight: '100vh' }}>
-      <PageHeader
-        title="Saved meals"
-        subtitle={`${meals.length} templates`}
-        back="/more"
-        trailing={
-          <GlassButton variant="primary" size="sm" onClick={openAddMeal}>
-            <Plus size={14} style={{ marginRight: 2 }} />
-            New
-          </GlassButton>
-        }
-      />
+    <>
+      <section className="fd-panel fd-fill" style={{ overflow: 'hidden' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flex: 'none' }}><b className="fd-title">Saved meals</b><button type="button" className="fd-btn primary" onClick={openAddMeal}>+ New</button></div>
+        <input className="fd-input" aria-label="Search meals" placeholder="Search meals" value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} />
+        <div className="fd-list">
+          {shown.length === 0 && <p className="fd-mute" style={{ fontSize: 13 }}>{loading ? 'Loading…' : 'No meals found'}</p>}
+          {rows.slice.map((meal) => (
+            <button key={meal.id} type="button" className="fd-row fd-tap" onClick={() => setOpenMeal(meal)}>
+              <span className="fd-col"><span className="fd-row-title" style={{ fontSize: 13 }}>{meal.name}</span><span className="fd-row-sub" style={{ fontSize: 11 }}>{meal.items?.length ?? 0} item{(meal.items?.length ?? 0) === 1 ? '' : 's'}</span></span>
+              <span className="fd-mono" style={{ flex: 'none', fontSize: 12 }}>{mealKcal(meal)} kcal</span>
+            </button>
+          ))}
+        </div>
+        <FoldPager page={rows.page} pages={rows.pages} total={shown.length} from={rows.from} to={rows.to} onPage={setPage} />
+      </section>
 
-      <div
-        style={{
-          padding: '0 1rem 1rem 1rem',
-          maxWidth: 480,
-          margin: '0 auto',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 12,
-        }}
-      >
-        {loading ? (
-          <div className="flex flex-col gap-2">
-            {[0, 1, 2].map((i) => (
-              <div
-                key={i}
-                className="skeleton"
-                style={{ height: 60, borderRadius: 8 }}
-              />
-            ))}
-          </div>
-        ) : meals.length === 0 ? (
-          <EmptyState>
-            No saved meals yet. Tap <strong>New</strong> to create your first.
-          </EmptyState>
-        ) : (
-          <GlassCard padding={false}>
-            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-              {meals.map((meal, idx) => (
-                <li key={meal.id}>
-                  <button
-                    type="button"
-                    onClick={() => setOpenMeal(meal)}
-                    className="cursor-pointer text-left w-full"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 10,
-                      padding: '12px 14px',
-                      borderTop:
-                        idx === 0 ? 'none' : '1px solid var(--color-border)',
-                      background: 'transparent',
-                      border: 0,
-                      borderTopColor: 'var(--color-border)',
-                      borderTopStyle: idx === 0 ? 'none' : 'solid',
-                      borderTopWidth: idx === 0 ? 0 : 1,
-                      color: 'var(--color-foreground)',
-                      fontFamily: 'inherit',
-                    }}
-                  >
-                    <Salad
-                      size={16}
-                      style={{ color: 'var(--color-muted-foreground)', flexShrink: 0 }}
-                    />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div
-                        style={{
-                          fontSize: 13,
-                          fontWeight: 600,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {meal.name}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 11,
-                          color: 'var(--color-muted-foreground)',
-                          marginTop: 2,
-                        }}
-                      >
-                        {meal.items?.length ?? 0} items
-                      </div>
-                    </div>
-                    <ChevronRight
-                      size={16}
-                      style={{ color: 'var(--color-placeholder)' }}
-                    />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </GlassCard>
-        )}
-      </div>
 
-      {/* Meal detail modal */}
-      <GlassModal
+<GlassModal
         isOpen={openMeal !== null}
         onClose={() => setOpenMeal(null)}
         title={openMeal?.name ?? ''}
@@ -609,6 +538,6 @@ export default function MealsScreen() {
           )}
         </p>
       </GlassModal>
-    </div>
+    </>
   );
 }

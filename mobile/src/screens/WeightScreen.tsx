@@ -4,19 +4,11 @@
 // (filed for later if needed — Sparkline + delta carries most of the value).
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { TrendingDown, TrendingUp, Plus, Trash2, Target, Scale } from 'lucide-react';
 import {
-  GlassCard,
   GlassButton,
   GlassInput,
   GlassModal,
-  CardShell,
-  Pill,
   MicroLabel,
-  MonoNum,
-  Sparkline,
-  SegmentedControl,
-  EmptyState,
 } from '../components/ui';
 import {
   getWeightEntries,
@@ -27,14 +19,15 @@ import {
 } from '../lib/api';
 import type { WeightEntry, Goals } from '../lib/types';
 import { toISODate } from '../lib/nutrition';
-import PageHeader from '../components/PageHeader';
+import { FoldHead, FoldPager, paged } from '../components/Fold';
 
-type Range = '14d' | '30d' | '60d' | 'all';
+type Range = '14d' | '30d' | '60d' | '90d' | 'all';
 
 const RANGE_DAYS: Record<Range, number | null> = {
   '14d': 14,
   '30d': 30,
   '60d': 60,
+  '90d': 90,
   all: null,
 };
 
@@ -71,8 +64,8 @@ export default function WeightScreen() {
   const [entries, setEntries] = useState<WeightEntry[]>([]);
   const [goals, setGoals] = useState<Goals>(DEFAULT_GOALS);
   const [latest, setLatest] = useState<WeightEntry | null>(null);
-  const [range, setRange] = useState<Range>('30d');
-  const [loading, setLoading] = useState(true);
+  const [range, setRange] = useState<Range>('all');
+  const [, setLoading] = useState(true);
 
   const [addOpen, setAddOpen] = useState(false);
   const [weightInput, setWeightInput] = useState('');
@@ -81,6 +74,7 @@ export default function WeightScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const [confirmDelete, setConfirmDelete] = useState<WeightEntry | null>(null);
+  const [page, setPage] = useState(0);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -120,27 +114,21 @@ export default function WeightScreen() {
       .map((e) => e.weight_kg);
   }, [filteredEntries]);
 
-  // Delta over the visible range
-  const delta = useMemo(() => {
-    if (sparkData.length < 2) return null;
-    return Number((sparkData[sparkData.length - 1] - sparkData[0]).toFixed(1));
-  }, [sparkData]);
 
   // Stats
   const min = sparkData.length ? Math.min(...sparkData) : null;
   const max = sparkData.length ? Math.max(...sparkData) : null;
-  const avg =
-    sparkData.length > 0
-      ? Number(
-          (sparkData.reduce((a, b) => a + b, 0) / sparkData.length).toFixed(1),
-        )
-      : null;
 
   // Goal delta
   const goalDelta =
     latest && goals.weight_kg
       ? Number((latest.weight_kg - goals.weight_kg).toFixed(1))
       : null;
+
+  const rows = paged(entries, page, 8);
+  const allMin = entries.length ? Math.min(...entries.map((e) => e.weight_kg)) : 0;
+  const allMax = entries.length ? Math.max(...entries.map((e) => e.weight_kg)) : 0;
+  const lastChange = entries.length > 1 ? entries[0].weight_kg - entries[1].weight_kg : null;
 
   async function handleAddWeight() {
     if (!weightInput) return;
@@ -175,289 +163,42 @@ export default function WeightScreen() {
   }
 
   return (
-    <div style={{ background: 'var(--color-background)', minHeight: '100vh' }}>
-      <PageHeader
-        title="Weight"
-        subtitle={
-          latest
-            ? `Last logged: ${formatDateShort(latest.date)}`
-            : 'No entries yet'
-        }
-        trailing={
-          <GlassButton
-            variant="primary"
-            size="sm"
-            onClick={() => {
-              setDateInput(toISODate(new Date()));
-              setWeightInput(latest ? latest.weight_kg.toString() : '');
-              setAddOpen(true);
-            }}
-          >
-            <Plus size={14} style={{ marginRight: 2 }} />
-            Log
-          </GlassButton>
-        }
-      />
-
-      <div
-        style={{
-          padding: '0 1rem 1rem 1rem',
-          maxWidth: 480,
-          margin: '0 auto',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 12,
-        }}
-      >
-        {/* Latest weight hero */}
-        <GlassCard>
-          <MicroLabel>
-            <Scale size={11} style={{ marginRight: 4, verticalAlign: '-1px' }} />
-            Current
-          </MicroLabel>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'baseline',
-              gap: 8,
-              marginTop: 8,
-            }}
-          >
-            {latest ? (
-              <>
-                <MonoNum size={36}>{latest.weight_kg.toFixed(1)}</MonoNum>
-                <span style={{ color: 'var(--color-muted-foreground)', fontSize: 13 }}>
-                  kg
-                </span>
-                {delta !== null && delta !== 0 && (
-                  <Pill
-                    tone={delta < 0 ? 'success' : 'warning'}
-                    style={{ marginLeft: 'auto' }}
-                  >
-                    {delta < 0 ? (
-                      <TrendingDown size={10} style={{ marginRight: 2 }} />
-                    ) : (
-                      <TrendingUp size={10} style={{ marginRight: 2 }} />
-                    )}
-                    {delta > 0 ? '+' : ''}
-                    {delta} kg · {range}
-                  </Pill>
-                )}
-              </>
-            ) : (
-              <span style={{ color: 'var(--color-muted-foreground)', fontSize: 14 }}>
-                Tap Log to record your first weight
-              </span>
-            )}
-          </div>
-
-          {/* Range selector */}
-          <div style={{ marginTop: 14 }}>
-            <SegmentedControl<Range>
-              value={range}
-              options={[
-                { value: '14d', label: '14d' },
-                { value: '30d', label: '30d' },
-                { value: '60d', label: '60d' },
-                { value: 'all', label: 'All' },
-              ]}
-              onChange={setRange}
-            />
-          </div>
-
-          {/* Sparkline */}
-          {sparkData.length > 1 ? (
-            <div style={{ marginTop: 6 }}>
-              <Sparkline
-                data={sparkData}
-                stroke="var(--color-primary)"
-                height={64}
-                fill
-              />
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  fontSize: 10,
-                  color: 'var(--color-muted-foreground)',
-                  fontFamily: 'var(--font-mono)',
-                  marginTop: 2,
-                }}
-              >
-                <span>{min != null && `min ${min.toFixed(1)}`}</span>
-                <span>{avg != null && `avg ${avg.toFixed(1)}`}</span>
-                <span>{max != null && `max ${max.toFixed(1)}`}</span>
-              </div>
-            </div>
-          ) : sparkData.length === 1 ? (
-            <div
-              style={{
-                marginTop: 12,
-                fontSize: 12,
-                color: 'var(--color-muted-foreground)',
-                textAlign: 'center',
-              }}
-            >
-              Log more weights to see your trend
-            </div>
-          ) : null}
-        </GlassCard>
-
-        {/* Goal card */}
-        {goals.weight_kg && latest && (
-          <CardShell title="Goal" icon={<Target size={14} />}>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'baseline',
-                gap: 6,
-              }}
-            >
-              <MonoNum size={20}>{goals.weight_kg.toFixed(1)}</MonoNum>
-              <span style={{ color: 'var(--color-muted-foreground)', fontSize: 12 }}>
-                kg target
-              </span>
-              {goalDelta !== null && (
-                <Pill
-                  tone={goalDelta <= 0 ? 'success' : 'medium'}
-                  style={{ marginLeft: 'auto' }}
-                >
-                  {goalDelta > 0
-                    ? `${goalDelta.toFixed(1)} kg to go`
-                    : goalDelta < 0
-                      ? `${Math.abs(goalDelta).toFixed(1)} kg under`
-                      : 'At goal'}
-                </Pill>
-              )}
-            </div>
-          </CardShell>
-        )}
-
-        {/* Entries list */}
-        <GlassCard padding={false}>
-          <div
-            style={{
-              padding: '12px 14px',
-              borderBottom:
-                filteredEntries.length > 0
-                  ? '1px solid var(--color-border)'
-                  : 'none',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-            }}
-          >
-            <MicroLabel>Recent entries</MicroLabel>
-            <span style={{ fontSize: 11, color: 'var(--color-muted-foreground)' }}>
-              {filteredEntries.length} in {range}
-            </span>
-          </div>
-
-          {loading ? (
-            <div
-              style={{
-                padding: 14,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 8,
-              }}
-            >
-              {[0, 1, 2].map((i) => (
-                <div
-                  key={i}
-                  className="skeleton"
-                  style={{ height: 44, borderRadius: 6 }}
-                />
+    <>
+      <main className="fd-page">
+        <FoldHead
+          title="Weight"
+          sub={<><span className="fd-wide">{entries.length} entries{entries.length ? ` since ${formatDateShort(entries[entries.length - 1].date)}` : ''}</span><span className="fd-narrow">{goalDelta !== null ? `${goalDelta.toFixed(1)} kg to your ${goals.weight_kg} kg goal` : ''}</span></>}
+          right={<button type="button" className="fd-btn primary" onClick={() => { setDateInput(toISODate(new Date())); setError(null); setAddOpen(true); }}><span className="fd-wide">+ Log weight</span><span className="fd-narrow">+ Log</span></button>}
+        />
+        <div className="fd-grid3 fd-wide" style={{ flex: 'none' }}>
+          <section className="fd-panel" style={{ gap: 1 }}><span className="fd-mute" style={{ fontSize: 12 }}>Latest{latest ? ` · ${formatDateShort(latest.date)}` : ''}</span><b className="fd-mono" style={{ fontSize: 24 }}>{latest ? `${latest.weight_kg.toFixed(1)} kg` : '—'}</b><span style={{ fontSize: 12, color: lastChange !== null && lastChange <= 0 ? '#55B97A' : '#A8A39B' }}>{lastChange !== null ? `${lastChange <= 0 ? '↓' : '↑'} ${Math.abs(lastChange).toFixed(1)} kg since ${formatDateShort(entries[1].date)}` : ' '}</span></section>
+          <section className="fd-panel" style={{ gap: 1 }}><span className="fd-mute" style={{ fontSize: 12 }}>Goal</span><b className="fd-mono" style={{ fontSize: 24 }}>{goals.weight_kg ? `${goals.weight_kg.toFixed(1)} kg` : '—'}</b><span className="fd-mute" style={{ fontSize: 12 }}>{goalDelta !== null ? `${goalDelta.toFixed(1)} kg to go` : ' '}</span></section>
+          <section className="fd-panel" style={{ gap: 1 }}><span className="fd-mute" style={{ fontSize: 12 }}>Lowest logged</span><b className="fd-mono" style={{ fontSize: 24 }}>{entries.length ? `${allMin.toFixed(1)} kg` : '—'}</b><span className="fd-mute" style={{ fontSize: 12 }}>{entries.length ? `Highest ${allMax.toFixed(1)} kg` : ' '}</span></section>
+        </div>
+        <div className="fd-2-1">
+          <section className="fd-panel">
+            <b className="fd-mono fd-narrow" style={{ fontSize: 32 }}>{latest ? `${latest.weight_kg.toFixed(1)} kg` : '—'}</b>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}><b className="fd-title fd-wide" style={{ fontSize: 15 }}>Trend</b><div className="fd-chips">
+              {(['30d', '90d', 'all'] as Range[]).map((r) => <button key={r} type="button" className={`fd-chip${range === r ? ' on' : ''}`} onClick={() => setRange(r)}>{r === '30d' ? '1M' : r === '90d' ? '3M' : 'All'}</button>)}
+            </div></div>
+            <svg role="img" aria-label="Weight trend" viewBox="0 0 600 200" preserveAspectRatio="none" style={{ width: '100%', flex: 1, minHeight: 150, display: 'block' }}>
+              {sparkData.length > 1 && <polyline fill="none" stroke="#2F7FE6" strokeWidth="2.5" vectorEffect="non-scaling-stroke" strokeLinejoin="round" points={sparkData.map((v, i) => `${(i / (sparkData.length - 1)) * 600},${190 - ((v - (min ?? v)) / ((max ?? v) - (min ?? v) || 1)) * 180}`).join(' ')} />}
+            </svg>
+          </section>
+          <section className="fd-panel" style={{ overflow: 'hidden' }}>
+            <b className="fd-title" style={{ fontSize: 15 }}>Recent</b>
+            <div className="fd-list">
+              {rows.slice.map((e) => (
+                <button key={e.id} type="button" className="fd-row fd-tap" aria-label={`Delete weight on ${formatDateFull(e.date)}`} onClick={() => setConfirmDelete(e)}><span style={{ fontSize: 13 }}>{new Date(e.date + 'T00:00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}</span><b className="fd-mono" style={{ fontSize: 13 }}>{e.weight_kg.toFixed(1)}</b></button>
               ))}
             </div>
-          ) : filteredEntries.length === 0 ? (
-            <div style={{ padding: 14 }}>
-              <EmptyState>No weights logged in this range yet.</EmptyState>
-            </div>
-          ) : (
-            <ul
-              style={{
-                listStyle: 'none',
-                padding: '4px 6px 6px 6px',
-                margin: 0,
-                display: 'flex',
-                flexDirection: 'column',
-              }}
-            >
-              {filteredEntries.map((entry, idx) => {
-                const prev = filteredEntries[idx + 1];
-                const entryDelta = prev
-                  ? Number((entry.weight_kg - prev.weight_kg).toFixed(1))
-                  : null;
-                return (
-                  <li key={entry.id}>
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 10,
-                        padding: '10px 10px',
-                        borderRadius: 6,
-                      }}
-                    >
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600 }}>
-                          {formatDateFull(entry.date)}
-                        </div>
-                      </div>
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'baseline',
-                          gap: 4,
-                        }}
-                      >
-                        <MonoNum size={15}>{entry.weight_kg.toFixed(1)}</MonoNum>
-                        <span
-                          style={{
-                            fontSize: 11,
-                            color: 'var(--color-muted-foreground)',
-                          }}
-                        >
-                          kg
-                        </span>
-                      </div>
-                      {entryDelta !== null && entryDelta !== 0 && (
-                        <Pill tone={entryDelta < 0 ? 'success' : 'warning'}>
-                          {entryDelta > 0 ? '+' : ''}
-                          {entryDelta.toFixed(1)}
-                        </Pill>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => setConfirmDelete(entry)}
-                        aria-label="Delete entry"
-                        className="cursor-pointer"
-                        style={{
-                          width: 26,
-                          height: 26,
-                          borderRadius: 4,
-                          background: 'transparent',
-                          border: 0,
-                          color: 'var(--color-muted-foreground)',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </GlassCard>
-      </div>
+            <FoldPager page={rows.page} pages={rows.pages} total={entries.length} from={rows.from} to={rows.to} onPage={setPage} />
+          </section>
+        </div>
+      </main>
 
-      {/* Add weight modal */}
-      <GlassModal
+
+<GlassModal
         isOpen={addOpen}
         onClose={() => setAddOpen(false)}
         title="Log weight"
@@ -563,6 +304,6 @@ export default function WeightScreen() {
           )}
         </p>
       </GlassModal>
-    </div>
+    </>
   );
 }

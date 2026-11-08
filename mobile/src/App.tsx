@@ -27,8 +27,7 @@ const MoreScreen = lazy(() => import('./screens/MoreScreen'));
 const JournalScreen = lazy(() => import('./screens/JournalScreen'));
 const WeightScreen = lazy(() => import('./screens/WeightScreen'));
 const StepsScreen = lazy(() => import('./screens/StepsScreen'));
-const MealsScreen = lazy(() => import('./screens/MealsScreen'));
-const FoodsScreen = lazy(() => import('./screens/FoodsScreen'));
+const MealsFoodsScreen = lazy(() => import('./screens/MealsFoodsScreen'));
 const CalendarScreen = lazy(() => import('./screens/CalendarScreen'));
 
 function LoadingSplash() {
@@ -213,7 +212,7 @@ function AppRoutes() {
           path="/meals"
           element={
             <TabbedRoute allowed={tabbed}>
-              <MealsScreen />
+              <MealsFoodsScreen initial="meals" />
             </TabbedRoute>
           }
         />
@@ -221,7 +220,7 @@ function AppRoutes() {
           path="/foods"
           element={
             <TabbedRoute allowed={tabbed}>
-              <FoodsScreen />
+              <MealsFoodsScreen initial="foods" />
             </TabbedRoute>
           }
         />

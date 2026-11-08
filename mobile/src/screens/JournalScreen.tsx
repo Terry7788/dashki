@@ -28,11 +28,7 @@ import {
 } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  ChevronLeft,
-  ChevronRight,
-  Plus,
   Trash2,
-  Pencil,
   Search,
   Sunrise,
   Sun,
@@ -41,14 +37,12 @@ import {
   Loader2,
 } from 'lucide-react';
 import {
-  GlassCard,
   GlassButton,
   GlassInput,
   GlassModal,
   Pill,
   MicroLabel,
   MonoNum,
-  ProgressBar,
   SegmentedControl,
   EmptyState,
 } from '../components/ui';
@@ -69,12 +63,12 @@ import type {
 } from '../lib/types';
 import {
   nutritionFor,
-  formatQuantity,
   toISODate,
-  formatDateLabel,
   defaultMealForNow,
 } from '../lib/nutrition';
-import PageHeader from '../components/PageHeader';
+import { FoldHead, FoldBar, PAGE_WEEK } from '../components/Fold';
+
+const MEAL_COLOUR: Record<MealType, string> = { breakfast: '#E3A13B', lunch: '#55B97A', snack: '#4CB5AE', dinner: '#4D9BFF' };
 
 const MEAL_TYPES: MealType[] = ['breakfast', 'lunch', 'snack', 'dinner'];
 
@@ -120,6 +114,20 @@ export default function JournalScreen() {
   const [editEntry, setEditEntry] = useState<JournalEntry | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [defaultMeal, setDefaultMeal] = useState<MealType>(defaultMealForNow());
+  const [copyOpen, setCopyOpen] = useState(false);
+  const [copying, setCopying] = useState(false);
+  const [weekCalories, setWeekCalories] = useState<Record<string, number>>({});
+
+  // Monday to Sunday of the selected day, for the day strip
+  const weekOf = useMemo(() => {
+    const monday = new Date(date);
+    monday.setDate(date.getDate() - ((date.getDay() + 6) % 7));
+    return PAGE_WEEK.map((name, i) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      return { iso: toISODate(d), label: `${name} ${d.getDate()}` };
+    });
+  }, [date]);
 
   // Fetch entries for selected date
   const fetchAll = useCallback(async () => {
@@ -131,14 +139,32 @@ export default function JournalScreen() {
       ]);
       if (entriesData.status === 'fulfilled') setEntries(entriesData.value);
       if (goalsData.status === 'fulfilled') setGoals(goalsData.value);
+      getJournalEntries({ startDate: weekOf[0].iso, endDate: weekOf[6].iso }).then((list) => {
+        const by: Record<string, number> = {};
+        for (const e of list) by[e.date] = (by[e.date] ?? 0) + (e.calories_snapshot ?? 0);
+        for (const k of Object.keys(by)) by[k] = Math.round(by[k]);
+        setWeekCalories(by);
+      }).catch(() => {});
     } finally {
       setLoading(false);
     }
-  }, [iso]);
+  }, [iso, weekOf]);
 
   useEffect(() => {
     fetchAll();
   }, [fetchAll]);
+
+  // ?date=YYYY-MM-DD opens that day (from the Calendar)
+  useEffect(() => {
+    const d = searchParams.get('date');
+    if (d) {
+      const [y, m, day] = d.split('-').map(Number);
+      setDate(new Date(y, m - 1, day));
+      const next = new URLSearchParams(searchParams);
+      next.delete('date');
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   // ?addFood=1 in URL opens the Add Food modal (home-tile deep link)
   useEffect(() => {
@@ -196,6 +222,31 @@ export default function JournalScreen() {
     return map;
   }, [entries]);
 
+  async function handleCopyYesterday() {
+    setCopying(true);
+    try {
+      const y = new Date(date);
+      y.setDate(y.getDate() - 1);
+      const list = await getJournalEntries({ date: toISODate(y) });
+      for (const e of list) {
+        await addJournalEntry({
+          date: iso,
+          meal_type: e.meal_type,
+          food_id: e.food_id ?? undefined,
+          food_name_snapshot: e.food_name_snapshot,
+          quantity: e.quantity,
+          unit: e.unit,
+          calories_snapshot: e.calories_snapshot,
+          protein_snapshot: e.protein_snapshot,
+        });
+      }
+      setCopyOpen(false);
+      await fetchAll();
+    } finally {
+      setCopying(false);
+    }
+  }
+
   async function handleDelete(id: number) {
     try {
       await deleteJournalEntry(id);
@@ -211,202 +262,65 @@ export default function JournalScreen() {
   }
 
   return (
-    <div style={{ background: 'var(--color-background)', minHeight: '100vh' }}>
-      <PageHeader
-        title="Journal"
-        subtitle={formatDateLabel(date)}
-        trailing={
-          <GlassButton
-            variant="primary"
-            size="sm"
-            onClick={() => {
-              setDefaultMeal(defaultMealForNow());
-              setAddFoodOpen(true);
-            }}
-          >
-            <Plus size={14} style={{ marginRight: 2 }} />
-            Add
-          </GlassButton>
-        }
-      />
-
-      <div
-        style={{
-          padding: '0 1rem 1rem 1rem',
-          maxWidth: 480,
-          margin: '0 auto',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 12,
-        }}
-      >
-        {/* Date navigator */}
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => shiftDate(-1)}
-            aria-label="Previous day"
-            className="cursor-pointer"
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 4,
-              background: 'var(--color-soft)',
-              border: 0,
-              color: 'var(--color-foreground)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <ChevronLeft size={16} />
-          </button>
-          <input
-            type="date"
-            value={iso}
-            onChange={(e) => jumpToDate(e.target.value)}
-            max={toISODate(new Date())}
-            style={{
-              flex: 1,
-              padding: '8px 10px',
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 4,
-              color: 'var(--color-foreground)',
-              fontFamily: 'inherit',
-              fontSize: 14,
-              textAlign: 'center',
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => shiftDate(1)}
-            aria-label="Next day"
-            disabled={iso >= toISODate(new Date())}
-            className="cursor-pointer"
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 4,
-              background: 'var(--color-soft)',
-              border: 0,
-              color: 'var(--color-foreground)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              opacity: iso >= toISODate(new Date()) ? 0.4 : 1,
-            }}
-          >
-            <ChevronRight size={16} />
-          </button>
+    <>
+      <main className="fd-page">
+        <FoldHead
+          title="Journal"
+          sub={date.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })}
+          right={<>
+            <button type="button" className="fd-btn line" aria-label="Previous week" onClick={() => shiftDate(-7)}>‹</button>
+            <button type="button" className="fd-btn line" aria-label="Next week" onClick={() => shiftDate(7)}>›</button>
+            <button type="button" className="fd-btn line fd-wide" onClick={() => setQuickAddOpen(true)}>Quick add</button>
+            <button type="button" className="fd-btn line fd-wide" onClick={() => setCopyOpen(true)}>Copy yesterday</button>
+            <button type="button" className="fd-btn primary fd-narrow" onClick={() => { setDefaultMeal(defaultMealForNow()); setAddFoodOpen(true); }}>+ Add</button>
+          </>}
+        />
+        <div className="fd-days" style={{ flex: 'none' }}>
+          {weekOf.map((d) => (
+            <button key={d.iso} type="button" className={`fd-day${d.iso === iso ? ' on' : ''}`} onClick={() => jumpToDate(d.iso)}>
+              <span>{d.label}</span><b className="fd-mono" style={{ fontSize: 12 }}>{(weekCalories[d.iso] ?? 0).toLocaleString()}</b>
+            </button>
+          ))}
         </div>
-
-        {/* Daily totals */}
-        <GlassCard muted>
-          <div className="flex items-center justify-between mb-3">
-            <MicroLabel>Daily totals</MicroLabel>
-            <span
-              style={{
-                fontSize: 11,
-                color: 'var(--color-muted-foreground)',
-                fontFamily: 'var(--font-mono)',
-              }}
-            >
-              {entries.length} entries
-            </span>
+        <section className="fd-panel" style={{ flex: 'none' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flex: 'none' }}><b className="fd-mono" style={{ fontSize: 24 }}>{totals.calories.toLocaleString()}</b><span className="fd-mute" style={{ fontSize: 12 }}>of {goals.calories.toLocaleString()}</span></div>
+            <div style={{ flex: 1, minWidth: 120, display: 'flex', flexDirection: 'column', gap: 3 }}><FoldBar pct={(totals.calories / (goals.calories || 1)) * 100} height={6} /><span className="fd-mute" style={{ fontSize: 11 }}>{Math.max(goals.calories - totals.calories, 0).toLocaleString()} kcal left</span></div>
+            <div style={{ flex: 1, minWidth: 120, display: 'flex', flexDirection: 'column', gap: 3 }}><FoldBar pct={(totals.protein / (goals.protein || 1)) * 100} color="#55B97A" height={6} /><span className="fd-mute" style={{ fontSize: 11 }}>Protein {totals.protein} / {goals.protein} g</span></div>
           </div>
-          <div className="flex items-end gap-4 mb-2">
-            <div>
-              <MonoNum size={28}>{totals.calories.toLocaleString()}</MonoNum>
-              <span
-                style={{
-                  fontSize: 11,
-                  color: 'var(--color-muted-foreground)',
-                  marginLeft: 4,
-                }}
-              >
-                / {goals.calories} kcal
-              </span>
-            </div>
-          </div>
-          <ProgressBar
-            value={totals.calories}
-            max={goals.calories}
-            tone={totals.calories >= goals.calories ? 'success' : 'primary'}
-          />
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: 10,
-              marginTop: 10,
-            }}
-          >
-            <TotalChip
-              label="Protein"
-              value={totals.protein}
-              target={goals.protein}
-              unit="g"
-            />
-            {goals.fiber != null ? (
-              <TotalChip
-                label="Fibre"
-                value={totals.fiber}
-                target={goals.fiber}
-                unit="g"
-              />
-            ) : (
-              <TotalChip label="Fibre" value={totals.fiber} unit="g" />
-            )}
-          </div>
-        </GlassCard>
-
-        {/* Meals */}
-        {loading ? (
-          <div className="flex flex-col gap-2">
-            {MEAL_TYPES.map((m) => (
-              <div
-                key={m}
-                className="skeleton"
-                style={{ height: 80, borderRadius: 12 }}
-              />
-            ))}
-          </div>
-        ) : (
-          MEAL_TYPES.map((meal) => (
-            <MealSection
-              key={meal}
-              meal={meal}
-              entries={grouped[meal]}
-              onAdd={() => handleStartAdd(meal)}
-              onEdit={(entry) => setEditEntry(entry)}
-              onDelete={(id) => setConfirmDeleteId(id)}
-            />
-          ))
-        )}
-
-        {/* Quick add link */}
-        <div style={{ textAlign: 'center', paddingTop: 8 }}>
-          <button
-            type="button"
-            onClick={() => setQuickAddOpen(true)}
-            className="cursor-pointer"
-            style={{
-              background: 'transparent',
-              border: 0,
-              color: 'var(--color-link)',
-              fontSize: 13,
-              fontWeight: 600,
-              fontFamily: 'inherit',
-            }}
-          >
-            Quick add (no food in database) →
-          </button>
+        </section>
+        <div className="fd-meals fd-meal-stack">
+          {MEAL_TYPES.map((meal) => {
+            const list = grouped[meal];
+            const total = Math.round(list.reduce((a, e) => a + (e.calories_snapshot ?? 0), 0));
+            return (
+              <section key={meal} className="fd-panel">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flex: 'none' }}><b style={{ fontSize: 16, color: MEAL_COLOUR[meal] }}>{MEAL_META[meal].label}</b><span className="fd-mono fd-mute" style={{ fontSize: 13 }}>{total}</span></div>
+                <div className="fd-meal-list">
+                  {list.length === 0 && <div className="fd-mute" style={{ fontSize: 13, padding: '8px 0', borderTop: '1px solid #34312E' }}>{loading ? 'Loading…' : 'Nothing logged yet'}</div>}
+                  {list.map((e) => (
+                    <button key={e.id} type="button" className="fd-row fd-tap" onClick={() => setEditEntry(e)} style={{ display: 'block', padding: '8px 0' }}>
+                      <span style={{ display: 'block', fontSize: 13, fontWeight: 600, lineHeight: 1.2 }}>{e.food_name_snapshot}</span>
+                      <span style={{ display: 'block', fontSize: 12, marginTop: 3 }} className="fd-mute"><b className="fd-mono">{Math.round(e.calories_snapshot)} kcal</b> · {Math.round(e.protein_snapshot ?? 0)} g protein</span>
+                    </button>
+                  ))}
+                </div>
+                <button type="button" className="fd-btn line" style={{ width: '100%', borderStyle: 'dashed', flex: 'none' }} onClick={() => handleStartAdd(meal)}>+ Add food</button>
+              </section>
+            );
+          })}
         </div>
-      </div>
+      </main>
 
-      {/* Add Food modal */}
-      <AddFoodModal
+      <GlassModal isOpen={copyOpen} onClose={() => setCopyOpen(false)} title="Copy yesterday" size="sm" footer={<>
+        <GlassButton variant="ghost" onClick={() => setCopyOpen(false)}>Cancel</GlassButton>
+        <GlassButton variant="primary" disabled={copying} onClick={handleCopyYesterday}>{copying ? 'Copying…' : 'Copy'}</GlassButton>
+      </>}>
+        <p style={{ fontSize: 14, margin: 0 }}>Add everything you logged the day before to {date.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })}?</p>
+      </GlassModal>
+
+
+<AddFoodModal
         isOpen={addFoodOpen}
         onClose={() => setAddFoodOpen(false)}
         date={iso}
@@ -478,290 +392,11 @@ export default function JournalScreen() {
 
       {/* Backdrop nav exit (consumed by ScrollToTop on route change) */}
       <button hidden onClick={() => navigate('/')} />
-    </div>
+    </>
   );
 }
 
 // ─── Total chip ───────────────────────────────────────────────────────────
-
-function TotalChip({
-  label,
-  value,
-  target,
-  unit,
-}: {
-  label: string;
-  value: number;
-  target?: number;
-  unit: string;
-}) {
-  const pct = target ? Math.min(100, Math.round((value / target) * 100)) : null;
-  return (
-    <div
-      style={{
-        padding: '8px 10px',
-        background: 'var(--color-surface)',
-        border: '1px solid var(--color-border)',
-        borderRadius: 8,
-      }}
-    >
-      <MicroLabel>{label}</MicroLabel>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'baseline',
-          gap: 4,
-          marginTop: 4,
-        }}
-      >
-        <MonoNum size={16}>{value}</MonoNum>
-        <span
-          style={{
-            fontSize: 11,
-            color: 'var(--color-muted-foreground)',
-          }}
-        >
-          {target != null ? `/ ${target}${unit}` : unit}
-        </span>
-        {pct != null && (
-          <span
-            style={{
-              marginLeft: 'auto',
-              fontSize: 10,
-              color: 'var(--color-muted-foreground)',
-              fontFamily: 'var(--font-mono)',
-              fontWeight: 600,
-            }}
-          >
-            {pct}%
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── Meal section ────────────────────────────────────────────────────────
-
-function MealSection({
-  meal,
-  entries,
-  onAdd,
-  onEdit,
-  onDelete,
-}: {
-  meal: MealType;
-  entries: JournalEntry[];
-  onAdd: () => void;
-  onEdit: (entry: JournalEntry) => void;
-  onDelete: (id: number) => void;
-}) {
-  const meta = MEAL_META[meal];
-  const Icon = meta.icon;
-  const total = entries.reduce(
-    (acc, e) => acc + (e.calories_snapshot ?? 0),
-    0,
-  );
-
-  return (
-    <GlassCard padding={false}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          padding: '12px 14px 8px 14px',
-          gap: 10,
-        }}
-      >
-        <Pill tone={meta.tone}>
-          <Icon size={11} style={{ marginRight: 4 }} />
-          {meta.label}
-        </Pill>
-        <span
-          style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 11,
-            color: 'var(--color-muted-foreground)',
-            marginLeft: 'auto',
-          }}
-        >
-          <span
-            style={{
-              color: 'var(--color-foreground)',
-              fontWeight: 700,
-            }}
-          >
-            {Math.round(total)}
-          </span>{' '}
-          kcal
-        </span>
-        <button
-          type="button"
-          onClick={onAdd}
-          className="cursor-pointer"
-          aria-label={`Add to ${meta.label}`}
-          style={{
-            width: 26,
-            height: 26,
-            borderRadius: 4,
-            background: 'var(--color-soft)',
-            border: 0,
-            color: 'var(--color-foreground)',
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Plus size={14} />
-        </button>
-      </div>
-
-      {entries.length === 0 ? (
-        <div style={{ padding: '0 14px 14px 14px' }}>
-          <button
-            type="button"
-            onClick={onAdd}
-            className="cursor-pointer text-left w-full"
-            style={{
-              background: 'var(--color-surface-warm)',
-              border: '1px dashed var(--color-border)',
-              borderRadius: 8,
-              padding: '10px 12px',
-              fontSize: 12,
-              color: 'var(--color-muted-foreground)',
-              fontFamily: 'inherit',
-            }}
-          >
-            + Log {meta.label.toLowerCase()}
-          </button>
-        </div>
-      ) : (
-        <div style={{ padding: '0 4px 6px 4px' }}>
-          {entries.map((entry) => (
-            <EntryRow
-              key={entry.id}
-              entry={entry}
-              onEdit={() => onEdit(entry)}
-              onDelete={() => onDelete(entry.id)}
-            />
-          ))}
-        </div>
-      )}
-    </GlassCard>
-  );
-}
-
-function EntryRow({
-  entry,
-  onEdit,
-  onDelete,
-}: {
-  entry: JournalEntry;
-  onEdit: () => void;
-  onDelete: () => void;
-}) {
-  const time = (entry.logged_at || '').slice(11, 16); // HH:MM
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10,
-        padding: '10px 10px',
-        borderRadius: 6,
-      }}
-    >
-      <button
-        type="button"
-        onClick={onEdit}
-        className="cursor-pointer text-left"
-        style={{
-          flex: 1,
-          minWidth: 0,
-          background: 'transparent',
-          border: 0,
-          padding: 0,
-          fontFamily: 'inherit',
-          color: 'var(--color-foreground)',
-        }}
-      >
-        <div
-          style={{
-            fontSize: 13,
-            fontWeight: 600,
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-          }}
-        >
-          {entry.food_name_snapshot}
-        </div>
-        <div
-          style={{
-            display: 'flex',
-            gap: 8,
-            alignItems: 'baseline',
-            marginTop: 2,
-            fontSize: 11,
-            color: 'var(--color-muted-foreground)',
-            fontFamily: 'var(--font-mono)',
-          }}
-        >
-          <span>
-            {formatQuantity(entry.quantity ?? entry.servings ?? 1, entry.unit ?? 'serving')}
-          </span>
-          {time && <span>· {time}</span>}
-          <span style={{ marginLeft: 'auto' }}>
-            <span style={{ color: 'var(--color-foreground)', fontWeight: 700 }}>
-              {Math.round(entry.calories_snapshot)}
-            </span>{' '}
-            kcal · {Math.round(entry.protein_snapshot ?? 0)}g protein
-          </span>
-        </div>
-      </button>
-      <button
-        type="button"
-        onClick={onEdit}
-        aria-label="Edit"
-        className="cursor-pointer"
-        style={{
-          width: 26,
-          height: 26,
-          borderRadius: 4,
-          background: 'transparent',
-          border: 0,
-          color: 'var(--color-muted-foreground)',
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <Pencil size={14} />
-      </button>
-      <button
-        type="button"
-        onClick={onDelete}
-        aria-label="Delete"
-        className="cursor-pointer"
-        style={{
-          width: 26,
-          height: 26,
-          borderRadius: 4,
-          background: 'transparent',
-          border: 0,
-          color: 'var(--color-muted-foreground)',
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <Trash2 size={14} />
-      </button>
-    </div>
-  );
-}
-
-// ─── Add Food modal ───────────────────────────────────────────────────────
 
 function AddFoodModal({
   isOpen,

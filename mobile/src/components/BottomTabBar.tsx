@@ -1,7 +1,7 @@
 // Fixed bottom tab bar — 5 primary destinations.
 // Safe-area aware (sits above the iPhone gesture bar).
 
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import {
   Home as HomeIcon,
   NotebookPen,
@@ -27,6 +27,8 @@ const TABS: Tab[] = [
 ];
 
 export default function BottomTabBar() {
+  const { pathname } = useLocation();
+  const inMore = ['/more', '/meals', '/foods', '/calendar', '/settings'].some((p) => pathname.startsWith(p));
   return (
     <nav
       className="dk-tabbar"
@@ -51,7 +53,9 @@ export default function BottomTabBar() {
             className="dk-tab"
             to={tab.to}
             end={!tab.matchPrefix}
-            style={({ isActive }) => ({
+            style={({ isActive: active }) => {
+              const isActive = active || (tab.to === '/more' && inMore);
+              return {
               flex: 1,
               display: 'flex',
               flexDirection: 'column',
@@ -68,11 +72,11 @@ export default function BottomTabBar() {
               fontWeight: 600,
               letterSpacing: '0.02em',
               background: 'transparent',
-            })}
+            };}}
           >
             {({ isActive }) => (
               <>
-                <Icon size={20} strokeWidth={isActive ? 2.2 : 1.7} />
+                <Icon className="dk-tab-icon" size={20} strokeWidth={isActive ? 2.2 : 1.7} />
                 <span>{tab.label}</span>
               </>
             )}
