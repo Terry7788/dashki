@@ -208,7 +208,7 @@ export default function SettingsScreen() {
         )}
 
         {/* Sign out */}
-        {(status === 'signed-in' || status === 'guest') && (
+        {import.meta.env.VITE_PERSONAL_BUILD !== '1' && (status === 'signed-in' || status === 'guest') && (
           <GlassButton
             variant="default"
             size="lg"

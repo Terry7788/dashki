@@ -43,6 +43,27 @@
             </intent-filter>
         </activity-alias>
 
+        <!-- Home-screen widgets (widget/DashkiWidgets.kt) -->
+        <receiver android:name=".widget.TodayWidget" android:label="Dashki Today" android:exported="true">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/w_d_today" />
+        </receiver>
+        <receiver android:name=".widget.StepsWidget" android:label="Dashki Steps" android:exported="true">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/w_d_steps" />
+        </receiver>
+        <receiver android:name=".widget.WeightWidget" android:label="Dashki Weight" android:exported="true">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/w_d_weight" />
+        </receiver>
+        <receiver android:name=".widget.WidgetActions" android:exported="false" />
+        <activity
+            android:name=".widget.QuickLogActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.Dashki.QuickLog" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

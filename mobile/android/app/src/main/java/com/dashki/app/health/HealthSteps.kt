@@ -30,8 +30,6 @@ import java.time.ZoneId
 object HealthSteps {
     const val NOTE = "Samsung Health"
     private const val PREFS = "dashki.health"
-    private const val CAP_PREFS = "CapacitorStorage"        // where @capacitor/preferences keeps the sign-in
-    private const val TOKEN_KEY = "dashki.auth.token"
 
     val READ = setOf(HealthPermission.getReadPermission(StepsRecord::class))
     val BACKGROUND = setOf(HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND)
@@ -94,14 +92,12 @@ object HealthSteps {
         if (!available(ctx)) return Result(false, "Health Connect isn't available")
         if (!granted(ctx).containsAll(READ)) return Result(false, "Steps permission not given")
         val base = prefs(ctx).getString("baseUrl", null) ?: return Result(false, "Not configured")
-        val token = ctx.getSharedPreferences(CAP_PREFS, Context.MODE_PRIVATE).getString(TOKEN_KEY, null)
-            ?: return Result(false, "Not signed in to Dashki")
 
         val days = readDays(ctx, 2)
         val out = JSONArray()
         for ((date, steps) in days) {
             val d = date.toString()
-            val logs = JSONArray(http("GET", "$base/api/steps/logs?date=${URLEncoder.encode(d, "UTF-8")}", token, null))
+            val logs = JSONArray(http("GET", "$base/api/steps/logs?date=${URLEncoder.encode(d, "UTF-8")}", null))
             var mine: JSONObject? = null
             for (i in 0 until logs.length()) {
                 val l = logs.getJSONObject(i)
@@ -109,22 +105,22 @@ object HealthSteps {
             }
             when {
                 mine != null && mine.optLong("steps") != steps ->
-                    http("PUT", "$base/api/steps/logs/${mine.getInt("id")}", token, JSONObject().put("steps", steps))
+                    http("PUT", "$base/api/steps/logs/${mine.getInt("id")}", JSONObject().put("steps", steps))
                 mine == null && steps > 0 ->
-                    http("POST", "$base/api/steps/logs", token, JSONObject().put("date", d).put("steps", steps).put("note", NOTE))
+                    http("POST", "$base/api/steps/logs", JSONObject().put("date", d).put("steps", steps).put("note", NOTE))
             }
             out.put(JSONObject().put("date", d).put("steps", steps))
         }
         val today = days.last().second
         prefs(ctx).edit().putLong("lastSync", System.currentTimeMillis()).putLong("lastToday", today).apply()
+        try { com.dashki.app.widget.DashkiWidgets.refreshAll(ctx) } catch (_: Exception) { }
         return Result(true, "Synced", today, out)
     }
 
-    private fun http(method: String, url: String, token: String, body: JSONObject?): String {
+    private fun http(method: String, url: String, body: JSONObject?): String {
         val c = URL(url).openConnection() as HttpURLConnection
         c.requestMethod = method
         c.connectTimeout = 10000; c.readTimeout = 15000
-        c.setRequestProperty("Authorization", "Bearer $token")
         c.setRequestProperty("Accept", "application/json")
         if (body != null) {
             c.doOutput = true

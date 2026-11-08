@@ -29,6 +29,8 @@ interface HealthStepsPlugin {
   requestPermission(): Promise<HealthStatus>;
   syncNow(): Promise<HealthSyncResult>;
   addListener(event: 'synced', fn: (r: HealthSyncResult) => void): Promise<{ remove: () => Promise<void> }>;
+  addListener(event: 'route', fn: (r: { route: string }) => void): Promise<{ remove: () => Promise<void> }>;
+  takeRoute(): Promise<{ route?: string }>;
 }
 
 const HealthSteps = registerPlugin<HealthStepsPlugin>('HealthSteps');
@@ -86,4 +88,11 @@ export function initHealthSync(): void {
   // The native side also syncs every time Dashki comes back to the front, and
   // reports each successful sync here so open screens reload.
   void HealthSteps.addListener('synced', (r) => listeners.forEach((fn) => fn(r)));
+}
+
+/** Pages opened from Dashki's home-screen widgets, both when already running and on a cold start. */
+export function initWidgetRoutes(go: (route: string) => void): void {
+  if (!healthSupported()) return;
+  void HealthSteps.takeRoute().then((r) => r.route && go(r.route)).catch(() => {});
+  void HealthSteps.addListener('route', (r) => go(r.route));
 }

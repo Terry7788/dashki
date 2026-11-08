@@ -87,6 +87,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Boot: load token from storage and verify
   useEffect(() => {
     (async () => {
+      // Personal Android build: no accounts. The server treats requests without
+      // a token as Terry (user 1), so there is nothing to sign in to.
+      if (import.meta.env.VITE_PERSONAL_BUILD === '1') {
+        setStatus('guest');
+        return;
+      }
       try {
         const guest = await storageGet(STORAGE_KEYS.AUTH_GUEST_MODE);
         if (guest === '1') {

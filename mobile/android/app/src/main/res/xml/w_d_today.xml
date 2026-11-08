@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="utf-8"?>
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android" android:initialLayout="@layout/w_d_today_m" android:previewLayout="@layout/w_d_today_m" android:minWidth="240dp" android:minHeight="130dp" android:minResizeWidth="100dp" android:minResizeHeight="100dp" android:targetCellWidth="4" android:targetCellHeight="2" android:resizeMode="horizontal|vertical" android:widgetCategory="home_screen|keyguard" android:updatePeriodMillis="1800000"/>

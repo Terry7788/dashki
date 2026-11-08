@@ -1,12 +1,14 @@
 import { lazy, Suspense, useEffect } from 'react';
 import {
   BrowserRouter,
+  useNavigate,
   Routes,
   Route,
   Navigate,
   useLocation,
 } from 'react-router-dom';
 import { AuthProvider, useAuth, type AuthStatus } from './lib/auth-context';
+import { initWidgetRoutes } from './lib/health';
 import AppShell from './components/AppShell';
 
 // Auth screens — synchronous so the sign-in screen feels instant.
@@ -239,11 +241,21 @@ function AppRoutes() {
   );
 }
 
+/** Home-screen widgets can open a page directly. */
+function WidgetRoutes() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    initWidgetRoutes((route) => navigate(route));
+  }, [navigate]);
+  return null;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
         <ScrollToTop />
+        <WidgetRoutes />
         <AppRoutes />
       </AuthProvider>
     </BrowserRouter>

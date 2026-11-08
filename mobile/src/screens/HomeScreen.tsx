@@ -217,7 +217,7 @@ export default function HomeScreen() {
   );
 
   const greetingName =
-    displayName || user?.display_name || (status === 'guest' ? 'there' : 'you');
+    displayName || user?.display_name || (import.meta.env.VITE_PERSONAL_BUILD === '1' ? 'Terry' : status === 'guest' ? 'there' : 'you');
 
   return (
     <div style={{ background: 'var(--color-background)', minHeight: '100vh' }}>

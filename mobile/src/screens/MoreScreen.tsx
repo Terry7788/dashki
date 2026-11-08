@@ -97,7 +97,7 @@ export default function MoreScreen() {
             >
               {status === 'signed-in'
                 ? user?.display_name || user?.email
-                : 'Guest mode'}
+                : import.meta.env.VITE_PERSONAL_BUILD === '1' ? 'Terry' : 'Guest mode'}
             </div>
             <div className="mt-1">
               {status === 'signed-in' && user && (

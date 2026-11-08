@@ -31,9 +31,28 @@ class HealthStepsPlugin : Plugin() {
         o
     }
 
+    /** A home-screen widget opened a page ("/journal?addFood=1") while Dashki was already running. */
+    override fun handleOnNewIntent(intent: Intent) {
+        super.handleOnNewIntent(intent)
+        intent.getStringExtra("route")?.let { route ->
+            intent.removeExtra("route")
+            notifyListeners("route", JSObject().put("route", route))
+        }
+    }
+
+    /** The widget's page when Dashki was started by the tap. */
+    @PluginMethod
+    fun takeRoute(call: PluginCall) {
+        val i = activity?.intent
+        val o = JSObject()
+        i?.getStringExtra("route")?.let { o.put("route", it); i.removeExtra("route") }
+        call.resolve(o)
+    }
+
     /** Every time Dashki comes back to the front (and on start), pull the latest steps. */
     override fun handleOnResume() {
         super.handleOnResume()
+        scope.launch { try { com.dashki.app.widget.DashkiWidgets.refreshAll(context) } catch (_: Exception) { } }
         if (!HealthSteps.prefs(context).contains("baseUrl")) return
         scope.launch { try { runSync() } catch (_: Exception) { } }
     }
