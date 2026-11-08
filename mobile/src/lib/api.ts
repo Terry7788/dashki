@@ -30,6 +30,9 @@ const BASE_URL = (
   import.meta.env.VITE_API_BASE_URL || 'http://localhost:4001'
 ).replace(/\/$/, '');
 
+/** The Dashki API address this build talks to (also handed to the native step sync). */
+export const API_BASE_URL = BASE_URL;
+
 // ─── Auth token (in-memory + persisted to Capacitor Preferences / localStorage) ──
 // Phase 2 (DSHKI auth tickets) wires real sign-in. For now this lets the client
 // already send tokens if present, so adding auth doesn't require re-touching every

@@ -29,6 +29,7 @@ import {
 } from './api';
 import type { User } from './types';
 import { storageGet, storageSet, storageRemove, STORAGE_KEYS } from './storage';
+import { syncHealthSteps } from './health';
 
 export type AuthStatus = 'loading' | 'signed-in' | 'signed-out' | 'guest';
 
@@ -59,6 +60,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await storageSet(STORAGE_KEYS.AUTH_EXPIRES_AT, expiresAt);
       await storageRemove(STORAGE_KEYS.AUTH_GUEST_MODE);
       setAuthToken(token);
+      // Personal Android build: pull today's Samsung Health steps now that we're signed in.
+      void syncHealthSteps();
     },
     [],
   );

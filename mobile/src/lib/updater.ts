@@ -19,7 +19,7 @@ export async function checkForUpdate(appKey: string): Promise<void> {
     const info = (await res.json())?.apps?.[appKey];
     if (!info || !(info.versionCode > current)) return;
     if (later && later.code === info.versionCode && Date.now() - later.at < 86_400_000) return;
-    const msg = `${info.versionName} is ready${info.notes ? `:\n\n${info.notes}` : '.'}\n\nInstall it now?`;
+    const msg = `Dashki ${info.versionName} is ready${info.notes ? `:\n\n${info.notes}` : '.'}\n\nInstall it now?`;
     if (window.confirm(`Update available\n\n${msg}`)) {
       // External URL → Capacitor hands it to the browser, which downloads the APK.
       window.location.href = APK + info.file;

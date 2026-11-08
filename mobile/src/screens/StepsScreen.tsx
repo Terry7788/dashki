@@ -35,6 +35,15 @@ import {
 import type { StepLogEntry, Goals } from '../lib/types';
 import { toISODate } from '../lib/nutrition';
 import PageHeader from '../components/PageHeader';
+import {
+  HEALTH_NOTE,
+  healthSupported,
+  healthStatus,
+  connectHealth,
+  syncHealthSteps,
+  onHealthSync,
+  type HealthStatus,
+} from '../lib/health';
 
 const DEFAULT_GOALS: Goals = {
   id: 0,
@@ -126,6 +135,9 @@ export default function StepsScreen() {
   useEffect(() => {
     fetchAll();
   }, [fetchAll]);
+
+  // Samsung Health (personal Android build): reload when a sync wrote new numbers.
+  useEffect(() => onHealthSync(() => void fetchAll()), [fetchAll]);
 
   function shiftDate(delta: number) {
     const next = new Date(date);
@@ -348,6 +360,8 @@ export default function StepsScreen() {
           </div>
         </GlassCard>
 
+        {healthSupported() && iso === toISODate(new Date()) && <SamsungHealthCard />}
+
         {/* Week bar chart */}
         <CardShell title="This week">
           {loading ? (
@@ -490,6 +504,8 @@ export default function StepsScreen() {
             >
               {dayLogs.map((entry) => {
                 const time = (entry.logged_at || '').slice(11, 16);
+                // The automatic Samsung Health entry is rewritten on every sync, so it isn't edited by hand.
+                const auto = healthSupported() && entry.note === HEALTH_NOTE;
                 return (
                   <li key={entry.id}>
                     <div
@@ -548,44 +564,58 @@ export default function StepsScreen() {
                           </div>
                         )}
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => openEdit(entry)}
-                        aria-label="Edit"
-                        className="cursor-pointer"
-                        style={{
-                          width: 26,
-                          height: 26,
-                          borderRadius: 4,
-                          background: 'transparent',
-                          border: 0,
-                          color: 'var(--color-muted-foreground)',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
-                      >
-                        <Pencil size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setConfirmDelete(entry)}
-                        aria-label="Delete"
-                        className="cursor-pointer"
-                        style={{
-                          width: 26,
-                          height: 26,
-                          borderRadius: 4,
-                          background: 'transparent',
-                          border: 0,
-                          color: 'var(--color-muted-foreground)',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                      {auto ? (
+                        <span
+                          style={{
+                            fontSize: 11,
+                            color: 'var(--color-muted-foreground)',
+                            fontFamily: 'var(--font-mono)',
+                          }}
+                        >
+                          synced
+                        </span>
+                      ) : (
+                        <>
+                        <button
+                          type="button"
+                          onClick={() => openEdit(entry)}
+                          aria-label="Edit"
+                          className="cursor-pointer"
+                          style={{
+                            width: 26,
+                            height: 26,
+                            borderRadius: 4,
+                            background: 'transparent',
+                            border: 0,
+                            color: 'var(--color-muted-foreground)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDelete(entry)}
+                          aria-label="Delete"
+                          className="cursor-pointer"
+                          style={{
+                            width: 26,
+                            height: 26,
+                            borderRadius: 4,
+                            background: 'transparent',
+                            border: 0,
+                            color: 'var(--color-muted-foreground)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                        </>
+                      )}
                     </div>
                   </li>
                 );
@@ -758,5 +788,85 @@ function StepFormFields({
         </div>
       )}
     </div>
+  );
+}
+
+/** Today's steps from Samsung Health (Health Connect): connect button, or last sync + Sync now. */
+function SamsungHealthCard() {
+  const [status, setStatus] = useState<HealthStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => setStatus(await healthStatus()), []);
+  useEffect(() => {
+    void refresh();
+    return onHealthSync(() => void refresh());
+  }, [refresh]);
+
+  if (!status) return null;
+
+  async function connect() {
+    setBusy(true);
+    setNote(null);
+    try {
+      setStatus(await connectHealth());
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : 'Could not open Health Connect');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function syncNow() {
+    setBusy(true);
+    setNote(null);
+    const r = await syncHealthSteps();
+    if (r && !r.ok) setNote(r.message);
+    else if (!r) setNote('Sync failed — is the Mac mini reachable?');
+    await refresh();
+    setBusy(false);
+  }
+
+  const last = status.lastSync
+    ? new Date(status.lastSync).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    : null;
+
+  return (
+    <GlassCard>
+      <MicroLabel>Samsung Health</MicroLabel>
+      {!status.available ? (
+        <p style={{ fontSize: 13, color: 'var(--color-muted-foreground)', marginTop: 8 }}>
+          Health Connect isn't available on this phone.
+        </p>
+      ) : !status.granted ? (
+        <div style={{ marginTop: 8 }}>
+          <p style={{ fontSize: 13, color: 'var(--color-muted-foreground)', marginBottom: 10 }}>
+            Fill in today's steps automatically from Samsung Health.
+          </p>
+          <GlassButton onClick={connect} disabled={busy}>
+            {busy ? 'Opening…' : 'Connect Samsung Health'}
+          </GlassButton>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
+          <div style={{ flex: 1, fontSize: 13, color: 'var(--color-muted-foreground)' }}>
+            {last ? (
+              <>
+                <MonoNum size={16}>{(status.today ?? 0).toLocaleString()}</MonoNum> steps · synced {last}
+              </>
+            ) : (
+              'Connected'
+            )}
+            {!status.background && (
+              <div style={{ fontSize: 11, marginTop: 2 }}>Updates when you open Dashki</div>
+            )}
+          </div>
+          <GlassButton onClick={syncNow} disabled={busy}>
+            {busy ? 'Syncing…' : 'Sync now'}
+          </GlassButton>
+        </div>
+      )}
+      {note && <p style={{ fontSize: 12, color: 'var(--color-critical)', marginTop: 8 }}>{note}</p>}
+    </GlassCard>
   );
 }
