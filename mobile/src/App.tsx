@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useRef } from 'react';
 import {
   BrowserRouter,
   useNavigate,
@@ -243,9 +243,11 @@ function AppRoutes() {
 /** Home-screen widgets can open a page directly. */
 function WidgetRoutes() {
   const navigate = useNavigate();
+  const go = useRef(navigate);
+  go.current = navigate;
   useEffect(() => {
-    initWidgetRoutes((route) => navigate(route));
-  }, [navigate]);
+    initWidgetRoutes((route) => go.current(route));
+  }, []);
   return null;
 }
 

@@ -40,6 +40,17 @@ class HealthStepsPlugin : Plugin() {
         }
     }
 
+    /** Started by a widget tap: hold the page until the app is listening. */
+    override fun load() {
+        super.load()
+        activity?.intent?.let { i ->
+            i.getStringExtra("route")?.let { route ->
+                i.removeExtra("route")
+                notifyListeners("route", JSObject().put("route", route), true)
+            }
+        }
+    }
+
     /** The widget's page when Dashki was started by the tap. */
     @PluginMethod
     fun takeRoute(call: PluginCall) {

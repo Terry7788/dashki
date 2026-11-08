@@ -125,7 +125,7 @@ export default function WeightScreen() {
       ? Number((latest.weight_kg - goals.weight_kg).toFixed(1))
       : null;
 
-  const rows = paged(entries, page, 8);
+  const rows = paged(entries, page, 7);
   const allMin = entries.length ? Math.min(...entries.map((e) => e.weight_kg)) : 0;
   const allMax = entries.length ? Math.max(...entries.map((e) => e.weight_kg)) : 0;
   const lastChange = entries.length > 1 ? entries[0].weight_kg - entries[1].weight_kg : null;
