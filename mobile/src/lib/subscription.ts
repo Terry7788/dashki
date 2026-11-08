@@ -76,6 +76,8 @@ export const PREMIUM_FEATURES: PremiumFeature[] = [
 // ─── Gating ───────────────────────────────────────────────────────────────
 
 export function hasPremium(user: User | null): boolean {
+  // Personal build (VITE_PERSONAL_BUILD=1, Terry's own APK): everything unlocked.
+  if (import.meta.env.VITE_PERSONAL_BUILD === '1') return true;
   if (!user) return false;
   return user.subscription_status === 'premium' || user.subscription_status === 'lifetime';
 }

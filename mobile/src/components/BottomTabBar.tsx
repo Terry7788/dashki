@@ -29,6 +29,7 @@ const TABS: Tab[] = [
 export default function BottomTabBar() {
   return (
     <nav
+      className="dk-tabbar"
       style={{
         position: 'fixed',
         bottom: 0,
@@ -47,6 +48,7 @@ export default function BottomTabBar() {
         return (
           <NavLink
             key={tab.to}
+            className="dk-tab"
             to={tab.to}
             end={!tab.matchPrefix}
             style={({ isActive }) => ({

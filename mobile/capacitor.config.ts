@@ -10,6 +10,11 @@ const config: CapacitorConfig = {
   //   url: 'http://192.168.0.36:5173',
   //   cleartext: true,
   // },
+  // Android WebView origin = http://localhost, which the Dashki API's CORS list
+  // already allows (Capacitor's default is https://localhost).
+  server: {
+    androidScheme: 'http',
+  },
   ios: {
     contentInset: 'always', // respects iPhone notch / dynamic island
     backgroundColor: '#1a1918', // matches dark theme so launch-to-app transition is seamless

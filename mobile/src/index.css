@@ -424,3 +424,33 @@ i[data-lucide] > svg { width: var(--icon-size, 16px); height: var(--icon-size, 1
 /* ── Chart axis helpers (used by inline SVG charts) ── */
 .chart-axis { fill: var(--color-muted-foreground); font: 500 10px/1 var(--font-mono); }
 .chart-grid { stroke: var(--color-border); }
+
+/* Foldables / tablets (Galaxy Z Fold inner screen ≈ 840 px wide): the bottom
+   tab bar becomes a left rail and the content is centred at a readable width.
+   The cover screen and phones keep the bottom bar. */
+@media (min-width: 700px) {
+  .dk-tabbar {
+    top: 0 !important;
+    right: auto !important;
+    width: 84px;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 4px;
+    padding: calc(16px + env(safe-area-inset-top)) 0 env(safe-area-inset-bottom) 0 !important;
+    border-top: none !important;
+    border-right: 1px solid var(--color-border);
+  }
+  .dk-tabbar .dk-tab {
+    flex: 0 0 auto !important;
+    padding: 12px 0 !important;
+    font-size: 11px !important;
+  }
+  .dk-main {
+    padding-bottom: env(safe-area-inset-bottom) !important;
+    padding-left: 84px;
+  }
+  .dk-content {
+    max-width: 920px;
+    margin: 0 auto;
+  }
+}
