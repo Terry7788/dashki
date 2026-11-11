@@ -445,7 +445,7 @@ function AddStepsForm({
                 <label className="stp-row field">
                   <span>Walking time</span>
                   <span className="stp-in">
-                    <input type="text" inputMode="decimal" placeholder="30 or 45:30" value={time} aria-invalid={timeBad}
+                    <input type="text" inputMode="decimal" value={time} aria-invalid={timeBad}
                       onChange={(e) => setTime(e.target.value.replace(/[^\d:.]/g, ''))} />
                     <em>min</em>
                   </span>
