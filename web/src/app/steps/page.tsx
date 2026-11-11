@@ -1575,7 +1575,8 @@ export default function StepsPage() {
                         width: 64,
                       }}
                     >
-                      {formatLogTime(log.logged_at)}
+                      {/* The phone app keeps ONE "Samsung Health" entry per day, updated by each sync: it is the whole day, not a moment. */}
+                      {log.note === 'Samsung Health' ? 'All day' : formatLogTime(log.logged_at)}
                     </span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       {isEditing ? (
