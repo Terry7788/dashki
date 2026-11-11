@@ -82,6 +82,7 @@
 
     <!-- Steps from Samsung Health via Health Connect (read only, + hourly background sync) -->
     <uses-permission android:name="android.permission.health.READ_STEPS" />
+    <uses-permission android:name="android.permission.health.WRITE_STEPS" />
     <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND" />
     <queries>
         <package android:name="com.google.android.apps.healthdata" />

@@ -26,7 +26,7 @@ class HealthStepsPlugin : Plugin() {
     private suspend fun runSync(): JSObject = lock.withLock {
         val r = HealthSteps.sync(context)
         val o = JSObject()
-        o.put("ok", r.ok); o.put("message", r.message); o.put("today", r.today); o.put("days", r.days)
+        o.put("ok", r.ok); o.put("message", r.message); o.put("today", r.today); o.put("days", r.days); o.put("sources", r.sources)
         if (r.ok) notifyListeners("synced", o)
         o
     }
@@ -97,6 +97,7 @@ class HealthStepsPlugin : Plugin() {
             val g = HealthSteps.granted(context)
             o.put("granted", g.containsAll(HealthSteps.READ))
             o.put("background", g.containsAll(HealthSteps.BACKGROUND))
+            o.put("write", g.containsAll(HealthSteps.WRITE))
         } else {
             o.put("granted", false); o.put("background", false)
         }
@@ -126,7 +127,7 @@ class HealthStepsPlugin : Plugin() {
     fun requestPermission(call: PluginCall) {
         if (!HealthSteps.available(context)) { call.reject("Health Connect isn't available on this phone"); return }
         val intent: Intent = PermissionController.createRequestPermissionResultContract()
-            .createIntent(context, HealthSteps.READ + HealthSteps.BACKGROUND)
+            .createIntent(context, HealthSteps.READ + HealthSteps.WRITE + HealthSteps.BACKGROUND)
         startActivityForResult(call, intent, "permissionResult")
     }
 

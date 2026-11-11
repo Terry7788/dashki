@@ -12,6 +12,8 @@ export interface HealthStatus {
   available: boolean;
   granted: boolean;
   background: boolean;
+  /** Dashki may write its own step entries to Health Connect (→ Samsung Health). */
+  write?: boolean;
   lastSync?: number;
   today?: number;
 }
@@ -21,6 +23,8 @@ export interface HealthSyncResult {
   message: string;
   today: number;
   days: { date: string; steps: number }[];
+  /** Today's steps in Health Connect per app. */
+  sources?: { app: string; steps: number }[];
 }
 
 interface HealthStepsPlugin {
@@ -66,7 +70,7 @@ export function syncHealthSteps(): Promise<HealthSyncResult | null> {
   if (!syncing) {
     // Screens are told through the native "synced" event (see initHealthSync).
     syncing = HealthSteps.syncNow()
-      .catch(() => null)
+      .catch((e: unknown) => ({ ok: false, message: e instanceof Error ? e.message : String(e), today: 0, days: [] }))
       .finally(() => {
         syncing = null;
       });
