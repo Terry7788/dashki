@@ -6,7 +6,7 @@
 // "Add steps" sheet with two tabs: type a number, or the walk calculator.
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { ChevronLeft, ChevronRight, Pencil, Trash2, Check, X, Plus, Calculator, TrendingUp, Target, Star } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Pencil, Trash2, Check, X, Plus, TrendingUp, Target, Star } from 'lucide-react';
 import { getSteps, getGoals, getStepLogs, createStepLog, updateStepLog, deleteStepLog } from '@/lib/api';
 import type { StepEntry, StepLogEntry } from '@/lib/types';
 import { useSocketEvent } from '@/lib/useSocketEvent';
@@ -408,8 +408,8 @@ function AddStepsForm({
 
         <div className="stp-sheet-body">
           <div role="tablist" aria-label="How to add" className="stp-seg two">
-            <button type="button" role="tab" aria-selected={tab === 'steps'} className={tab === 'steps' ? 'on' : ''} onClick={() => setTab('steps')}>Steps</button>
             <button type="button" role="tab" aria-selected={tab === 'calc'} className={tab === 'calc' ? 'on' : ''} onClick={() => setTab('calc')}>Walk calculator</button>
+            <button type="button" role="tab" aria-selected={tab === 'steps'} className={tab === 'steps' ? 'on' : ''} onClick={() => setTab('steps')}>Steps</button>
           </div>
 
           <div className="stp-group">
@@ -589,8 +589,7 @@ export default function StepsPage() {
         <aside className="stp-side" aria-label="Log steps and highlights">
           <div className="stp-tools">
             <div className="stp-actions stp-open">
-              <button type="button" className="stp-btn primary" onClick={() => setSheet('steps')}><Plus size={16} /> Log steps</button>
-              <button type="button" className="stp-btn calc-btn" onClick={() => setSheet('calc')}><Calculator size={16} /> Calculator</button>
+              <button type="button" className="stp-btn primary" onClick={() => setSheet('calc')}><Plus size={16} /> Add steps</button>
             </div>
 
             {/* Website (wide screens): the step calculator and typing steps live here, always open (no buttons). */}
@@ -756,6 +755,7 @@ export default function StepsPage() {
         .stp-goal-key i { width: 18px; border-top: 2px dashed var(--color-muted-foreground); }
 
         .stp-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+        .stp-actions.stp-open { grid-template-columns: minmax(0, 1fr); }
         .stp-btn { height: 46px; border-radius: 12px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-foreground);
           font: 600 14px var(--font-sans); display: inline-flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; }
         .stp-btn.primary { background: var(--g-btn); border-color: var(--g-btn); color: #fff; }
