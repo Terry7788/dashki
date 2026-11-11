@@ -19,7 +19,7 @@ html { -webkit-tap-highlight-color: transparent; }
   border-radius: 10px; border: 1px solid var(--color-border); background: transparent;
   color: var(--color-foreground); font: 600 13px var(--font-sans); cursor: pointer;
 }
-.phone-health-btn.primary { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
+.phone-health-btn.primary { background: #23804a; border-color: #23804a; color: #fff; }
 .phone-health-btn:disabled { opacity: .6; }
 
 /* Cover screen (≤ 640 px): the website's month grid sized its 7 columns by their
