@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Lock-screen widget (calories): white text on a light navy tint so it reads over the sky wallpaper. No buttons (the phone is locked). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@android:id/background"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="horizontal" android:gravity="center_vertical" android:background="@drawable/w_s_lock_bg"
+    android:paddingStart="14dp" android:paddingEnd="12dp" android:layoutAnimation="@anim/w_s_layout">
+        <LinearLayout android:id="@+id/calCol" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+            android:orientation="horizontal" android:gravity="center_vertical">
+            <ProgressBar android:id="@+id/calRing" style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="40dp" android:layout_height="40dp" android:max="100" android:progress="0"
+                android:progressDrawable="@drawable/w_s_lring_cal"/>
+            <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginStart="9dp" android:orientation="vertical">
+                <TextView android:id="@+id/calNum" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="—" android:textColor="#FFFFFF" android:textSize="19sp" android:fontFamily="sans-serif-medium"
+                    android:includeFontPadding="false" android:shadowColor="#660E2A4D" android:shadowRadius="6" android:shadowDy="1"/>
+                <TextView android:id="@+id/calNumUnit" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="kcal left" android:textColor="#EAF2FB" android:textSize="12sp"
+                    android:shadowColor="#660E2A4D" android:shadowRadius="6" android:shadowDy="1"/>
+            </LinearLayout>
+        </LinearLayout>
+</LinearLayout>

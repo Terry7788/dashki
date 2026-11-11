@@ -22,12 +22,16 @@ import java.time.LocalDate
  * and when a number changes its bar or ring fills to the new value over ~0.4 s instead of jumping.
  */
 object SkyWidgets {
-    private enum class Kind(val provider: Class<*>, val layout: Int, val blue: Boolean = false) {
+    private enum class Kind(val provider: Class<*>, val layout: Int, val blue: Boolean = false, val lock: Boolean = false) {
         SPLIT(SplitWidget::class.java, R.layout.w_s_split),
         GLASS(GlassWidget::class.java, R.layout.w_s_glass, blue = true),
         MEALS(MealsWidget::class.java, R.layout.w_s_meals),
         WEEK(WeekWidget::class.java, R.layout.w_s_week),
+        LOCK_TODAY(LockTodayWidget::class.java, R.layout.w_s_lock_today, lock = true),
+        LOCK_CAL(LockCaloriesWidget::class.java, R.layout.w_s_lock_cal, lock = true),
+        LOCK_STEPS(LockStepsWidget::class.java, R.layout.w_s_lock_steps, lock = true),
     }
+    private val PCT = setOf(R.id.calBar, R.id.stepsBar, R.id.calRing, R.id.stepsRing)
 
     private const val PREFS = "dashki.skywidgets"
     private const val FRAMES = 16
@@ -54,7 +58,7 @@ object SkyWidgets {
             for ((bar, value) in target) {
                 val before = p.getInt("$id.$bar", 0)
                 from[bar] = before
-                v.setProgressBar(bar, if (bar == R.id.calBar || bar == R.id.stepsBar || bar == R.id.calRing) 100 else 1000, from[bar]!!, false)
+                v.setProgressBar(bar, if (bar in PCT) 100 else 1000, from[bar]!!, false)
             }
             m.updateAppWidget(id, v)
             if (target.any { (bar, value) -> from[bar] != value }) runs.add(Triple(id, from, target))
@@ -69,7 +73,7 @@ object SkyWidgets {
                 val v = RemoteViews(ctx.packageName, Kind.valueOf(ids[id]!!).layout)
                 for ((bar, end) in to) {
                     val start = from[bar] ?: end
-                    val max = if (bar == R.id.calBar || bar == R.id.stepsBar || bar == R.id.calRing) 100 else 1000
+                    val max = if (bar in PCT) 100 else 1000
                     v.setProgressBar(bar, max, (start + (end - start) * e).toInt(), false)
                 }
                 m.partiallyUpdateAppWidget(id, v)
@@ -77,9 +81,32 @@ object SkyWidgets {
         }
     }
 
+    /** Lock-screen widgets: rings and numbers only (no buttons; a tap unlocks into Dashki). */
+    private fun fillLock(ctx: Context, v: RemoteViews, d: JSONObject?): Map<Int, Int> {
+        v.setOnClickPendingIntent(R.id.calCol, DashkiWidgets.open(ctx, "/journal"))
+        v.setOnClickPendingIntent(R.id.stepsCol, DashkiWidgets.open(ctx, "/steps"))
+        val fmt = DashkiWidgets.fmt
+        if (d == null) { v.setTextViewText(R.id.calNum, "—"); v.setTextViewText(R.id.stepsNum, "—"); return emptyMap() }
+        val g = d.optJSONObject("goals") ?: JSONObject()
+        val goal = g.optDouble("calories", 2000.0).coerceAtLeast(1.0)
+        val eaten = d.optDouble("calories", 0.0)
+        val left = Math.round(goal - eaten)
+        v.setTextViewText(R.id.calNum, fmt.format(Math.abs(left)))
+        v.setTextViewText(R.id.calNumUnit, if (left < 0) "kcal over" else "kcal left")
+        v.setTextColor(R.id.calNum, if (left < 0) Color.parseColor("#FFB4AB") else Color.WHITE)
+        val sGoal = g.optDouble("steps", 10000.0).coerceAtLeast(1.0)
+        val steps = d.optLong("steps")
+        v.setTextViewText(R.id.stepsNum, fmt.format(steps))
+        v.setTextViewText(R.id.stepsNumUnit, if (steps >= sGoal) "steps · goal ✓" else "steps")
+        return mapOf(
+            R.id.calRing to (eaten / goal * 100).toInt().coerceIn(0, 100),
+            R.id.stepsRing to (steps / sGoal * 100).toInt().coerceIn(0, 100))
+    }
+
     /** Fills texts, colours and taps; returns each bar's value (the caller animates them). */
     private fun fill(ctx: Context, kind: Kind, v: RemoteViews, d: JSONObject?): Map<Int, Int> {
         v.setOnClickPendingIntent(android.R.id.background, DashkiWidgets.open(ctx, "/"))
+        if (kind.lock) return fillLock(ctx, v, d)
         v.setOnClickPendingIntent(R.id.calCol, DashkiWidgets.open(ctx, "/journal"))
         v.setOnClickPendingIntent(R.id.stepsCol, DashkiWidgets.open(ctx, "/steps"))
         v.setOnClickPendingIntent(R.id.logFood, DashkiWidgets.open(ctx, "/journal?addFood=1"))
@@ -88,7 +115,7 @@ object SkyWidgets {
         v.setTextViewText(R.id.logFoodText, when (kind) {
             Kind.SPLIT, Kind.GLASS -> "Log ${meal}"
             Kind.MEALS -> mealName
-            Kind.WEEK -> "Food"
+            else -> "Food"
         })
         val fmt = DashkiWidgets.fmt
         val bars = HashMap<Int, Int>()
@@ -171,6 +198,7 @@ object SkyWidgets {
                         (sGoal / scale * 64 - 1).toFloat(), TypedValue.COMPLEX_UNIT_DIP)
                 }
             }
+            else -> {}
         }
         return bars
     }
@@ -180,3 +208,6 @@ class SplitWidget : DashkiProvider()
 class GlassWidget : DashkiProvider()
 class MealsWidget : DashkiProvider()
 class WeekWidget : DashkiProvider()
+class LockTodayWidget : DashkiProvider()
+class LockCaloriesWidget : DashkiProvider()
+class LockStepsWidget : DashkiProvider()

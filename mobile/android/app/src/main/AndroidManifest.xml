@@ -72,6 +72,18 @@
             <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/w_s_glass" />
         </receiver>
+        <receiver android:name=".widget.LockTodayWidget" android:label="Dashki · Lock screen, calories and steps" android:exported="true">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/w_s_lock_today" />
+        </receiver>
+        <receiver android:name=".widget.LockCaloriesWidget" android:label="Dashki · Lock screen, calories" android:exported="true">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/w_s_lock_cal" />
+        </receiver>
+        <receiver android:name=".widget.LockStepsWidget" android:label="Dashki · Lock screen, steps" android:exported="true">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/w_s_lock_steps" />
+        </receiver>
         <receiver android:name=".widget.WidgetActions" android:exported="false" />
         <activity
             android:name=".widget.QuickLogActivity"
