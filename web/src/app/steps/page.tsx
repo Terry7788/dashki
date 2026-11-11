@@ -593,8 +593,7 @@ export default function StepsPage() {
             </div>
 
             {/* Website (wide screens): the step calculator and typing steps live here, always open (no buttons). */}
-            <section className="stp-card stp-calc-card" aria-labelledby="stp-calc-title">
-              <h2 id="stp-calc-title" className="stp-hl-h"><Plus size={15} /> Add steps</h2>
+            <section className="stp-card stp-calc-card" aria-label="Add steps">
               <AddStepsForm startTab="calc" byDay={byDay} goal={goal} today={today} />
             </section>
           </div>
@@ -696,8 +695,7 @@ export default function StepsPage() {
           .stp-tools { grid-area: tools; }
           .stp-hls { grid-area: hls; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); align-items: stretch; }
           .stp-actions.stp-open { display: none; }
-          .stp-calc-card { display: flex; flex-direction: column; padding: 14px 0 2px; }
-          .stp-calc-card > h2 { margin: 0 16px; font-size: 14px; }
+          .stp-calc-card { display: flex; flex-direction: column; padding: 4px 0 2px; }
           .stp-calc-card .stp-sheet-body { padding: 10px 12px 12px; gap: 12px; }
           .stp-calc-card .stp-group { background: var(--color-surface-warm); }
           .stp-calc-card .stp-quick button { background: var(--color-surface-warm); }
