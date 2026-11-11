@@ -105,7 +105,7 @@ function hoursFromLogs(logs: StepLogEntry[]): number[] {
 
 // ─── One page of the chart ───────────────────────────────────────────────────
 
-interface Bar { v: number | null; label: string; short?: string; aria: string }
+interface Bar { v: number | null; label: string; short?: string; aria: string; date?: Date }
 interface Period { bars: Bar[]; kind: string; unit: string; when: string; value: number; canPrev: boolean; daily: boolean; day?: Date }
 
 function period(range: Range, off: number, byDay: Map<string, number>, first: Date, today: Date, hours: (d: Date) => number[]): Period {
@@ -126,7 +126,7 @@ function period(range: Range, off: number, byDay: Map<string, number>, first: Da
     const mon = addDays(mondayOf(today), -7 * off), sun = addDays(mon, 6);
     for (let j = 0; j < 7; j++) {
       const d = addDays(mon, j);
-      bars.push({ v: inData(d) ? on(d) : null, label: DAYS[j], short: DAYS[j].charAt(0), aria: longDay(d) });
+      bars.push({ v: inData(d) ? on(d) : null, label: DAYS[j], short: DAYS[j].charAt(0), aria: longDay(d), date: d });
       if (inData(d)) avgDays.push(on(d));
     }
     const when = mon.getMonth() === sun.getMonth()
@@ -139,7 +139,7 @@ function period(range: Range, off: number, byDay: Map<string, number>, first: Da
     const n = new Date(m0.getFullYear(), m0.getMonth() + 1, 0).getDate();
     for (let k = 0; k < n; k++) {
       const d = addDays(m0, k);
-      bars.push({ v: inData(d) ? on(d) : null, label: k % 7 === 0 ? String(k + 1) : '', aria: longDay(d) });
+      bars.push({ v: inData(d) ? on(d) : null, label: k % 7 === 0 ? String(k + 1) : '', aria: longDay(d), date: d });
       if (inData(d)) avgDays.push(on(d));
     }
     return { bars, kind: 'AVERAGE', unit: 'steps/day', when: `${MONTHS_FULL[m0.getMonth()]} ${m0.getFullYear()}`, value: mean(avgDays), canPrev: m0 > first, daily: true };
@@ -195,7 +195,11 @@ function StepsChart({
 
   const p = useMemo(() => period(range, off, byDay, first, today, hours), [range, off, byDay, first, today, hours]);
 
-  useEffect(() => { onDayView(range === 'D' && p.day ? p.day : null); }, [range, p.day, onDayView]);
+  // The entries list follows the day on screen: the D view's day, or a day bar tapped in W / M.
+  const selDay = sel !== null ? p.bars[sel]?.date : undefined;
+  useEffect(() => {
+    onDayView(range === 'D' && p.day ? p.day : selDay && selDay <= today ? selDay : null);
+  }, [range, p.day, selDay, today, onDayView]);
   useEffect(() => {
     setGrown(false);
     const t = window.setTimeout(() => setGrown(true), 40);
