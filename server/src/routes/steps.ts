@@ -248,14 +248,15 @@ router.post('/logs', (req: Request, res: Response) => {
   );
 });
 
-// PUT /logs/:id — update a log entry (partial: steps and/or note)
+// PUT /logs/:id — update a log entry (partial: steps, note and/or logged_at).
+// The Android app's Samsung Health entry sends logged_at on every sync, so its time reads as the last sync.
 router.put('/logs/:id', (req: Request, res: Response) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) {
     return res.status(400).json({ error: 'Invalid id' });
   }
 
-  const { steps, note } = req.body || {};
+  const { steps, note, logged_at } = req.body || {};
   const updates: string[] = [];
   const params: (number | string | null)[] = [];
 
@@ -278,6 +279,15 @@ router.put('/logs/:id', (req: Request, res: Response) => {
     } else {
       return res.status(400).json({ error: 'Invalid note value' });
     }
+  }
+
+  if (logged_at !== undefined) {
+    // Same shape as nowLocalISO(): YYYY-MM-DDTHH:MM:SS, local (Melbourne) time, no zone.
+    if (typeof logged_at !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(logged_at)) {
+      return res.status(400).json({ error: 'Invalid logged_at (YYYY-MM-DDTHH:MM:SS)' });
+    }
+    updates.push('logged_at = ?');
+    params.push(logged_at);
   }
 
   if (updates.length === 0) {

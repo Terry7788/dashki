@@ -194,8 +194,10 @@ object HealthSteps {
             }
             when {
                 // Health Connect can come back with 0 (not shared yet); the server refuses 0, so keep the last number.
-                mine != null && steps > 0 && mine.optLong("steps") != steps ->
-                    http("PUT", "$base/api/steps/logs/${mine.getInt("id")}", JSONObject().put("steps", steps))
+                // Today's entry is touched on every sync so its time on the Steps page is the last sync.
+                mine != null && steps > 0 && (mine.optLong("steps") != steps || date == LocalDate.now()) ->
+                    http("PUT", "$base/api/steps/logs/${mine.getInt("id")}", JSONObject().put("steps", steps)
+                        .put("logged_at", LocalDateTime.now().withNano(0).toString().let { if (it.length == 16) "$it:00" else it }))
                 mine == null && steps > 0 ->
                     http("POST", "$base/api/steps/logs", JSONObject().put("date", d).put("steps", steps).put("note", NOTE))
             }
