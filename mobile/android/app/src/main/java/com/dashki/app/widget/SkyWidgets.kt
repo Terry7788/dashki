@@ -14,7 +14,7 @@ import org.json.JSONObject
 import java.time.LocalDate
 
 /**
- * The 4×2 widgets drawn for Terry's sky wallpaper: Split (2), By meal (5), This week (7) and
+ * The 4×2 widgets drawn for Terry's sky wallpaper, all in the deep-blue glass look (Terry, 2026-11-12): Split (2), By meal (5), This week (7) and
  * Deep-blue glass (8). Designs: https://claude.ai/artifact/YVqkPo9Y7mKzJ4gQfUuA2J
  *
  * Smoothness: the content fades and slides in when the widget first appears (layoutAnimation in
@@ -23,10 +23,10 @@ import java.time.LocalDate
  */
 object SkyWidgets {
     private enum class Kind(val provider: Class<*>, val layout: Int, val blue: Boolean = false, val lock: Boolean = false) {
-        SPLIT(SplitWidget::class.java, R.layout.w_s_split),
+        SPLIT(SplitWidget::class.java, R.layout.w_s_split, blue = true),
         GLASS(GlassWidget::class.java, R.layout.w_s_glass, blue = true),
-        MEALS(MealsWidget::class.java, R.layout.w_s_meals),
-        WEEK(WeekWidget::class.java, R.layout.w_s_week),
+        MEALS(MealsWidget::class.java, R.layout.w_s_meals, blue = true),
+        WEEK(WeekWidget::class.java, R.layout.w_s_week, blue = true),
         LOCK_TODAY(LockTodayWidget::class.java, R.layout.w_s_lock_today, lock = true),
         LOCK_CAL(LockCaloriesWidget::class.java, R.layout.w_s_lock_cal, lock = true),
         LOCK_STEPS(LockStepsWidget::class.java, R.layout.w_s_lock_steps, lock = true),
@@ -183,14 +183,14 @@ object SkyWidgets {
                     bars[BARS[i]] = if (future) 40 else (values[i] / scale * 1000).toInt().coerceIn(if (values[i] > 0) 30 else 0, 1000)
                     if (Build.VERSION.SDK_INT >= 31) {
                         val c = when {
-                            future -> "#DCE6EF"
-                            i == upTo -> "#2E9E5B"
-                            values[i] >= sGoal -> "#5DBB84"
-                            else -> "#9FD4B3"
+                            future -> "#33FFFFFF"
+                            i == upTo -> "#7BE3A0"
+                            values[i] >= sGoal -> "#5CD68A"
+                            else -> "#4F9A72"
                         }
                         v.setColorStateList(BARS[i], "setProgressTintList", ColorStateList.valueOf(Color.parseColor(c)))
                     }
-                    v.setTextColor(DAYS[i], Color.parseColor(if (i == upTo) "#14263B" else "#4E6378"))
+                    v.setTextColor(DAYS[i], Color.parseColor(if (i == upTo) "#FFFFFF" else "#D5E3F2"))
                 }
                 if (Build.VERSION.SDK_INT >= 31) {
                     v.setViewVisibility(R.id.goalLine, View.VISIBLE)
