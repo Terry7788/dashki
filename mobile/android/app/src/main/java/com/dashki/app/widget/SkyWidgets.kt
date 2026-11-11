@@ -193,11 +193,7 @@ object SkyWidgets {
                     }
                     v.setTextColor(DAYS[i], Color.parseColor(if (i == upTo) "#FFFFFF" else "#D5E3F2"))
                 }
-                if (Build.VERSION.SDK_INT >= 31) {
-                    v.setViewVisibility(R.id.goalLine, View.VISIBLE)
-                    v.setViewLayoutMargin(R.id.goalLine, RemoteViews.MARGIN_BOTTOM,
-                        (sGoal / scale * 64 - 1).toFloat(), TypedValue.COMPLEX_UNIT_DIP)
-                }
+                bars[R.id.goalLine] = (sGoal / scale * 1000).toInt().coerceIn(0, 1000)   // the chart stretches, so the line is a fraction too
             }
             else -> {}
         }

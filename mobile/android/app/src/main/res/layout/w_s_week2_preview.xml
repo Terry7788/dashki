@@ -21,8 +21,8 @@
         </LinearLayout>
         <TextView android:id="@+id/stepsSub" android:layout_width="wrap_content" android:layout_height="wrap_content"
             android:layout_marginTop="2dp" android:text="Avg 8,303 this week" android:textColor="#D5E3F2" android:textSize="12sp" android:maxLines="1"/>
-        <FrameLayout android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1" android:minHeight="4dp"/>
-        <FrameLayout android:layout_width="match_parent" android:layout_height="64dp">
+        <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
+            android:layout_marginTop="8dp" android:minHeight="48dp">
             <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="horizontal">
                 <ProgressBar android:id="@+id/b0" style="?android:attr/progressBarStyleHorizontal"
                     android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
@@ -53,9 +53,9 @@
                     android:layout_marginStart="3dp" android:layout_marginEnd="3dp"
                     android:progress="40" android:max="1000" android:progressDrawable="@drawable/w_s_vbar"/>
             </LinearLayout>
-            <ImageView android:id="@+id/goalLine" android:layout_width="match_parent" android:layout_height="2dp"
-                android:layout_gravity="bottom" android:scaleType="fitXY" android:src="@drawable/w_s_dash"
-                android:layout_marginBottom="56dp"/>
+            <ProgressBar android:id="@+id/goalLine" style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent" android:layout_height="match_parent"
+                android:max="1000" android:progress="870" android:progressDrawable="@drawable/w_s_goal"/>
         </FrameLayout>
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
             android:layout_marginTop="3dp" android:orientation="horizontal">

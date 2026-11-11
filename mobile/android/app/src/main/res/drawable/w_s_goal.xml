@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Goal line for the This week bars: a ProgressBar whose "progress" is the goal's height. The scale drawable shrinks the
+     layer to that height from the bottom, and the dashed line sits on the layer's top edge, so it lands at the goal. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@android:id/background"><shape><solid android:color="#00000000"/></shape></item>
+    <item android:id="@android:id/progress">
+        <scale android:scaleHeight="100%" android:scaleGravity="bottom|fill_horizontal">
+            <layer-list>
+                <item android:gravity="top|fill_horizontal" android:height="2dp" android:drawable="@drawable/w_s_dash"/>
+            </layer-list>
+        </scale>
+    </item>
+</layer-list>
