@@ -27,6 +27,7 @@ object SkyWidgets {
         GLASS(GlassWidget::class.java, R.layout.w_s_glass, blue = true),
         MEALS(MealsWidget::class.java, R.layout.w_s_meals, blue = true),
         WEEK(WeekWidget::class.java, R.layout.w_s_week, blue = true),
+        WEEK2(WeekStepsFirstWidget::class.java, R.layout.w_s_week2, blue = true),
         LOCK_TODAY(LockTodayWidget::class.java, R.layout.w_s_lock_today, lock = true),
         LOCK_CAL(LockCaloriesWidget::class.java, R.layout.w_s_lock_cal, lock = true),
         LOCK_STEPS(LockStepsWidget::class.java, R.layout.w_s_lock_steps, lock = true),
@@ -121,7 +122,7 @@ object SkyWidgets {
         val bars = HashMap<Int, Int>()
         if (d == null) {
             v.setTextViewText(R.id.calNum, "—"); v.setTextViewText(R.id.stepsNum, "—")
-            if (kind != Kind.WEEK) v.setTextViewText(R.id.calSub, "Can't reach Dashki")
+            if (kind != Kind.WEEK && kind != Kind.WEEK2) v.setTextViewText(R.id.calSub, "Can't reach Dashki")
             else v.setTextViewText(R.id.stepsSub, "Can't reach Dashki")
             return bars
         }
@@ -135,7 +136,7 @@ object SkyWidgets {
         v.setTextViewText(R.id.calNum, fmt.format(Math.abs(left)))
         v.setTextColor(R.id.calNum, if (over) red else ink)
         v.setTextViewText(R.id.calUnit, when {
-            kind == Kind.MEALS || kind == Kind.WEEK -> if (over) "kcal over" else "kcal left"
+            kind == Kind.MEALS || kind == Kind.WEEK || kind == Kind.WEEK2 -> if (over) "kcal over" else "kcal left"
             else -> if (over) "over" else "left"
         })
         val calPct = (eaten / goal * 100).toInt().coerceIn(0, 100)
@@ -167,7 +168,7 @@ object SkyWidgets {
                 v.setTextViewText(R.id.stepsNum, "${fmt.format(steps)} steps")
                 bars[R.id.stepsBar] = stepPct
             }
-            Kind.WEEK -> {
+            Kind.WEEK, Kind.WEEK2 -> {
                 bars[R.id.calRing] = calPct
                 v.setTextViewText(R.id.stepsNum, fmt.format(steps))
                 val week = d.optJSONObject("week") ?: JSONObject()
@@ -211,3 +212,4 @@ class WeekWidget : DashkiProvider()
 class LockTodayWidget : DashkiProvider()
 class LockCaloriesWidget : DashkiProvider()
 class LockStepsWidget : DashkiProvider()
+class WeekStepsFirstWidget : DashkiProvider()

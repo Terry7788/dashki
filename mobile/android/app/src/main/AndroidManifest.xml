@@ -84,6 +84,10 @@
             <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/w_s_lock_steps" />
         </receiver>
+        <receiver android:name=".widget.WeekStepsFirstWidget" android:label="Dashki · This week, steps first" android:exported="true">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/w_s_week2" />
+        </receiver>
         <receiver android:name=".widget.WidgetActions" android:exported="false" />
         <activity
             android:name=".widget.QuickLogActivity"
