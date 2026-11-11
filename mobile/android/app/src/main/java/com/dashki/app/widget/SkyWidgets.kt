@@ -1,0 +1,182 @@
+package com.dashki.app.widget
+
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
+import android.content.Context
+import android.content.res.ColorStateList
+import android.graphics.Color
+import android.os.Build
+import android.util.TypedValue
+import android.view.View
+import android.widget.RemoteViews
+import com.dashki.app.R
+import org.json.JSONObject
+import java.time.LocalDate
+
+/**
+ * The 4×2 widgets drawn for Terry's sky wallpaper: Split (2), By meal (5), This week (7) and
+ * Deep-blue glass (8). Designs: https://claude.ai/artifact/YVqkPo9Y7mKzJ4gQfUuA2J
+ *
+ * Smoothness: the content fades and slides in when the widget first appears (layoutAnimation in
+ * the layouts), taps ripple, opening Dashki grows out of the widget (root id = android:id/background),
+ * and when a number changes its bar or ring fills to the new value over ~0.4 s instead of jumping.
+ */
+object SkyWidgets {
+    private enum class Kind(val provider: Class<*>, val layout: Int, val blue: Boolean = false) {
+        SPLIT(SplitWidget::class.java, R.layout.w_s_split),
+        GLASS(GlassWidget::class.java, R.layout.w_s_glass, blue = true),
+        MEALS(MealsWidget::class.java, R.layout.w_s_meals),
+        WEEK(WeekWidget::class.java, R.layout.w_s_week),
+    }
+
+    private const val PREFS = "dashki.skywidgets"
+    private const val FRAMES = 16
+    private const val FRAME_MS = 33L
+    private val BARS = intArrayOf(R.id.b0, R.id.b1, R.id.b2, R.id.b3, R.id.b4, R.id.b5, R.id.b6)
+    private val DAYS = intArrayOf(R.id.d0, R.id.d1, R.id.d2, R.id.d3, R.id.d4, R.id.d5, R.id.d6)
+
+    fun ids(ctx: Context, m: AppWidgetManager): Map<Int, String> {
+        val out = LinkedHashMap<Int, String>()
+        for (k in Kind.values()) for (id in m.getAppWidgetIds(ComponentName(ctx, k.provider))) out[id] = k.name
+        return out
+    }
+
+    fun update(ctx: Context, m: AppWidgetManager, ids: Map<Int, String>, d: JSONObject?) {
+        if (ids.isEmpty()) return
+        val p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        // Each widget: draw it with the bars where they were last time, then let them run to the new values.
+        val runs = ArrayList<Triple<Int, Map<Int, Int>, Map<Int, Int>>>()
+        for ((id, name) in ids) {
+            val kind = Kind.valueOf(name)
+            val v = RemoteViews(ctx.packageName, kind.layout)
+            val target = fill(ctx, kind, v, d)
+            val from = HashMap<Int, Int>()
+            for ((bar, value) in target) {
+                val before = p.getInt("$id.$bar", 0)
+                from[bar] = before
+                v.setProgressBar(bar, if (bar == R.id.calBar || bar == R.id.stepsBar || bar == R.id.calRing) 100 else 1000, from[bar]!!, false)
+            }
+            m.updateAppWidget(id, v)
+            if (target.any { (bar, value) -> from[bar] != value }) runs.add(Triple(id, from, target))
+            p.edit().apply { for ((bar, value) in target) putInt("$id.$bar", value) }.apply()
+        }
+        if (runs.isEmpty()) return
+        for (f in 1..FRAMES) {
+            Thread.sleep(FRAME_MS)
+            val t = f.toDouble() / FRAMES
+            val e = 1 - Math.pow(1 - t, 3.0)              // ease out
+            for ((id, from, to) in runs) {
+                val v = RemoteViews(ctx.packageName, Kind.valueOf(ids[id]!!).layout)
+                for ((bar, end) in to) {
+                    val start = from[bar] ?: end
+                    val max = if (bar == R.id.calBar || bar == R.id.stepsBar || bar == R.id.calRing) 100 else 1000
+                    v.setProgressBar(bar, max, (start + (end - start) * e).toInt(), false)
+                }
+                m.partiallyUpdateAppWidget(id, v)
+            }
+        }
+    }
+
+    /** Fills texts, colours and taps; returns each bar's value (the caller animates them). */
+    private fun fill(ctx: Context, kind: Kind, v: RemoteViews, d: JSONObject?): Map<Int, Int> {
+        v.setOnClickPendingIntent(android.R.id.background, DashkiWidgets.open(ctx, "/"))
+        v.setOnClickPendingIntent(R.id.calCol, DashkiWidgets.open(ctx, "/journal"))
+        v.setOnClickPendingIntent(R.id.stepsCol, DashkiWidgets.open(ctx, "/steps"))
+        v.setOnClickPendingIntent(R.id.logFood, DashkiWidgets.open(ctx, "/journal?addFood=1"))
+        val meal = DashkiWidgets.mealForNow()
+        val mealName = meal.replaceFirstChar { it.uppercase() }
+        v.setTextViewText(R.id.logFoodText, when (kind) {
+            Kind.SPLIT, Kind.GLASS -> "Log ${meal}"
+            Kind.MEALS -> mealName
+            Kind.WEEK -> "Food"
+        })
+        val fmt = DashkiWidgets.fmt
+        val bars = HashMap<Int, Int>()
+        if (d == null) {
+            v.setTextViewText(R.id.calNum, "—"); v.setTextViewText(R.id.stepsNum, "—")
+            if (kind != Kind.WEEK) v.setTextViewText(R.id.calSub, "Can't reach Dashki")
+            else v.setTextViewText(R.id.stepsSub, "Can't reach Dashki")
+            return bars
+        }
+        val g = d.optJSONObject("goals") ?: JSONObject()
+        val goal = g.optDouble("calories", 2000.0).coerceAtLeast(1.0)
+        val eaten = d.optDouble("calories", 0.0)
+        val left = Math.round(goal - eaten)
+        val over = left < 0
+        val ink = if (kind.blue) Color.WHITE else Color.parseColor("#14263B")
+        val red = if (kind.blue) Color.parseColor("#FF8A80") else Color.parseColor("#C8372D")
+        v.setTextViewText(R.id.calNum, fmt.format(Math.abs(left)))
+        v.setTextColor(R.id.calNum, if (over) red else ink)
+        v.setTextViewText(R.id.calUnit, when {
+            kind == Kind.MEALS || kind == Kind.WEEK -> if (over) "kcal over" else "kcal left"
+            else -> if (over) "over" else "left"
+        })
+        val calPct = (eaten / goal * 100).toInt().coerceIn(0, 100)
+
+        val sGoal = g.optDouble("steps", 10000.0).coerceAtLeast(1.0)
+        val steps = d.optLong("steps")
+        val stepPct = (steps / sGoal * 100).toInt().coerceIn(0, 100)
+        val toGo = (sGoal - steps).toLong()
+        val stepsLine = if (toGo > 0) "${fmt.format(toGo)} to go" else "Goal reached ✓"
+
+        when (kind) {
+            Kind.SPLIT, Kind.GLASS -> {
+                v.setTextViewText(R.id.calSub, "${fmt.format(Math.round(eaten))} of ${fmt.format(goal.toLong())}")
+                v.setTextViewText(R.id.stepsNum, fmt.format(steps))
+                v.setTextViewText(R.id.stepsSub, stepsLine)
+                bars[R.id.calBar] = calPct; bars[R.id.stepsBar] = stepPct
+            }
+            Kind.MEALS -> {
+                v.setTextViewText(R.id.calSub, "${fmt.format(Math.round(eaten))} / ${fmt.format(goal.toLong())}")
+                val ms = d.optJSONObject("meals") ?: JSONObject()
+                val b = ms.optDouble("breakfast", 0.0); val l = ms.optDouble("lunch", 0.0)
+                val s = ms.optDouble("snack", 0.0); val dn = ms.optDouble("dinner", 0.0)
+                for ((id, x) in listOf(R.id.mB to b, R.id.mL to l, R.id.mS to s, R.id.mD to dn))
+                    v.setTextViewText(id, if (x > 0) fmt.format(Math.round(x)) else "–")
+                val scale = maxOf(goal, b + l + s + dn)
+                fun seg(x: Double) = (x / scale * 1000).toInt().coerceIn(0, 1000)
+                bars[R.id.segB] = seg(b); bars[R.id.segL] = seg(b + l)
+                bars[R.id.segS] = seg(b + l + s); bars[R.id.segD] = seg(b + l + s + dn)
+                v.setTextViewText(R.id.stepsNum, "${fmt.format(steps)} steps")
+                bars[R.id.stepsBar] = stepPct
+            }
+            Kind.WEEK -> {
+                bars[R.id.calRing] = calPct
+                v.setTextViewText(R.id.stepsNum, fmt.format(steps))
+                val week = d.optJSONObject("week") ?: JSONObject()
+                val today = LocalDate.now()
+                val monday = today.with(java.time.DayOfWeek.MONDAY)
+                val values = (0 until 7).map { week.optLong(monday.plusDays(it.toLong()).toString(), 0) }
+                val upTo = (today.toEpochDay() - monday.toEpochDay()).toInt()
+                val avg = values.take(upTo + 1).average().toLong()
+                v.setTextViewText(R.id.stepsSub, "Avg ${fmt.format(avg)} this week")
+                val scale = maxOf(sGoal * 1.15, values.maxOrNull()?.toDouble() ?: 0.0)
+                for (i in 0 until 7) {
+                    val future = i > upTo
+                    bars[BARS[i]] = if (future) 40 else (values[i] / scale * 1000).toInt().coerceIn(if (values[i] > 0) 30 else 0, 1000)
+                    if (Build.VERSION.SDK_INT >= 31) {
+                        val c = when {
+                            future -> "#DCE6EF"
+                            i == upTo -> "#2E9E5B"
+                            values[i] >= sGoal -> "#5DBB84"
+                            else -> "#9FD4B3"
+                        }
+                        v.setColorStateList(BARS[i], "setProgressTintList", ColorStateList.valueOf(Color.parseColor(c)))
+                    }
+                    v.setTextColor(DAYS[i], Color.parseColor(if (i == upTo) "#14263B" else "#4E6378"))
+                }
+                if (Build.VERSION.SDK_INT >= 31) {
+                    v.setViewVisibility(R.id.goalLine, View.VISIBLE)
+                    v.setViewLayoutMargin(R.id.goalLine, RemoteViews.MARGIN_BOTTOM,
+                        (sGoal / scale * 64 - 1).toFloat(), TypedValue.COMPLEX_UNIT_DIP)
+                }
+            }
+        }
+        return bars
+    }
+}
+
+class SplitWidget : DashkiProvider()
+class GlassWidget : DashkiProvider()
+class MealsWidget : DashkiProvider()
+class WeekWidget : DashkiProvider()

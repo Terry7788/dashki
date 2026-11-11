@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Preview in the widget picker (sample numbers). Widget 5 · By meal (frosted white). The meal bar is four bars stacked on top of each other:
+     dinner (with the track) underneath, then snack, lunch, breakfast, each filled to its running total. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@android:id/background"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:background="@drawable/w_s_glass"
+    android:paddingStart="16dp" android:paddingEnd="16dp" android:paddingTop="14dp" android:paddingBottom="14dp"
+   >
+
+    <LinearLayout android:id="@+id/calCol" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:background="@drawable/w_s_press">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:gravity="bottom">
+            <TextView android:id="@+id/calNum" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="815" android:textColor="#14263B" android:textSize="22sp"
+                android:fontFamily="sans-serif-medium" android:includeFontPadding="false"/>
+            <TextView android:id="@+id/calUnit" android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:layout_marginStart="5dp" android:layout_marginBottom="2dp"
+                android:text="kcal left" android:textColor="#4E6378" android:textSize="13sp" android:maxLines="1"/>
+            <TextView android:id="@+id/calSub" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginBottom="2dp" android:text="1,385 / 2,200" android:textColor="#4E6378" android:textSize="12sp"/>
+        </LinearLayout>
+
+        <FrameLayout android:layout_width="match_parent" android:layout_height="12dp" android:layout_marginTop="9dp">
+            <ProgressBar android:id="@+id/segD" style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent" android:layout_height="match_parent"
+                android:progress="629" android:max="1000" android:progressDrawable="@drawable/w_s_seg_d"/>
+            <ProgressBar android:id="@+id/segS" style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent" android:layout_height="match_parent"
+                android:progress="629" android:max="1000" android:progressDrawable="@drawable/w_s_seg_s"/>
+            <ProgressBar android:id="@+id/segL" style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent" android:layout_height="match_parent"
+                android:progress="482" android:max="1000" android:progressDrawable="@drawable/w_s_seg_l"/>
+            <ProgressBar android:id="@+id/segB" style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent" android:layout_height="match_parent"
+                android:progress="191" android:max="1000" android:progressDrawable="@drawable/w_s_seg_b"/>
+        </FrameLayout>
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="8dp" android:orientation="horizontal">
+            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical"><TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="●" android:textColor="#F7C08A" android:textSize="10sp"/><TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="3dp" android:text="Breakfast" android:textColor="#4E6378" android:textSize="11sp"/></LinearLayout>
+                <TextView android:id="@+id/mB" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="420" android:textColor="#14263B" android:textSize="13sp" android:textStyle="bold"/>
+            </LinearLayout>
+            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical"><TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="●" android:textColor="#F0A060" android:textSize="10sp"/><TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="3dp" android:text="Lunch" android:textColor="#4E6378" android:textSize="11sp"/></LinearLayout>
+                <TextView android:id="@+id/mL" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="640" android:textColor="#14263B" android:textSize="13sp" android:textStyle="bold"/>
+            </LinearLayout>
+            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical"><TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="●" android:textColor="#E8762B" android:textSize="10sp"/><TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="3dp" android:text="Snack" android:textColor="#4E6378" android:textSize="11sp"/></LinearLayout>
+                <TextView android:id="@+id/mS" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="325" android:textColor="#14263B" android:textSize="13sp" android:textStyle="bold"/>
+            </LinearLayout>
+            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical"><TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="●" android:textColor="#B5541A" android:textSize="10sp"/><TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="3dp" android:text="Dinner" android:textColor="#4E6378" android:textSize="11sp"/></LinearLayout>
+                <TextView android:id="@+id/mD" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="–" android:textColor="#14263B" android:textSize="13sp" android:textStyle="bold"/>
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+
+    <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:minHeight="8dp"/>
+
+    <LinearLayout android:layout_width="match_parent" android:layout_height="44dp" android:orientation="horizontal">
+        <LinearLayout android:id="@+id/stepsCol" android:layout_width="0dp" android:layout_height="match_parent"
+            android:layout_weight="1" android:orientation="horizontal" android:gravity="center_vertical"
+            android:background="@drawable/w_s_chip_steps" android:paddingStart="12dp" android:paddingEnd="12dp">
+            <ImageView android:layout_width="16dp" android:layout_height="16dp" android:src="@drawable/w_s_ic_walk"/>
+            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                android:layout_marginStart="10dp" android:orientation="vertical">
+                <TextView android:id="@+id/stepsNum" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="7,571 steps" android:textColor="#14263B" android:textSize="13sp" android:textStyle="bold" android:maxLines="1"/>
+                <ProgressBar android:id="@+id/stepsBar" style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="match_parent" android:layout_height="4dp" android:layout_marginTop="4dp"
+                    android:progress="76" android:max="100" android:progressDrawable="@drawable/w_s_bar_steps_chip"/>
+            </LinearLayout>
+        </LinearLayout>
+        <FrameLayout android:id="@+id/logFood" android:layout_width="wrap_content" android:layout_height="match_parent"
+            android:layout_marginStart="10dp" android:background="@drawable/w_s_btn_green"
+            android:paddingStart="16dp" android:paddingEnd="16dp">
+            <TextView android:id="@+id/logFoodText" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_gravity="center" android:gravity="center_vertical"
+                android:drawableStart="@drawable/w_s_ic_plus" android:drawablePadding="6dp"
+                android:text="Food" android:textColor="#FFFFFF" android:textSize="14sp" android:textStyle="bold"/>
+        </FrameLayout>
+    </LinearLayout>
+</LinearLayout>

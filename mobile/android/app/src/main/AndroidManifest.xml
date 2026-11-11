@@ -56,6 +56,22 @@
             <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/w_d_weight" />
         </receiver>
+        <receiver android:name=".widget.SplitWidget" android:label="Dashki · Calories and steps" android:exported="true">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/w_s_split" />
+        </receiver>
+        <receiver android:name=".widget.MealsWidget" android:label="Dashki · By meal" android:exported="true">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/w_s_meals" />
+        </receiver>
+        <receiver android:name=".widget.WeekWidget" android:label="Dashki · This week" android:exported="true">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/w_s_week" />
+        </receiver>
+        <receiver android:name=".widget.GlassWidget" android:label="Dashki · Blue glass" android:exported="true">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/w_s_glass" />
+        </receiver>
         <receiver android:name=".widget.WidgetActions" android:exported="false" />
         <activity
             android:name=".widget.QuickLogActivity"

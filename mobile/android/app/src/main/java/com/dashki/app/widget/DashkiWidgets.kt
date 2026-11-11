@@ -73,7 +73,7 @@ object DashkiWidgets {
     const val ACTION_LOG = "com.dashki.app.widget.LOG"
     const val ACTION_UNDO = "com.dashki.app.widget.UNDO"
     const val ACTION_REFRESH = "com.dashki.app.widget.REFRESH"
-    private val fmt: NumberFormat = NumberFormat.getIntegerInstance()
+    internal val fmt: NumberFormat = NumberFormat.getIntegerInstance()
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
@@ -86,7 +86,7 @@ object DashkiWidgets {
     }
 
     /** Fetch everything once; the last good copy is kept so a dropped connection doesn't blank the widgets. */
-    private fun load(ctx: Context): JSONObject? {
+    internal fun load(ctx: Context): JSONObject? {
         val today = LocalDate.now().toString()
         return try {
             val goals = JSONObject(DashkiApi.call(ctx, "GET", "/api/goals"))
@@ -97,10 +97,25 @@ object DashkiWidgets {
             val weights = JSONArray(DashkiApi.call(ctx, "GET", "/api/weight?limit=20"))
             val start = LocalDate.now().minusDays(21).toString()
             val journal = JSONArray(DashkiApi.call(ctx, "GET", "/api/journal?startDate=$start&endDate=$today"))
+            // Calories per meal today, and steps per day since Monday (both for the 4×2 widgets).
+            val meals = JSONObject()
+            summary.optJSONArray("entries")?.let { es ->
+                for (i in 0 until es.length()) {
+                    val e = es.getJSONObject(i)
+                    val m = e.optString("meal_type").lowercase().let { if (it.startsWith("snack")) "snack" else it }
+                    meals.put(m, meals.optDouble(m, 0.0) + e.optDouble("calories_snapshot", 0.0))
+                }
+            }
+            val monday = LocalDate.now().with(java.time.DayOfWeek.MONDAY)
+            val week = JSONObject()
+            val days = JSONArray(DashkiApi.call(ctx, "GET", "/api/steps?startDate=$monday&endDate=$today"))
+            for (i in 0 until days.length()) days.getJSONObject(i).let { week.put(it.optString("date"), it.optLong("steps")) }
+            week.put(today, steps)
             val out = JSONObject()
                 .put("date", today).put("goals", goals).put("calories", summary.optDouble("calories", 0.0))
                 .put("protein", summary.optDouble("protein", 0.0)).put("steps", steps)
                 .put("weights", weights).put("recent", recentFoods(journal))
+                .put("meals", meals).put("week", week)
             prefs(ctx).edit().putString(CACHE, out.toString()).apply()
             out
         } catch (_: Exception) {
@@ -127,8 +142,10 @@ object DashkiWidgets {
         val today = m.getAppWidgetIds(ComponentName(ctx, TodayWidget::class.java))
         val steps = m.getAppWidgetIds(ComponentName(ctx, StepsWidget::class.java))
         val weight = m.getAppWidgetIds(ComponentName(ctx, WeightWidget::class.java))
-        if (today.isEmpty() && steps.isEmpty() && weight.isEmpty()) return
+        val sky = SkyWidgets.ids(ctx, m)
+        if (today.isEmpty() && steps.isEmpty() && weight.isEmpty() && sky.isEmpty()) return
         val d = load(ctx)
+        SkyWidgets.update(ctx, m, sky, d)
         if (today.isNotEmpty()) m.updateAppWidget(today, todayViews(ctx, d))
         if (steps.isNotEmpty()) m.updateAppWidget(steps, stepsViews(ctx, d))
         if (weight.isNotEmpty()) m.updateAppWidget(weight, weightViews(ctx, d))
@@ -140,7 +157,7 @@ object DashkiWidgets {
     }
 
     // ── Opening things ──────────────────────────────────────────────────────
-    private fun open(ctx: Context, route: String): PendingIntent {
+    internal fun open(ctx: Context, route: String): PendingIntent {
         val i = Intent(ctx, MainActivity::class.java).putExtra("route", route).setAction("route:$route")
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         return PendingIntent.getActivity(ctx, route.hashCode(), i, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
