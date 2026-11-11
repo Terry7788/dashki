@@ -1,15 +1,22 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en" class="dark" data-sidebar="collapsed">
   <head>
     <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no"
-    />
+    <!-- No viewport-fit=cover: Android keeps the page between the status bar and the gesture bar. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
     <meta name="theme-color" content="#1a1918" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>Dashki</title>
+    <link rel="icon" href="/web/favicon.ico" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+    <!-- Same start-up as the website's layout.tsx: theme and sidebar before first paint. -->
+    <script>
+      // Some web pages check `typeof process` before reading the API address (Vite fills process.env.* in).
+      window.process = window.process || { env: {} };
+      (function(){try{var t=localStorage.getItem('dashki-theme');if(t==='light'){document.documentElement.classList.remove('dark')}else{document.documentElement.classList.add('dark')}}catch(e){}})();
+      (function(){try{var s=localStorage.getItem('dashki-sidebar-collapsed');var c=(s!==null?s==='true':true);if(c){document.documentElement.setAttribute('data-sidebar','collapsed')}else{document.documentElement.removeAttribute('data-sidebar')}}catch(e){}})();
+    </script>
   </head>
   <body>
     <div id="root"></div>

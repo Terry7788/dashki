@@ -1,0 +1,34 @@
+/* Phone extras on top of the website's styles (globals.css). Keep this small:
+   the look comes from the web app. */
+
+html { -webkit-tap-highlight-color: transparent; }
+#dashki-body { min-height: 100vh; }
+.phone-loading { min-height: 60vh; }
+
+/* Samsung Health line on the Steps page (phone only) */
+.phone-health { max-width: 1120px; margin: 0 auto; padding: 16px 16px 0; }
+.phone-health-card {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 14px; border-radius: var(--radius-lg);
+  background: var(--color-surface); border: 1px solid var(--color-border); box-shadow: var(--shadow-card);
+}
+.phone-health-title { font-size: 14px; font-weight: 600; color: var(--color-foreground); }
+.phone-health-sub { font-size: 12px; color: var(--color-muted-foreground); margin-top: 2px; }
+.phone-health-btn {
+  flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 14px;
+  border-radius: 10px; border: 1px solid var(--color-border); background: transparent;
+  color: var(--color-foreground); font: 600 13px var(--font-sans); cursor: pointer;
+}
+.phone-health-btn.primary { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
+.phone-health-btn:disabled { opacity: .6; }
+
+/* Cover screen (≤ 640 px): the website's month grid sized its 7 columns by their
+   content, so Sunday was cut off. Squeeze the columns and the day chips instead. */
+@media (max-width: 640px) {
+  [style*="repeat(7, 1fr)"] { grid-template-columns: repeat(7, minmax(0, 1fr)) !important; }
+  [style*="repeat(7, 1fr)"] > button { padding: 5px 3px !important; min-width: 0; overflow: hidden; }
+  [style*="repeat(7, 1fr)"] > button > div > div {
+    font-size: 9px !important; padding: 1px 3px !important; letter-spacing: -0.2px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+  }
+}

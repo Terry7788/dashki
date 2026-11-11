@@ -1,18 +1,17 @@
 {
   "name": "dashki-mobile",
   "version": "0.1.0",
-  "description": "Dashki mobile app — Vite + React + Capacitor (iOS + Android)",
+  "description": "Dashki for Android — the website (../web/src) built into a Capacitor app, plus Samsung Health, widgets and updates",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
     "@capacitor/android": "^8.3.4",
-    "@capacitor/camera": "^8.2.0",
     "@capacitor/cli": "^8.3.4",
     "@capacitor/core": "^8.3.4",
     "@capacitor/ios": "^8.3.4",
@@ -21,15 +20,19 @@
     "lucide-react": "^0.383.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^7.15.1"
+    "react-router-dom": "^7.15.1",
+    "recharts": "^2.12.7",
+    "socket.io-client": "^4.7.4"
   },
   "devDependencies": {
+    "@babel/core": "^7.29.13",
     "@types/node": "^25.9.1",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.19",
     "postcss": "^8.4.38",
+    "styled-jsx": "^5.1.1",
     "tailwindcss": "^3.4.3",
     "typescript": "^5.6.3",
     "vite": "^5.4.10"

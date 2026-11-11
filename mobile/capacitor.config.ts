@@ -22,6 +22,8 @@ const config: CapacitorConfig = {
   android: {
     backgroundColor: '#1a1918',
     allowMixedContent: false, // prod: HTTPS only
+    // DK_DEBUG=1 npx cap sync → a test build Chrome DevTools can inspect (never in published builds).
+    webContentsDebuggingEnabled: process.env.DK_DEBUG === '1',
   },
   backgroundColor: '#1a1918',
   plugins: {

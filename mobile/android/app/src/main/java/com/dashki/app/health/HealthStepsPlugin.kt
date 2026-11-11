@@ -51,6 +51,27 @@ class HealthStepsPlugin : Plugin() {
         }
     }
 
+    /** The page's light/dark theme: colour the strips behind the status bar and gesture bar to match. */
+    @PluginMethod
+    fun setTheme(call: PluginCall) {
+        val dark = call.getBoolean("dark", true) ?: true
+        val bg = if (dark) 0xFF1A1918.toInt() else 0xFFFFFFFF.toInt()
+        val act = activity ?: return call.resolve()
+        act.runOnUiThread {
+            val w = act.window
+            w.decorView.setBackgroundColor(bg)
+            act.findViewById<android.view.View>(android.R.id.content)?.setBackgroundColor(bg)
+            bridge?.webView?.let { wv ->
+                wv.setBackgroundColor(bg)
+                (wv.parent as? android.view.View)?.setBackgroundColor(bg)
+            }
+            val c = androidx.core.view.WindowInsetsControllerCompat(w, w.decorView)
+            c.isAppearanceLightStatusBars = !dark
+            c.isAppearanceLightNavigationBars = !dark
+            call.resolve()
+        }
+    }
+
     /** The widget's page when Dashki was started by the tap. */
     @PluginMethod
     fun takeRoute(call: PluginCall) {

@@ -5,8 +5,8 @@
 // the background. Elsewhere (web dev, iOS, other builds) everything here is a no-op.
 
 import { registerPlugin } from '@capacitor/core';
-import { isNativePlatform, getPlatform } from './native';
-import { API_BASE_URL } from './api';
+import { Capacitor } from '@capacitor/core';
+import { API_BASE_URL } from './config';
 
 export interface HealthStatus {
   available: boolean;
@@ -31,6 +31,7 @@ interface HealthStepsPlugin {
   addListener(event: 'synced', fn: (r: HealthSyncResult) => void): Promise<{ remove: () => Promise<void> }>;
   addListener(event: 'route', fn: (r: { route: string }) => void): Promise<{ remove: () => Promise<void> }>;
   takeRoute(): Promise<{ route?: string }>;
+  setTheme(opts: { dark: boolean }): Promise<void>;
 }
 
 const HealthSteps = registerPlugin<HealthStepsPlugin>('HealthSteps');
@@ -39,7 +40,7 @@ const HealthSteps = registerPlugin<HealthStepsPlugin>('HealthSteps');
 export const HEALTH_NOTE = 'Samsung Health';
 
 export const healthSupported = (): boolean =>
-  import.meta.env.VITE_PERSONAL_BUILD === '1' && isNativePlatform() && getPlatform() === 'android';
+  import.meta.env.VITE_PERSONAL_BUILD === '1' && Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
 
 const listeners = new Set<(r: HealthSyncResult) => void>();
 
@@ -95,4 +96,19 @@ export function initWidgetRoutes(go: (route: string) => void): void {
   if (!healthSupported()) return;
   void HealthSteps.takeRoute().then((r) => r.route && go(r.route)).catch(() => {});
   void HealthSteps.addListener('route', (r) => go(r.route));
+}
+
+/** Keep Android's status/gesture bar strips the colour of the page (the website switches light/dark on <html class="dark">). */
+export function initThemeBars(): void {
+  if (!healthSupported()) return;
+  const html = document.documentElement;
+  let last: boolean | null = null;
+  const apply = () => {
+    const dark = html.classList.contains('dark');
+    if (dark === last) return;
+    last = dark;
+    HealthSteps.setTheme({ dark }).catch(() => {});
+  };
+  apply();
+  new MutationObserver(apply).observe(html, { attributes: true, attributeFilter: ['class'] });
 }

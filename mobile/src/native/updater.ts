@@ -3,13 +3,13 @@
 // apps; it's only reachable over Tailscale, so off the tailnet this quietly
 // does nothing. "Later" hides that version for a day.
 
-import { isNativePlatform, getPlatform } from './native';
+import { Capacitor } from '@capacitor/core';
 
 const LIST = 'https://terrys-mac-mini.tail4abd3b.ts.net:3000/api/android/apps';
 const APK = 'https://terrys-mac-mini.tail4abd3b.ts.net:3000/api/android/apk/';
 
 export async function checkForUpdate(appKey: string): Promise<void> {
-  if (import.meta.env.VITE_PERSONAL_BUILD !== '1' || !isNativePlatform() || getPlatform() !== 'android') return;
+  if (import.meta.env.VITE_PERSONAL_BUILD !== '1' || !Capacitor.isNativePlatform() || Capacitor.getPlatform() !== 'android') return;
   const current = Number(import.meta.env.VITE_APP_VERSION_CODE || 0);
   try {
     const later = JSON.parse(localStorage.getItem('update.later') || 'null');
