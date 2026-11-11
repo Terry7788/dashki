@@ -122,9 +122,10 @@ object HealthSteps {
             val steps = l.optLong("steps")
             if (steps <= 0) continue
             val id = OWN_ID + l.getInt("id")
-            // logged_at is UTC without a zone ("2026-11-11T01:28:08"); fall back to noon on the log's date.
-            val end = try { LocalDateTime.parse(l.getString("logged_at").take(19)).toInstant(ZoneOffset.UTC) }
-                catch (_: Exception) { LocalDate.parse(l.getString("date")).atTime(12, 0).atZone(zone).toInstant() }
+            // created_at is always UTC ("2026-11-11 01:28:08"); logged_at is Melbourne time since 2026-11-11 (server TZ).
+            val end = try { LocalDateTime.parse(l.getString("created_at").take(19).replace(' ', 'T')).toInstant(ZoneOffset.UTC) }
+                catch (_: Exception) { try { LocalDateTime.parse(l.getString("logged_at").take(19)).atZone(zone).toInstant() }
+                catch (_: Exception) { LocalDate.parse(l.getString("date")).atTime(12, 0).atZone(zone).toInstant() } }
             val mins = Regex("(\\d+)\\s*min").find(l.optString("note"))?.groupValues?.get(1)?.toLongOrNull()?.coerceIn(1, 600) ?: 1L
             val start = end.minusSeconds(mins * 60)
             wanted[id] = StepsRecord(
