@@ -19,8 +19,8 @@ export function AuthScreenShell({
       className="min-h-screen flex flex-col"
       style={{
         background: 'var(--color-background)',
-        paddingTop: 'max(2rem, env(safe-area-inset-top))',
-        paddingBottom: 'max(2rem, env(safe-area-inset-bottom))',
+        paddingTop: 'max(2rem, var(--dk-sa-t))',
+        paddingBottom: 'max(2rem, var(--dk-sa-b))',
         paddingLeft: '1rem',
         paddingRight: '1rem',
       }}

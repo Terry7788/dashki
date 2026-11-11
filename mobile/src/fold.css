@@ -60,17 +60,24 @@ html, body { background: #1a1918; overflow-x: hidden; }
 .fd-cal button.sel { background: #2c3a50; border-color: #2f7fe6; color: #dce9fb; }
 .fd-cal b { font-size: 10px; font-weight: 600; }
 
-/* Bottom tabs: words only, as drawn */
+/* Status bar and gesture bar. Capacitor's SystemBars sets --safe-area-inset-* on Android
+   (env() is 0 in older WebViews); take whichever is bigger. */
+:root {
+  --dk-sa-t: max(var(--safe-area-inset-top, 0px), env(safe-area-inset-top, 0px));
+  --dk-sa-b: max(var(--safe-area-inset-bottom, 0px), env(safe-area-inset-bottom, 0px));
+}
+
+/* Bottom tabs: icon over the word (Terry, 2026-11-11) */
 .dk-tabbar { background: #232120 !important; border-top: 1px solid #34312e !important; }
 
-@media (max-width: 699px) { .dk-tab-icon { display: none; } .dk-tab { font-size: 11px !important; } }
+@media (max-width: 699px) { .dk-tab { font-size: 11px !important; padding: 7px 0 8px !important; } }
 :root.dark { --color-primary: #2f7fe6; }
 
 @media (min-width: 700px) {
   html, body, #root { height: 100%; overflow: hidden; }
-  .dk-main { min-height: 0 !important; height: 100dvh; padding-left: 64px !important; padding-bottom: 0 !important; box-sizing: border-box; overflow: hidden; }
+  .dk-main { min-height: 0 !important; height: 100dvh; padding-left: 64px !important; padding-bottom: var(--dk-sa-b) !important; box-sizing: border-box; overflow: hidden; }
   .dk-content { max-width: none !important; margin: 0 !important; height: 100%; }
-  .dk-tabbar { width: 64px !important; background: #1a1918 !important; border-top: 0 !important; border-right: 1px solid #34312e !important; padding-top: 8px !important; gap: 2px !important; }
+  .dk-tabbar { width: 64px !important; background: #1a1918 !important; border-top: 0 !important; border-right: 1px solid #34312e !important; padding-top: calc(var(--dk-sa-t) + 8px) !important; gap: 2px !important; }
   .fd-page { height: 100%; overflow: hidden; padding: 8px 14px 10px; gap: 8px; }
   .fd-page.fd-scroll { overflow-y: auto; }
   .fd-narrow { display: none !important; }

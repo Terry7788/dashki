@@ -105,12 +105,12 @@ export default function GlassModal({
   const wrapperPadding = clsx(
     'items-center justify-center',
     'pl-4 pr-4',
-    'pt-[max(1rem,env(safe-area-inset-top))]',
-    'pb-[max(1rem,env(safe-area-inset-bottom))]',
+    'pt-[max(1rem,var(--dk-sa-t))]',
+    'pb-[max(1rem,var(--dk-sa-b))]',
   );
 
   const mobileHeightClass =
-    'h-[calc(100svh-max(1rem,env(safe-area-inset-top))-max(1rem,env(safe-area-inset-bottom)))]';
+    'h-[calc(100svh-max(1rem,var(--dk-sa-t))-max(1rem,var(--dk-sa-b)))]';
   const tabletHeightClass = lockTabletHeight
     ? 'sm:h-[80vh] sm:max-h-[80vh]'
     : 'sm:h-auto sm:max-h-[90vh]';

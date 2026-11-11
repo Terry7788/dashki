@@ -40,7 +40,7 @@ export default function BottomTabBar() {
         display: 'flex',
         background: 'var(--color-surface)',
         borderTop: '1px solid var(--color-border)',
-        paddingBottom: 'env(safe-area-inset-bottom)',
+        paddingBottom: 'var(--dk-sa-b)',
         zIndex: 30,
         boxShadow: 'var(--shadow-card)',
       }}

@@ -436,7 +436,7 @@ i[data-lucide] > svg { width: var(--icon-size, 16px); height: var(--icon-size, 1
     flex-direction: column;
     justify-content: flex-start;
     gap: 4px;
-    padding: calc(16px + env(safe-area-inset-top)) 0 env(safe-area-inset-bottom) 0 !important;
+    padding: calc(16px + var(--dk-sa-t)) 0 var(--dk-sa-b) 0 !important;
     border-top: none !important;
     border-right: 1px solid var(--color-border);
   }
@@ -446,7 +446,7 @@ i[data-lucide] > svg { width: var(--icon-size, 16px); height: var(--icon-size, 1
     font-size: 11px !important;
   }
   .dk-main {
-    padding-bottom: env(safe-area-inset-bottom) !important;
+    padding-bottom: var(--dk-sa-b) !important;
     padding-left: 84px;
   }
   .dk-content {

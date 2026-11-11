@@ -1,5 +1,5 @@
 // Shared page header — title + optional back button + right-side action.
-// Safe-area aware (sits below the iPhone notch).
+// Sits below the status bar (AppShell pads the page and covers the bar).
 
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
@@ -22,13 +22,13 @@ export default function PageHeader({
     <header
       className="flex items-center gap-3"
       style={{
-        paddingTop: 'max(1rem, env(safe-area-inset-top))',
+        paddingTop: '0.5rem',
         paddingBottom: '0.75rem',
         paddingLeft: '1rem',
         paddingRight: '1rem',
         background: 'var(--color-background)',
         position: 'sticky',
-        top: 0,
+        top: 'var(--dk-sa-t)',
         zIndex: 10,
       }}
     >
