@@ -413,7 +413,7 @@ function AddStepsForm({
           </div>
 
           <div className="stp-group">
-            <div className="stp-row">
+            <div className="stp-row date">
               <span>Date</span>
               <div className="stp-chips">
                 <button type="button" aria-pressed={date === iso(today)} className={date === iso(today) ? 'on' : ''} onClick={() => setDate(iso(today))}>Today</button>
@@ -688,13 +688,13 @@ export default function StepsPage() {
         }
         .stp-calc-card { display: none; }
         .stp-tools, .stp-hls { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-        @media (min-width: 1000px) {
-          /* Website: chart with the highlights in a row under it; Log steps + the calculator on the right. */
-          .stp-top { grid-template-columns: minmax(0, 1fr) 360px; grid-template-rows: auto 1fr; grid-template-areas: 'hero tools' 'hls tools'; align-items: start; }
+        @media (min-width: 700px) {
+          /* Website and the unfolded Fold: chart with the highlights in a row under it; Log steps + the calculator on the right. */
+          .stp-top { grid-template-columns: minmax(0, 1fr) 320px; grid-template-rows: auto 1fr; grid-template-areas: 'hero tools' 'hls tools'; align-items: start; }
           .stp-hero { grid-area: hero; }
           .stp-side { display: contents; }
           .stp-tools { grid-area: tools; }
-          .stp-hls { grid-area: hls; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; }
+          .stp-hls { grid-area: hls; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); align-items: stretch; }
           .stp-actions.stp-open { display: none; }
           .stp-calc-card { display: flex; flex-direction: column; padding: 14px 0 2px; }
           .stp-calc-card > h2 { margin: 0 16px; font-size: 14px; }
@@ -703,6 +703,12 @@ export default function StepsPage() {
           .stp-calc-card .stp-quick button { background: var(--color-surface-warm); }
           .stp-calc-card .stp-quick button.on { background: var(--g); }
           .stp-calc-card .stp-est b { font-size: 28px; }
+          .stp-calc-card .stp-row.date { flex-direction: column; align-items: flex-start; gap: 8px; padding-top: 12px; }
+          .stp-calc-card .stp-row.date .stp-chips { justify-content: flex-start; flex-wrap: nowrap; }
+        }
+        @media (min-width: 1000px) {
+          .stp-top { grid-template-columns: minmax(0, 1fr) 360px; }
+          .stp-hls { grid-template-columns: repeat(3, minmax(0, 1fr)); }
         }
         .stp-saved { padding: 10px 12px; border-radius: 10px; font-size: 13px; color: var(--g-ink); background: var(--g-soft); }
         .stp-actions.wide { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
