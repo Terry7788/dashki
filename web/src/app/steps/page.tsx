@@ -312,11 +312,49 @@ function StepsChart({
 // ─── Add steps sheet (type a number, or the walk calculator) ────────────────
 
 function AddStepsSheet({
-  open, tab: startTab, onClose, byDay, goal, today,
+  open, tab, onClose, byDay, goal, today,
 }: {
   open: boolean; tab: 'steps' | 'calc'; onClose: () => void; byDay: Map<string, number>; goal: number; today: Date;
 }) {
-  const [tab, setTab] = useState<'steps' | 'calc'>(startTab);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = prev; };
+  }, [open, onClose]);
+
+  if (!open) return null;
+  return (
+    <div className="stp-sheet-wrap" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <section role="dialog" aria-modal="true" aria-labelledby="stp-sheet-title" className="stp-sheet">
+        <div className="stp-grab" aria-hidden="true" />
+        <AddStepsForm startTab={tab} byDay={byDay} goal={goal} today={today} onSaved={onClose}
+          header={(save, canAdd) => (
+            <header className="stp-sheet-head">
+              <button type="button" className="stp-link" onClick={onClose}>Cancel</button>
+              <h2 id="stp-sheet-title">Add steps</h2>
+              <button type="button" className="stp-link strong" disabled={!canAdd} onClick={save}>Add</button>
+            </header>
+          )} />
+      </section>
+    </div>
+  );
+}
+
+/**
+ * The "Add steps" form: type a number, or the walk calculator. In the sheet it has
+ * both tabs; on wide screens the calculator also sits in the page's right column
+ * (`only="calc"`), so it can be used without opening anything.
+ */
+function AddStepsForm({
+  startTab, only, byDay, goal, today, onSaved, header,
+}: {
+  startTab: 'steps' | 'calc'; only?: 'calc'; byDay: Map<string, number>; goal: number; today: Date;
+  onSaved?: () => void; header?: (save: () => void, canAdd: boolean) => React.ReactNode;
+}) {
+  const [tab, setTab] = useState<'steps' | 'calc'>(only || startTab);
   const [date, setDate] = useState(iso(today));
   const [steps, setSteps] = useState('');
   const [time, setTime] = useState('');
@@ -324,20 +362,12 @@ function AddStepsSheet({
   const [height, setHeight] = useState('183');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const dateRef = useRef<HTMLInputElement>(null);
+  const [saved, setSaved] = useState('');
 
   useEffect(() => {
-    if (!open) return;
-    setTab(startTab); setDate(iso(today)); setSteps(''); setError('');
     try { const h = localStorage.getItem(HEIGHT_KEY); if (h) setHeight(h); } catch { /* storage off */ }
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = prev; };
-  }, [open, startTab, today, onClose]);
-
-  if (!open) return null;
+  }, []);
+  useEffect(() => { setDate(iso(today)); }, [today]);
 
   const mins = parseWalkMinutes(time);
   const sp = parseFloat(speed), h = parseFloat(height);
@@ -355,7 +385,7 @@ function AddStepsSheet({
 
   async function save() {
     if (adding <= 0 || saving) return;
-    setSaving(true); setError('');
+    setSaving(true); setError(''); setSaved('');
     try {
       if (tab === 'calc') {
         try { localStorage.setItem(HEIGHT_KEY, height); } catch { /* storage off */ }
@@ -363,8 +393,9 @@ function AddStepsSheet({
         setTime('');
       } else {
         await createStepLog({ date, steps: typed });
+        setSteps('');
       }
-      onClose();
+      if (onSaved) onSaved(); else setSaved(`Added ${fmt(adding)} to ${which}.`);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save the steps');
     } finally {
@@ -373,20 +404,16 @@ function AddStepsSheet({
   }
 
   return (
-    <div className="stp-sheet-wrap" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <section role="dialog" aria-modal="true" aria-labelledby="stp-sheet-title" className="stp-sheet">
-        <div className="stp-grab" aria-hidden="true" />
-        <header className="stp-sheet-head">
-          <button type="button" className="stp-link" onClick={onClose}>Cancel</button>
-          <h2 id="stp-sheet-title">Add steps</h2>
-          <button type="button" className="stp-link strong" disabled={adding <= 0 || saving} onClick={save}>Add</button>
-        </header>
+    <>
+        {header && header(save, adding > 0 && !saving)}
 
         <div className="stp-sheet-body">
-          <div role="tablist" aria-label="How to add" className="stp-seg two">
-            <button type="button" role="tab" aria-selected={tab === 'steps'} className={tab === 'steps' ? 'on' : ''} onClick={() => setTab('steps')}>Steps</button>
-            <button type="button" role="tab" aria-selected={tab === 'calc'} className={tab === 'calc' ? 'on' : ''} onClick={() => setTab('calc')}>Walk calculator</button>
-          </div>
+          {!only && (
+            <div role="tablist" aria-label="How to add" className="stp-seg two">
+              <button type="button" role="tab" aria-selected={tab === 'steps'} className={tab === 'steps' ? 'on' : ''} onClick={() => setTab('steps')}>Steps</button>
+              <button type="button" role="tab" aria-selected={tab === 'calc'} className={tab === 'calc' ? 'on' : ''} onClick={() => setTab('calc')}>Walk calculator</button>
+            </div>
+          )}
 
           <div className="stp-group">
             <div className="stp-row">
@@ -396,7 +423,7 @@ function AddStepsSheet({
                 <button type="button" aria-pressed={date === yesterday} className={date === yesterday ? 'on' : ''} onClick={() => setDate(yesterday)}>Yesterday</button>
                 <label className={`stp-pick${date !== iso(today) && date !== yesterday ? ' on' : ''}`}>
                   Pick…
-                  <input ref={dateRef} type="date" value={date} max={iso(today)} onChange={(e) => { if (e.target.value) setDate(e.target.value); }} aria-label="Pick a date" />
+                  <input type="date" value={date} max={iso(today)} onChange={(e) => { if (e.target.value) setDate(e.target.value); }} aria-label="Pick a date" />
                 </label>
               </div>
             </div>
@@ -421,7 +448,7 @@ function AddStepsSheet({
                 <label className="stp-row field">
                   <span>Walking time</span>
                   <span className="stp-in">
-                    <input type="text" inputMode="decimal" placeholder="e.g. 30 or 45:30" value={time} aria-invalid={timeBad}
+                    <input type="text" inputMode="decimal" placeholder="30 or 45:30" value={time} aria-invalid={timeBad}
                       onChange={(e) => setTime(e.target.value.replace(/[^\d:.]/g, ''))} />
                     <em>min</em>
                   </span>
@@ -456,16 +483,16 @@ function AddStepsSheet({
           </div>
 
           {error && <div className="stp-error" role="alert">{error}</div>}
+          {saved && <div className="stp-saved" role="status">{saved}</div>}
 
-          <div className="stp-actions">
-            <button type="button" className="stp-btn" onClick={() => (tab === 'calc' ? (setTime(''), setSpeed('5.0'), setHeight('183')) : setSteps(''))}>{tab === 'calc' ? 'Reset' : 'Clear'}</button>
+          <div className="stp-actions wide">
+            <button type="button" className="stp-btn" onClick={() => { setSaved(''); if (tab === 'calc') { setTime(''); setSpeed('5.0'); setHeight('183'); } else setSteps(''); }}>{tab === 'calc' ? 'Reset' : 'Clear'}</button>
             <button type="button" className="stp-btn primary" disabled={adding <= 0 || saving} onClick={save}>
               {saving ? 'Adding…' : adding > 0 ? `Add ${fmt(adding)} to ${which}` : 'Add steps'}
             </button>
           </div>
         </div>
-      </section>
-    </div>
+    </>
   );
 }
 
@@ -562,12 +589,21 @@ export default function StepsPage() {
           <StepsChart byDay={byDay} first={first} today={today} goal={goal} hours={hours} onDayView={onDayView} />
         </section>
 
-        <aside className="stp-side" aria-label="Highlights">
-          <div className="stp-actions">
-            <button type="button" className="stp-btn primary" onClick={() => setSheet('steps')}><Plus size={16} /> Log steps</button>
-            <button type="button" className="stp-btn" onClick={() => setSheet('calc')}><Calculator size={16} /> Calculator</button>
+        <aside className="stp-side" aria-label="Log steps and highlights">
+          <div className="stp-tools">
+            <div className="stp-actions stp-open">
+              <button type="button" className="stp-btn primary" onClick={() => setSheet('steps')}><Plus size={16} /> Log steps</button>
+              <button type="button" className="stp-btn calc-btn" onClick={() => setSheet('calc')}><Calculator size={16} /> Calculator</button>
+            </div>
+
+            {/* Website (wide screens): the step calculator lives here, always open. */}
+            <section className="stp-card stp-calc-card" aria-labelledby="stp-calc-title">
+              <h2 id="stp-calc-title" className="stp-hl-h"><Calculator size={15} /> Step calculator</h2>
+              <AddStepsForm startTab="calc" only="calc" byDay={byDay} goal={goal} today={today} />
+            </section>
           </div>
 
+          <div className="stp-hls">
           <h2 className="stp-h2 phone-only">Highlights</h2>
           <article className="stp-card stp-hl">
             <div className="stp-hl-h"><TrendingUp size={15} /> This week</div>
@@ -595,6 +631,7 @@ export default function StepsPage() {
               <p>{best.d.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })}, <b className="mono">{fmt(best.v)}</b> steps.</p>
             </article>
           )}
+          </div>
         </aside>
       </div>
 
@@ -653,7 +690,28 @@ export default function StepsPage() {
           .stp-chart-head { flex-direction: row !important; align-items: center !important; }
           .stp-seg { width: 290px; }
         }
-        @media (min-width: 1000px) { .stp-top { grid-template-columns: minmax(0, 1fr) 320px; } }
+        .stp-calc-card { display: none; }
+        .stp-tools, .stp-hls { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+        @media (min-width: 1000px) {
+          /* Website: chart with the highlights in a row under it; Log steps + the calculator on the right. */
+          .stp-top { grid-template-columns: minmax(0, 1fr) 360px; grid-template-rows: auto 1fr; grid-template-areas: 'hero tools' 'hls tools'; align-items: start; }
+          .stp-hero { grid-area: hero; }
+          .stp-side { display: contents; }
+          .stp-tools { grid-area: tools; }
+          .stp-hls { grid-area: hls; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; }
+          .stp-actions.stp-open { grid-template-columns: minmax(0, 1fr); }
+          .stp-calc-card { display: flex; flex-direction: column; padding: 14px 0 2px; }
+          .stp-calc-card > h2 { margin: 0 16px; font-size: 14px; }
+          .stp-calc-card .stp-sheet-body { padding: 10px 12px 12px; gap: 12px; }
+          .stp-calc-card .stp-group { background: var(--color-surface-warm); }
+          .stp-calc-card .stp-quick button { background: var(--color-surface-warm); }
+          .stp-calc-card .stp-quick button.on { background: var(--g); }
+          .stp-calc-card .stp-est b { font-size: 28px; }
+          .stp-open .calc-btn { display: none; }
+        }
+        .stp-saved { padding: 10px 12px; border-radius: 10px; font-size: 13px; color: var(--g-ink); background: var(--g-soft); }
+        .stp-actions.wide { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
+        .stp-actions.wide .stp-btn { height: 50px; font-size: 15px; }
 
         .stp-chart { display: flex; flex-direction: column; gap: 14px; user-select: none; }
         .stp-chart-head { display: flex; flex-direction: column; align-items: stretch; justify-content: space-between; gap: 12px; }
@@ -781,8 +839,6 @@ export default function StepsPage() {
         .stp-track { height: 8px; border-radius: 4px; background: var(--color-border); overflow: hidden; }
         .stp-track div { height: 100%; border-radius: 4px; background: var(--g-ink); transition: width 0.35s ease; }
         .stp-track div.done { background: var(--g); }
-        .stp-sheet .stp-actions { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
-        .stp-sheet .stp-btn { height: 50px; font-size: 15px; }
         @media (prefers-reduced-motion: reduce) {
           .stp-bar, .stp-goal, .stp-bars, .stp-x, .stp-track div { transition: none !important; }
           .stp-sheet, .stp-sheet-wrap { animation: none; }
