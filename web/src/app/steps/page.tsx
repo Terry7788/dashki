@@ -459,10 +459,7 @@ function AddStepsForm({
                   <span className="stp-in"><input type="number" inputMode="decimal" min={0} value={height} onChange={(e) => setHeight(e.target.value)} /><em>cm</em></span>
                 </label>
               </div>
-              <div className={`stp-hint${timeBad ? ' bad' : ''}`}>
-                {timeBad ? 'Type minutes (45), or the treadmill time: 45:30 or 1:05:00.' : 'Minutes, or the treadmill time as shown: 45:30 or 1:05:00.'}
-              </div>
-              <div className="stp-hint">Step length = 0.415 × height: <b className="mono">{h > 0 ? (0.415 * h).toFixed(1) : '—'} cm</b> per step at your height.</div>
+              {timeBad && <div className="stp-hint bad">Type minutes (45), or the treadmill time: 45:30 or 1:05:00.</div>}
               <div className="stp-est">
                 <span className="stp-kind">ESTIMATED STEPS</span>
                 <span><b className="mono">{est > 0 ? fmt(est) : '—'}</b> steps</span>
