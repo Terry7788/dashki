@@ -5,8 +5,8 @@ html { -webkit-tap-highlight-color: transparent; }
 #dashki-body { min-height: 100vh; }
 .phone-loading { min-height: 60vh; }
 
-/* Samsung Health line on the Steps page (phone only) */
-.phone-health { max-width: 1120px; margin: 0 auto; padding: 16px 16px 0; }
+/* Samsung Health line at the bottom of the Steps page (phone only; tucked into the page's 80 px bottom padding) */
+.phone-health { max-width: 1120px; margin: -56px auto 0; padding: 0 16px 32px; }
 .phone-health-card {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 12px 14px; border-radius: var(--radius-lg);

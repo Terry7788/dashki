@@ -57,7 +57,7 @@ function App() {
             <Route path="/foods" element={<Foods />} />
             <Route path="/meals" element={<Meals />} />
             <Route path="/weight" element={<Weight />} />
-            <Route path="/steps" element={<><HealthCard /><Steps /></>} />
+            <Route path="/steps" element={<><Steps /><HealthCard /></>} />
             <Route path="/calendar" element={<Calendar />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<Home />} />
