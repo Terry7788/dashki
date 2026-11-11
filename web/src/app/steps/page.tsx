@@ -344,17 +344,16 @@ function AddStepsSheet({
 }
 
 /**
- * The "Add steps" form: type a number, or the walk calculator. In the sheet it has
- * both tabs; on wide screens the calculator also sits in the page's right column
- * (`only="calc"`), so it can be used without opening anything.
+ * The "Add steps" form: type a number, or the walk calculator. It is the phone's
+ * sheet, and on wide screens it also sits open in the page's right column.
  */
 function AddStepsForm({
-  startTab, only, byDay, goal, today, onSaved, header,
+  startTab, byDay, goal, today, onSaved, header,
 }: {
-  startTab: 'steps' | 'calc'; only?: 'calc'; byDay: Map<string, number>; goal: number; today: Date;
+  startTab: 'steps' | 'calc'; byDay: Map<string, number>; goal: number; today: Date;
   onSaved?: () => void; header?: (save: () => void, canAdd: boolean) => React.ReactNode;
 }) {
-  const [tab, setTab] = useState<'steps' | 'calc'>(only || startTab);
+  const [tab, setTab] = useState<'steps' | 'calc'>(startTab);
   const [date, setDate] = useState(iso(today));
   const [steps, setSteps] = useState('');
   const [time, setTime] = useState('');
@@ -408,12 +407,10 @@ function AddStepsForm({
         {header && header(save, adding > 0 && !saving)}
 
         <div className="stp-sheet-body">
-          {!only && (
-            <div role="tablist" aria-label="How to add" className="stp-seg two">
-              <button type="button" role="tab" aria-selected={tab === 'steps'} className={tab === 'steps' ? 'on' : ''} onClick={() => setTab('steps')}>Steps</button>
-              <button type="button" role="tab" aria-selected={tab === 'calc'} className={tab === 'calc' ? 'on' : ''} onClick={() => setTab('calc')}>Walk calculator</button>
-            </div>
-          )}
+          <div role="tablist" aria-label="How to add" className="stp-seg two">
+            <button type="button" role="tab" aria-selected={tab === 'steps'} className={tab === 'steps' ? 'on' : ''} onClick={() => setTab('steps')}>Steps</button>
+            <button type="button" role="tab" aria-selected={tab === 'calc'} className={tab === 'calc' ? 'on' : ''} onClick={() => setTab('calc')}>Walk calculator</button>
+          </div>
 
           <div className="stp-group">
             <div className="stp-row">
@@ -596,10 +593,10 @@ export default function StepsPage() {
               <button type="button" className="stp-btn calc-btn" onClick={() => setSheet('calc')}><Calculator size={16} /> Calculator</button>
             </div>
 
-            {/* Website (wide screens): the step calculator lives here, always open. */}
+            {/* Website (wide screens): the step calculator and typing steps live here, always open (no buttons). */}
             <section className="stp-card stp-calc-card" aria-labelledby="stp-calc-title">
-              <h2 id="stp-calc-title" className="stp-hl-h"><Calculator size={15} /> Step calculator</h2>
-              <AddStepsForm startTab="calc" only="calc" byDay={byDay} goal={goal} today={today} />
+              <h2 id="stp-calc-title" className="stp-hl-h"><Plus size={15} /> Add steps</h2>
+              <AddStepsForm startTab="calc" byDay={byDay} goal={goal} today={today} />
             </section>
           </div>
 
@@ -699,7 +696,7 @@ export default function StepsPage() {
           .stp-side { display: contents; }
           .stp-tools { grid-area: tools; }
           .stp-hls { grid-area: hls; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; }
-          .stp-actions.stp-open { grid-template-columns: minmax(0, 1fr); }
+          .stp-actions.stp-open { display: none; }
           .stp-calc-card { display: flex; flex-direction: column; padding: 14px 0 2px; }
           .stp-calc-card > h2 { margin: 0 16px; font-size: 14px; }
           .stp-calc-card .stp-sheet-body { padding: 10px 12px 12px; gap: 12px; }
@@ -707,7 +704,6 @@ export default function StepsPage() {
           .stp-calc-card .stp-quick button { background: var(--color-surface-warm); }
           .stp-calc-card .stp-quick button.on { background: var(--g); }
           .stp-calc-card .stp-est b { font-size: 28px; }
-          .stp-open .calc-btn { display: none; }
         }
         .stp-saved { padding: 10px 12px; border-radius: 10px; font-size: 13px; color: var(--g-ink); background: var(--g-soft); }
         .stp-actions.wide { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
