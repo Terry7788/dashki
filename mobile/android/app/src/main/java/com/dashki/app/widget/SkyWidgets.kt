@@ -35,6 +35,7 @@ object SkyWidgets {
     private val PCT = setOf(R.id.calBar, R.id.stepsBar, R.id.calRing, R.id.stepsRing)
 
     private const val PREFS = "dashki.skywidgets"
+    private val SAMSUNG = android.os.Build.MANUFACTURER.equals("samsung", ignoreCase = true)
     private const val FRAMES = 16
     private const val FRAME_MS = 33L
     private val BARS = intArrayOf(R.id.b0, R.id.b1, R.id.b2, R.id.b3, R.id.b4, R.id.b5, R.id.b6)
@@ -60,7 +61,9 @@ object SkyWidgets {
             val from = HashMap<Int, Int>()
             for ((bar, value) in target) {
                 val before = p.getInt("$id.$bar", 0)
-                from[bar] = before
+                // Samsung's launcher animates every widget update itself; 16 quick partial updates left the
+                // Dashki widgets drawn slightly rotated on Terry's Fold (2026-11-12), so there the bars jump.
+                from[bar] = if (SAMSUNG) value else before
                 v.setProgressBar(bar, if (bar in PCT) 100 else 1000, from[bar]!!, false)
             }
             m.updateAppWidget(id, v)
