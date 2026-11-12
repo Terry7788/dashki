@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Plus, Trash2, UtensilsCrossed, Search, ChevronLeft, BookOpen, Pencil, X, ChevronDown } from 'lucide-react';
+import { Plus, Trash2, Search, Pencil, Check } from 'lucide-react';
 import {
   GlassCard,
   GlassButton,
@@ -11,13 +11,22 @@ import {
   MicroLabel,
   MonoNum,
   EmptyState,
-  Stepper,
 } from '@/components/ui';
 import { getSavedMeals, createSavedMeal, updateSavedMeal, deleteSavedMeal, addJournalEntry } from '@/lib/api';
 import type { SavedMeal, Food, MealType, Unit } from '@/lib/types';
 import { useSocketEvent } from '@/lib/useSocketEvent';
 import { useIsNarrow } from '@/lib/useIsNarrow';
-import { QuantityInput } from '@/components/QuantityInput';
+import {
+  FoodSheet,
+  SearchBox,
+  Chips,
+  FoodAmount,
+  TextBox,
+  defaultAmount,
+  unitsOf,
+  useIsWide,
+} from '@/components/food/FoodSheet';
+import { FOOD_TAGS, inferTag, unitLabel, type FoodTag } from '@/lib/foodTags';
 import { nutritionFor, formatQuantity } from '@/lib/nutrition';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -76,35 +85,30 @@ function MealSkeleton() {
   );
 }
 
-// ─── Food Picker (for Create Meal modal) ──────────────────────────────────────
+// ─── Saved-meal builder (Fold 8 design, 2026-11-12) ───────────────────────────
+// Phones: name + "Add a food" search pinned on top; an empty search lists the
+// meal's foods with steppers, typing lists matching foods with a +. Tray at the
+// bottom with totals and Save meal. From 700 px: left = food search with chips
+// (tick = in the meal), right = name, note, the meal's foods, totals, Save.
 
 interface PickedItem {
   food: Food;
   quantity: number;
   unit: Unit;
+  /** Built from a saved meal's item (no units/carbs/fat yet) — swapped for the full food once it loads. */
+  partial?: boolean;
 }
 
-/**
- * MealFoodPicker — flat, single-tap food picker used inside the
- * Create/Edit meal modal. Renders an inline list of foods (table on
- * desktop, cards on mobile) where clicking + stages the food with
- * a sensible default quantity. Adjusting quantity happens in the
- * "Items" list above, via Stepper. No Back/Confirm two-step.
- */
-function MealFoodPicker({
-  stagedIds,
-  onAdd,
-}: {
-  stagedIds: Set<number>;
-  onAdd: (food: Food, quantity: number, unit: Unit) => void;
-}) {
-  const isNarrow = useIsNarrow();
-  const [query, setQuery] = useState('');
+type BuilderChip = 'Recent' | FoodTag | 'All';
+
+/** Debounced food search, same endpoint and timing as the old picker. */
+function useFoodSearch(query: string, active: boolean) {
   const [foods, setFoods] = useState<Food[]>([]);
   const [loading, setLoading] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (!active) return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
@@ -123,232 +127,104 @@ function MealFoodPicker({
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [query]);
+  }, [query, active]);
 
-  function addFood(food: Food) {
-    const units = food.units ?? [
-      { unit: 'serving' as Unit, label: 'serving', default: true },
-    ];
-    const def = units.find((u) => u.default) ?? units[0];
-    const startQty =
-      def.unit === 'serving'
-        ? 1
-        : food.base_amount ?? food.baseAmount ?? 100;
-    onAdd(food, startQty, def.unit);
+  return { foods, loading };
+}
+
+/** Calories from protein / carbs / fat for one item, or null if the food has no macro data. */
+function macroKcal(food: Food, kcal: number) {
+  const base = food.calories ?? 0;
+  if (!base || food.carbs === undefined) return null;
+  const s = kcal / base;
+  return { p: (food.protein ?? 0) * s * 4, c: (food.carbs ?? 0) * s * 4, f: (food.fat ?? 0) * s * 9 };
+}
+
+function splitText(items: PickedItem[]): string | null {
+  if (items.length === 0) return null;
+  let p = 0, c = 0, f = 0;
+  for (const { food, quantity, unit } of items) {
+    const m = macroKcal(food, calcItemNutrition(food, quantity, unit).calories);
+    if (!m) return null;
+    p += m.p; c += m.c; f += m.f;
   }
+  const t = p + c + f;
+  if (t <= 0) return null;
+  const pc = (n: number) => Math.round((n / t) * 100);
+  return `P ${pc(p)}% · C ${pc(c)}% · F ${pc(f)}%`;
+}
 
-  // Hide already-staged foods so the picker only shows what you can still add.
-  const available = foods.filter((f) => !stagedIds.has(f.id));
-
+function TotalsBlock({ calories, protein, split }: { calories: number; protein: number; split: string | null }) {
+  const big: React.CSSProperties = { fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 700, lineHeight: 1.2 };
+  const unit: React.CSSProperties = { fontSize: 12, color: 'var(--color-muted-foreground)', marginLeft: 6, fontWeight: 500 };
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div style={{ position: 'relative' }}>
-        <Search
-          style={{
-            position: 'absolute',
-            left: 10,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            width: 14,
-            height: 14,
-            color: 'var(--color-placeholder)',
-            strokeWidth: 1.75,
-          }}
-        />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search foods to add…"
-          style={{
-            width: '100%',
-            padding: '8px 32px 8px 32px',
-            background: 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 4,
-            color: 'var(--color-foreground)',
-            fontFamily: 'inherit',
-            fontSize: 14,
-          }}
-        />
-        {query && (
-          <button
-            onClick={() => setQuery('')}
-            type="button"
-            style={{
-              position: 'absolute',
-              right: 6,
-              top: '50%',
-              transform: 'translateY(-50%)',
-              background: 'transparent',
-              border: 0,
-              padding: 4,
-              color: 'var(--color-muted-foreground)',
-              cursor: 'pointer',
-              display: 'flex',
-            }}
-            aria-label="Clear search"
-          >
-            <X style={{ width: 14, height: 14 }} />
-          </button>
-        )}
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 22 }}>
+      <div>
+        <div className="fs-label">Total</div>
+        <div style={big}>{Math.round(calories)}<span style={unit}>kcal</span></div>
       </div>
+      <div>
+        <div className="fs-label">Protein</div>
+        <div style={big}>{Math.round(protein)}<span style={unit}>g</span></div>
+      </div>
+      {split && <div className="fs-meta" style={{ marginLeft: 'auto', paddingTop: 1 }}>{split}</div>}
+    </div>
+  );
+}
 
-      <div
-        style={{
-          border: '1px solid var(--color-border)',
-          borderRadius: 6,
-          overflow: 'hidden',
-          background: 'var(--color-surface)',
-          maxHeight: 320,
-          overflowY: 'auto',
-        }}
-      >
-        {loading && (
-          <div
-            style={{
-              padding: 16,
-              textAlign: 'center',
-              fontSize: 12,
-              color: 'var(--color-muted-foreground)',
-            }}
-          >
-            Searching…
-          </div>
-        )}
-        {!loading && available.length === 0 && (
-          <div
-            style={{
-              padding: 16,
-              textAlign: 'center',
-              fontSize: 12,
-              color: 'var(--color-muted-foreground)',
-            }}
-          >
-            {query.trim()
-              ? 'No foods match.'
-              : 'All matching foods are already in this meal.'}
-          </div>
-        )}
-        {!loading && available.length > 0 && (
-          <ul
-            style={{
-              listStyle: 'none',
-              padding: 0,
-              margin: 0,
-              display: 'flex',
-              flexDirection: 'column',
-            }}
-          >
-            {available.map((food) => {
-              const cal = food.calories ?? food.calories_per_100g ?? 0;
-              const protein = food.protein ?? food.protein_per_100g ?? 0;
-              return (
-                <li
-                  key={food.id}
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: isNarrow
-                      ? 'minmax(0, 1fr) auto'
-                      : 'minmax(0, 1fr) auto auto auto',
-                    alignItems: 'center',
-                    gap: 10,
-                    padding: '8px 12px',
-                    borderBottom: '1px solid var(--color-border)',
-                  }}
-                >
-                  <div style={{ minWidth: 0 }}>
-                    <div
-                      style={{
-                        fontSize: 13,
-                        fontWeight: 500,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {food.name}
-                    </div>
-                    {isNarrow && (
-                      <div
-                        style={{
-                          fontSize: 11,
-                          color: 'var(--color-muted-foreground)',
-                          marginTop: 1,
-                          fontFamily: 'var(--font-mono)',
-                        }}
-                      >
-                        {cal} kcal · {protein}g
-                      </div>
-                    )}
-                  </div>
-                  {!isNarrow && (
-                    <span
-                      style={{
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: 12,
-                        color: 'var(--color-muted-foreground)',
-                        minWidth: 64,
-                        textAlign: 'right',
-                      }}
-                    >
-                      <span
-                        style={{
-                          color: 'var(--color-foreground)',
-                          fontWeight: 600,
-                        }}
-                      >
-                        {cal}
-                      </span>{' '}
-                      kcal
-                    </span>
-                  )}
-                  {!isNarrow && (
-                    <span
-                      style={{
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: 12,
-                        color: 'var(--color-muted-foreground)',
-                        minWidth: 48,
-                        textAlign: 'right',
-                      }}
-                    >
-                      <span
-                        style={{
-                          color: 'var(--color-foreground)',
-                          fontWeight: 600,
-                        }}
-                      >
-                        {protein}
-                      </span>
-                      g
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => addFood(food)}
-                    className="cursor-pointer"
-                    style={{
-                      width: 28,
-                      height: 28,
-                      borderRadius: 9999,
-                      background: 'var(--color-primary)',
-                      color: 'var(--color-primary-foreground)',
-                      border: 0,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontFamily: 'inherit',
-                    }}
-                    aria-label="Add to meal"
-                  >
-                    <Plus style={{ width: 14, height: 14, strokeWidth: 2.5 }} />
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+/** One food in the meal: name + kcal, remove, then the amount stepper (+ unit switch). */
+function MealItemRow({
+  item, onChange, onRemove, inSide,
+}: {
+  item: PickedItem;
+  onChange: (n: { quantity: number; unit: Unit }) => void;
+  onRemove: () => void;
+  inSide?: boolean;
+}) {
+  const { food, quantity, unit } = item;
+  const { calories } = calcItemNutrition(food, quantity, unit);
+  const units = unitsOf(food);
+  // A saved meal's item may carry a unit its (partial) food doesn't list yet.
+  const shownFood = units.some((u) => u.unit === unit)
+    ? food
+    : ({ ...food, units: [...units, { unit, label: unit === 'serving' ? 'serving' : unit, default: false }] } as Food);
+  return (
+    <div style={{ padding: inSide ? '10px 0' : '10px 14px', borderBottom: '1px solid var(--color-border)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="fs-name">{food.name}</div>
+          <div className="fs-meta">{Math.round(calories)} kcal · {formatQuantity(quantity, unit)}</div>
+        </div>
+        <button type="button" onClick={onRemove} aria-label={`Remove ${food.name}`}
+          style={{ width: 32, height: 32, borderRadius: 16, border: 0, background: 'transparent', color: 'var(--color-muted-foreground)',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flex: 'none' }}>
+          <Trash2 style={{ width: 16, height: 16, strokeWidth: 2 }} />
+        </button>
       </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 8 }}>
+        <FoodAmount food={shownFood} quantity={quantity} unit={unit} onChange={onChange} />
+      </div>
+    </div>
+  );
+}
+
+/** A food in the search list: tick when it's in the meal, + to add. Tapping the row toggles it. */
+function FoodPickRow({ food, item, onToggle }: { food: Food; item?: PickedItem; onToggle: () => void }) {
+  const on = !!item;
+  const kcal = item ? calcItemNutrition(food, item.quantity, item.unit).calories : food.calories ?? food.calories_per_100g ?? 0;
+  const protein = item ? calcItemNutrition(food, item.quantity, item.unit).protein : food.protein ?? food.protein_per_100g ?? 0;
+  return (
+    <div className={`fs-row${on ? ' on' : ''}`} onClick={onToggle}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="fs-name">{food.name}</div>
+        <div className="fs-meta">{item ? formatQuantity(item.quantity, item.unit) : unitLabel(food)}</div>
+      </div>
+      <span className="fs-col">{Math.round(protein ?? 0)} g P</span>
+      <span className="fs-kcal">{Math.round(kcal)}<small>kcal</small></span>
+      <button type="button" className={`fs-add${on ? ' on' : ''}`} aria-label={on ? `Remove ${food.name}` : `Add ${food.name}`}
+        onClick={(e) => { e.stopPropagation(); onToggle(); }}>
+        {on ? <Check style={{ width: 18, height: 18, strokeWidth: 2.5 }} /> : <Plus style={{ width: 18, height: 18, strokeWidth: 2.25 }} />}
+      </button>
     </div>
   );
 }
@@ -363,12 +239,16 @@ interface CreateMealModalProps {
 }
 
 function CreateMealModal({ isOpen, onClose, onCreated, editingMeal }: CreateMealModalProps) {
+  const wide = useIsWide();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [items, setItems] = useState<PickedItem[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [nameError, setNameError] = useState('');
+  const [query, setQuery] = useState('');
+  const [chip, setChip] = useState<BuilderChip>('All');
+  const { foods, loading } = useFoodSearch(query, isOpen);
 
   useEffect(() => {
     if (isOpen) {
@@ -389,6 +269,7 @@ function CreateMealModal({ isOpen, onClose, onCreated, editingMeal }: CreateMeal
             } as Food,
             quantity: item.quantity ?? item.servings ?? 1,
             unit: (item.unit as Unit) ?? 'serving',
+            partial: true,
           }))
         );
       } else {
@@ -399,8 +280,23 @@ function CreateMealModal({ isOpen, onClose, onCreated, editingMeal }: CreateMeal
       }
       setError('');
       setNameError('');
+      setQuery('');
+      setChip('All');
     }
   }, [isOpen, editingMeal]);
+
+  // Swap a saved meal's partial foods for the full ones (units, carbs, fat) once the list has them.
+  useEffect(() => {
+    if (foods.length === 0) return;
+    setItems((prev) => {
+      if (!prev.some((i) => i.partial && foods.some((f) => f.id === i.food.id))) return prev;
+      return prev.map((i) => {
+        if (!i.partial) return i;
+        const full = foods.find((f) => f.id === i.food.id);
+        return full ? { ...i, food: full, partial: false } : i;
+      });
+    });
+  }, [foods]);
 
   function handleAddFood(food: Food, quantity: number, unit: Unit) {
     setItems((prev) => {
@@ -417,12 +313,21 @@ function CreateMealModal({ isOpen, onClose, onCreated, editingMeal }: CreateMeal
       }
       return [...prev, { food, quantity, unit }];
     });
+    setError('');
   }
   function handleRemove(foodId: number) {
     setItems((prev) => prev.filter((i) => i.food.id !== foodId));
   }
   function handleUpdate(foodId: number, quantity: number, unit: Unit) {
     setItems((prev) => prev.map((i) => i.food.id === foodId ? { ...i, quantity, unit } : i));
+  }
+  function toggleFood(food: Food) {
+    if (items.some((i) => i.food.id === food.id)) {
+      handleRemove(food.id);
+    } else {
+      const d = defaultAmount(food);
+      handleAddFood(food, d.quantity, d.unit);
+    }
   }
 
   const totals = items.reduce(
@@ -432,6 +337,7 @@ function CreateMealModal({ isOpen, onClose, onCreated, editingMeal }: CreateMeal
     },
     { calories: 0, protein: 0 }
   );
+  const split = splitText(items);
 
   async function handleSave() {
     if (!name.trim()) { setNameError('Meal name is required'); return; }
@@ -464,362 +370,143 @@ function CreateMealModal({ isOpen, onClose, onCreated, editingMeal }: CreateMeal
     }
   }
 
-  const modalTitle = editingMeal ? 'Edit meal' : 'New meal';
-  const subtitle =
-    items.length > 0
-      ? `${items.length} ${items.length === 1 ? 'item' : 'items'} · template`
-      : 'Template';
+  const modalTitle = editingMeal ? 'Edit saved meal' : 'New saved meal';
   const buttonText = editingMeal ? 'Save changes' : 'Save meal';
+  const itemById = new Map(items.map((i) => [i.food.id, i]));
 
+  const hasRecent = foods.some((f) => f.recently_used);
+  const chips: BuilderChip[] = hasRecent ? ['Recent', ...FOOD_TAGS] : [...FOOD_TAGS];
+  const shownFoods = foods.filter((f) =>
+    !wide || chip === 'All' ? true : chip === 'Recent' ? !!f.recently_used : inferTag(f) === chip
+  );
+
+  const nameBox = (
+    <div className="fs-field">
+      <input
+        className="fs-input"
+        type="text"
+        value={name}
+        onChange={(e) => { setName(e.target.value); setNameError(''); }}
+        placeholder="e.g. Protein breakfast"
+        aria-label="Meal name"
+        style={{ fontSize: 17, fontWeight: 600, ...(nameError ? { borderColor: 'var(--color-critical)' } : {}) }}
+      />
+      {nameError && <div style={{ fontSize: 12, color: 'var(--color-critical)', paddingLeft: 4 }}>{nameError}</div>}
+    </div>
+  );
+  const noteBox = (
+    <TextBox value={description} onChange={setDescription} placeholder="Add a note (optional)" />
+  );
+
+  const searchList = (
+    <>
+      {loading && foods.length === 0 && <div className="fs-empty">Searching…</div>}
+      {!loading && shownFoods.length === 0 && (
+        <div className="fs-empty">{query.trim() ? 'No foods match.' : 'No foods here.'}</div>
+      )}
+      {shownFoods.map((food) => (
+        <FoodPickRow key={food.id} food={food} item={itemById.get(food.id)} onToggle={() => toggleFood(food)} />
+      ))}
+    </>
+  );
+
+  const mealList = (inSide: boolean) =>
+    items.length === 0 ? (
+      <div className="fs-empty">
+        {wide ? 'No foods yet. Pick them on the left.' : 'No foods yet. Search above to add some.'}
+      </div>
+    ) : (
+      items.map((item) => (
+        <MealItemRow
+          key={item.food.id}
+          item={item}
+          inSide={inSide}
+          onChange={({ quantity, unit }) => handleUpdate(item.food.id, quantity, unit)}
+          onRemove={() => handleRemove(item.food.id)}
+        />
+      ))
+    );
+
+  const saveButton = (
+    <button type="button" className="fs-btn" onClick={handleSave} disabled={saving || items.length === 0}>
+      {saving ? 'Saving…' : buttonText}
+    </button>
+  );
+
+  const countLabel = (
+    <div className="fs-label" style={{ padding: wide ? '4px 0 2px' : '6px 14px 4px' }}>
+      {items.length} {items.length === 1 ? 'food' : 'foods'}
+    </div>
+  );
+
+  if (wide) {
+    return (
+      <FoodSheet
+        isOpen={isOpen}
+        onClose={onClose}
+        title={modalTitle}
+        subtitle="Log it in one tap later"
+        sideWidth={340}
+        top={
+          <>
+            <SearchBox value={query} onChange={setQuery} placeholder="Search foods to add" autoFocus={!editingMeal} />
+            <Chips options={chips} value={chip} onChange={setChip} />
+          </>
+        }
+        side={
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {nameBox}
+            {noteBox}
+            {countLabel}
+            <div>{mealList(true)}</div>
+          </div>
+        }
+        sideFoot={
+          <>
+            {error && <div className="fs-err">{error}</div>}
+            <div className="fs-card" style={{ padding: '12px 14px' }}>
+              <TotalsBlock calories={totals.calories} protein={totals.protein} split={split} />
+            </div>
+            {saveButton}
+          </>
+        }
+      >
+        {searchList}
+      </FoodSheet>
+    );
+  }
+
+  const searching = query.trim().length > 0;
   return (
-    <GlassModal
+    <FoodSheet
       isOpen={isOpen}
       onClose={onClose}
       title={modalTitle}
-      subtitle={subtitle}
-      size="xl"
-      mobileFullscreen
-      lockTabletHeight
-      leadingFooter={
-        items.length > 0 ? (
-          <div style={{ display: 'flex', gap: 16, alignItems: 'baseline' }}>
-            <div>
-              <div
-                style={{
-                  fontSize: 9,
-                  fontWeight: 600,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.06em',
-                  color: 'var(--color-muted-foreground)',
-                }}
-              >
-                Total
-              </div>
-              <MonoNum size={16}>
-                {Math.round(totals.calories)}
-                <span
-                  style={{
-                    fontSize: 11,
-                    color: 'var(--color-muted-foreground)',
-                    marginLeft: 2,
-                  }}
-                >
-                  kcal
-                </span>
-              </MonoNum>
-            </div>
-            <div>
-              <div
-                style={{
-                  fontSize: 9,
-                  fontWeight: 600,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.06em',
-                  color: 'var(--color-muted-foreground)',
-                }}
-              >
-                Protein
-              </div>
-              <MonoNum size={16}>
-                {Math.round(totals.protein)}
-                <span
-                  style={{
-                    fontSize: 11,
-                    color: 'var(--color-muted-foreground)',
-                    marginLeft: 2,
-                  }}
-                >
-                  g
-                </span>
-              </MonoNum>
-            </div>
-          </div>
-        ) : null
-      }
-      footer={
+      subtitle="Log it in one tap later"
+      top={
         <>
-          <GlassButton variant="ghost" size="sm" onClick={onClose}>
-            Cancel
-          </GlassButton>
-          <GlassButton
-            variant="primary"
-            size="sm"
-            onClick={handleSave}
-            disabled={saving || items.length === 0}
-          >
-            {saving ? 'Saving…' : buttonText}
-          </GlassButton>
+          {nameBox}
+          <SearchBox value={query} onChange={setQuery} placeholder="Add a food to this meal" />
         </>
       }
+      tray={
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {error && <div className="fs-err">{error}</div>}
+          <TotalsBlock calories={totals.calories} protein={totals.protein} split={split} />
+          {saveButton}
+        </div>
+      }
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {/* Name + description */}
-        <div>
-          <FieldLabel>Name</FieldLabel>
-          <input
-            value={name}
-            onChange={(e) => {
-              setName(e.target.value);
-              setNameError('');
-            }}
-            placeholder="e.g. Protein breakfast"
-            style={{
-              width: '100%',
-              padding: '8px 10px',
-              fontSize: 14,
-              background: 'var(--color-surface)',
-              border:
-                '1px solid ' +
-                (nameError
-                  ? 'var(--color-critical)'
-                  : 'var(--color-border)'),
-              borderRadius: 4,
-              color: 'var(--color-foreground)',
-              fontFamily: 'inherit',
-            }}
-          />
-          {nameError && (
-            <div
-              style={{
-                fontSize: 11,
-                color: 'var(--color-critical)',
-                marginTop: 4,
-                paddingLeft: 2,
-              }}
-            >
-              {nameError}
-            </div>
-          )}
-        </div>
-        <div>
-          <FieldLabel>Description (optional)</FieldLabel>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Short note about this meal"
-            rows={1}
-            style={{
-              width: '100%',
-              padding: '8px 10px',
-              fontSize: 13,
-              resize: 'vertical',
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 4,
-              color: 'var(--color-foreground)',
-              fontFamily: 'inherit',
-            }}
-          />
-        </div>
-
-        {/* Items list — single column, full width */}
-        <div>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'baseline',
-              marginBottom: 8,
-            }}
-          >
-            <FieldLabel>Items ({items.length})</FieldLabel>
-            {items.length > 0 && (
-              <span
-                style={{
-                  fontSize: 11,
-                  fontFamily: 'var(--font-mono)',
-                  color: 'var(--color-muted-foreground)',
-                }}
-              >
-                <span
-                  style={{
-                    color: 'var(--color-foreground)',
-                    fontWeight: 600,
-                  }}
-                >
-                  {Math.round(totals.calories)}
-                </span>{' '}
-                kcal ·{' '}
-                <span
-                  style={{
-                    color: 'var(--color-foreground)',
-                    fontWeight: 600,
-                  }}
-                >
-                  {Math.round(totals.protein)}g
-                </span>{' '}
-                P
-              </span>
-            )}
-          </div>
-          {items.length === 0 ? (
-            <EmptyState>
-              No items yet — add foods using the search below.
-            </EmptyState>
-          ) : (
-            <ul
-              style={{
-                listStyle: 'none',
-                padding: 0,
-                margin: 0,
-                border: '1px solid var(--color-border)',
-                borderRadius: 6,
-                overflow: 'hidden',
-                background: 'var(--color-surface)',
-              }}
-            >
-              {items.map(({ food, quantity, unit }) => {
-                const { calories } = calcItemNutrition(food, quantity, unit);
-                return (
-                  <li
-                    key={food.id}
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns:
-                        'minmax(0, 1fr) auto auto auto',
-                      alignItems: 'center',
-                      gap: 10,
-                      padding: '8px 10px',
-                      borderBottom: '1px solid var(--color-border)',
-                    }}
-                  >
-                    <div style={{ minWidth: 0 }}>
-                      <div
-                        style={{
-                          fontSize: 13,
-                          fontWeight: 500,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {food.name}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 11,
-                          color: 'var(--color-muted-foreground)',
-                          marginTop: 1,
-                        }}
-                      >
-                        {formatQuantity(quantity, unit)}
-                      </div>
-                    </div>
-                    <Stepper
-                      value={quantity}
-                      onChange={(q) => handleUpdate(food.id, q, unit)}
-                      suffix={unit === 'serving' ? '×' : ''}
-                    />
-                    <span
-                      style={{
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: 12,
-                        fontWeight: 600,
-                        minWidth: 56,
-                        textAlign: 'right',
-                      }}
-                    >
-                      {Math.round(calories)} kcal
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleRemove(food.id)}
-                      className="cursor-pointer"
-                      style={{
-                        background: 'transparent',
-                        border: 0,
-                        color: 'var(--color-muted-foreground)',
-                        padding: 4,
-                        borderRadius: 4,
-                        display: 'inline-flex',
-                      }}
-                      aria-label="Remove"
-                    >
-                      <X style={{ width: 13, height: 13, strokeWidth: 2 }} />
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
-
-        {/* Divider between staged items and the search-to-add picker */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-            marginTop: 4,
-            marginBottom: 4,
-          }}
-        >
-          <div
-            style={{
-              flex: 1,
-              height: 1,
-              background: 'var(--color-border)',
-            }}
-          />
-          <span
-            style={{
-              fontSize: 10,
-              fontWeight: 600,
-              textTransform: 'uppercase',
-              letterSpacing: '0.06em',
-              color: 'var(--color-muted-foreground)',
-            }}
-          >
-            Add foods
-          </span>
-          <div
-            style={{
-              flex: 1,
-              height: 1,
-              background: 'var(--color-border)',
-            }}
-          />
-        </div>
-
-        {/* Inline search + food list. Single tap adds with default qty;
-            adjust quantity in the Items list above. */}
-        <MealFoodPicker
-          stagedIds={new Set(items.map((i) => i.food.id))}
-          onAdd={handleAddFood}
-        />
-
-        {error && (
-          <p
-            style={{
-              fontSize: 13,
-              color: 'var(--color-critical)',
-              background: 'rgba(201,28,43,0.10)',
-              border: '1px solid rgba(201,28,43,0.25)',
-              padding: '8px 12px',
-              borderRadius: 4,
-            }}
-          >
-            {error}
-          </p>
-        )}
-      </div>
-    </GlassModal>
-  );
-}
-
-// Small label helper to match the design's FieldLabel pattern.
-function FieldLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        fontSize: 11,
-        fontWeight: 600,
-        color: 'var(--color-muted-foreground)',
-        marginBottom: 6,
-      }}
-    >
-      {children}
-    </div>
+      {searching ? (
+        searchList
+      ) : (
+        <>
+          {countLabel}
+          {mealList(false)}
+          <div style={{ padding: '14px 14px 8px' }}>{noteBox}</div>
+        </>
+      )}
+    </FoodSheet>
   );
 }
 

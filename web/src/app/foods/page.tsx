@@ -20,6 +20,7 @@ import {
   Sparkles,
   Loader2,
   Camera,
+  Check,
 } from 'lucide-react';
 import {
   GlassCard,
@@ -43,6 +44,7 @@ import { getFoods, createFood, updateFood, deleteFood, addJournalEntry, estimate
 import type { Food, MealType } from '@/lib/types';
 import { useSocketEvent } from '@/lib/useSocketEvent';
 import { useIsNarrow } from '@/lib/useIsNarrow';
+import { FoodSheet, Seg, NumBox, Toggle, Stepper, useIsWide } from '@/components/food/FoodSheet';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -240,6 +242,13 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
   // back off so kJ re-derives from kcal.
   const [kjDraft, setKjDraft] = useState('');
   const [kjFromUser, setKjFromUser] = useState(false);
+  // AI guess needs a name: a hint shows when it's pressed without one.
+  const [aiNameHint, setAiNameHint] = useState(false);
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
+  const wide = useIsWide();
+  // Unfolded Fold (~874 px) and up: wide numbers pane with 4 macro columns.
+  const sideWide = !useIsNarrow(820);
+  const macroCols4 = wide ? sideWide : false;
 
   useEffect(() => {
     if (editingFood) {
@@ -288,6 +297,7 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
     setScanning(false);
     setKjDraft('');
     setKjFromUser(false);
+    setAiNameHint(false);
   }, [editingFood, isOpen]);
 
   function set(field: keyof FoodFormData, value: string) {
@@ -417,594 +427,359 @@ function FoodModal({ isOpen, onClose, editingFood, onSaved, onAddToJournal }: Fo
     }
   }
 
-  return (
-    <GlassModal
-      isOpen={isOpen}
-      onClose={onClose}
-      title={editingFood ? 'Edit Food' : 'Add Food'}
-      size="md"
-    >
-      <div className="space-y-4">
-        <div className="relative">
-          <GlassInput
-            label="Food Name *"
-            placeholder="e.g. Chicken Breast"
-            value={form.name}
-            onChange={(e) => set('name', e.target.value)}
-          />
-          {form.name && (
-            <button
-              type="button"
-              onClick={() => set('name', '')}
-              className="absolute right-3 top-9 text-white/40 hover:text-white"
-            >
-              ×
-            </button>
-          )}
-        </div>
-        {errors.name && <p className="text-xs text-red-400 -mt-2 pl-1">{errors.name}</p>}
+  // ─── Presentation (Fold 8 design, 2026-11-12) ──────────────────────────────
+  const isNew = !editingFood;
+  const canLog = isNew && !!onAddToJournal;
+  const perLabel = formatBaseLabel(form.base_unit, form.base_amount);
+  const kjValue = kjFromUser ? kjDraft : kcalToKjStr(form.calories_per_100g);
+  const unitShort = form.base_unit === 'grams' ? 'g' : form.base_unit === 'ml' ? 'ml'
+    : (parseFloat(form.base_amount) || 0) === 1 ? 'serving' : 'servings';
+  const servingsNum = parseFloat(journalServings) || 0;
 
-        {!editingFood && (
-          <>
-            {/* Hidden file input — `capture="environment"` makes mobile
-                browsers open the rear camera directly; on desktop it
-                falls back to a normal file picker.
+  function changeUnit(newUnit: BaseUnit) {
+    if (newUnit === form.base_unit) return;
+    // Same rule as before: sensible default amount for the new unit, nutrient
+    // values left alone (the per-label makes clear what they mean).
+    if (newUnit === 'servings') set('base_amount', '1');
+    else if (newUnit === 'grams' || newUnit === 'ml') set('base_amount', '100');
+    set('base_unit', newUnit);
+  }
 
-                NOTE on iOS: do NOT use `display: none` here. With the
-                modal's body scroll lock (position:fixed) active, iOS
-                Safari briefly suspends pointer events on the modal
-                after the camera dismisses if the triggering input was
-                `display: none`. The visually-hidden pattern below
-                keeps the input in the layout (so iOS finishes its
-                focus transition cleanly) while being invisible. We
-                also defer the value reset out of the onChange tick
-                for the same reason. */}
-            <input
-              ref={scanInputRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              tabIndex={-1}
-              aria-hidden="true"
-              style={{
-                position: 'absolute',
-                width: 1,
-                height: 1,
-                padding: 0,
-                margin: -1,
-                overflow: 'hidden',
-                clip: 'rect(0,0,0,0)',
-                whiteSpace: 'nowrap',
-                border: 0,
-                opacity: 0,
-                pointerEvents: 'none',
-              }}
-              onChange={(e) => {
-                const target = e.target;
-                const f = target.files?.[0];
-                if (f) handleScanFile(f);
-                // Defer the value reset and the blur to the next tick so
-                // iOS finishes dismissing the camera UI and releasing
-                // focus before we poke the input. Resetting synchronously
-                // here is what leaves the modal unresponsive on iOS.
-                setTimeout(() => {
-                  target.value = '';
-                  target.blur();
-                }, 0);
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => scanInputRef.current?.click()}
-              disabled={scanning}
-              className="cursor-pointer w-full"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                padding: '10px 14px',
-                background: 'var(--color-surface-warm)',
-                border: '1px dashed var(--color-border)',
-                borderRadius: 6,
-                color: 'var(--color-foreground)',
-                fontSize: 13,
-                fontWeight: 600,
-                fontFamily: 'inherit',
-                opacity: scanning ? 0.55 : 1,
-              }}
-            >
-              {scanning ? (
-                <>
-                  <Loader2 className="animate-spin" style={{ width: 14, height: 14 }} />
-                  <span>Reading the label…</span>
-                </>
-              ) : (
-                <>
-                  <Camera style={{ width: 14, height: 14, color: 'var(--color-primary)' }} />
-                  <span>Scan nutrition label</span>
-                </>
-              )}
-            </button>
-            {scanError && (
-              <div
-                style={{
-                  fontSize: 12,
-                  color: 'var(--color-critical)',
-                  background: 'rgba(201,28,43,0.10)',
-                  border: '1px solid rgba(201,28,43,0.25)',
-                  padding: '8px 10px',
-                  borderRadius: 4,
-                }}
-              >
-                {scanError}
-              </div>
-            )}
-            {scanResult && !scanError && (
-              <div
-                style={{
-                  background: 'var(--color-surface-warm)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 6,
-                  padding: '10px 12px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 4,
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    fontSize: 11,
-                    fontWeight: 700,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                    color: 'var(--color-muted-foreground)',
-                  }}
-                >
-                  <Camera style={{ width: 11, height: 11, color: 'var(--color-primary)' }} />
-                  Scanned label · {scanResult.confidence} confidence
-                </div>
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: 'var(--color-foreground)',
-                    lineHeight: 1.5,
-                  }}
-                >
-                  {scanResult.reasoning}
-                </div>
-                <div
-                  style={{
-                    fontSize: 11,
-                    color: 'var(--color-muted-foreground)',
-                    fontStyle: 'italic',
-                    marginTop: 2,
-                  }}
-                >
-                  Review every field below before saving — OCR is not perfect.
-                </div>
-              </div>
-            )}
-            <button
-              type="button"
-              onClick={handleAiGuess}
-              disabled={!form.name.trim() || aiEstimating}
-              className="cursor-pointer w-full"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                padding: '10px 14px',
-                background: 'var(--color-surface-warm)',
-                border: '1px dashed var(--color-border)',
-                borderRadius: 6,
-                color: 'var(--color-foreground)',
-                fontSize: 13,
-                fontWeight: 600,
-                fontFamily: 'inherit',
-                opacity: !form.name.trim() || aiEstimating ? 0.55 : 1,
-              }}
-            >
-              {aiEstimating ? (
-                <>
-                  <Loader2 className="animate-spin" style={{ width: 14, height: 14 }} />
-                  <span>AI is estimating…</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles style={{ width: 14, height: 14, color: 'var(--color-primary)' }} />
-                  <span>Let AI guess macros (per 1 serving)</span>
-                </>
-              )}
-            </button>
-            {aiError && (
-              <div
-                style={{
-                  fontSize: 12,
-                  color: 'var(--color-critical)',
-                  background: 'rgba(201,28,43,0.10)',
-                  border: '1px solid rgba(201,28,43,0.25)',
-                  padding: '8px 10px',
-                  borderRadius: 4,
-                }}
-              >
-                {aiError}
-              </div>
-            )}
-            {aiResult && !aiError && (
-              <div
-                style={{
-                  background: 'var(--color-surface-warm)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 6,
-                  padding: '10px 12px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 4,
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    fontSize: 11,
-                    fontWeight: 700,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                    color: 'var(--color-muted-foreground)',
-                  }}
-                >
-                  <Sparkles style={{ width: 11, height: 11, color: 'var(--color-primary)' }} />
-                  AI estimate · {aiResult.portion}
-                </div>
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: 'var(--color-foreground)',
-                    lineHeight: 1.5,
-                  }}
-                >
-                  {aiResult.reasoning}
-                </div>
-                <div
-                  style={{
-                    fontSize: 11,
-                    color: 'var(--color-muted-foreground)',
-                    fontStyle: 'italic',
-                    marginTop: 2,
-                  }}
-                >
-                  Filled as &ldquo;per 1 serving&rdquo; — edit anything below if it looks off.
-                </div>
-              </div>
-            )}
-          </>
-        )}
+  function setCalories(v: string) {
+    set('calories_per_100g', v);
+    setKjFromUser(false); // kJ re-derives from kcal
+  }
 
-        <div className="grid grid-cols-2 gap-2 sm:gap-3">
-          <div className="relative">
-            <GlassInput
-              label="Base Amount"
-              type="number"
-              inputMode="decimal"
-              value={form.base_amount}
-              onChange={(e) => set('base_amount', e.target.value)}
-              min={1}
-            />
-            {form.base_amount && (
-              <button
-                type="button"
-                onClick={() => set('base_amount', '')}
-                className="absolute right-3 top-9 text-white/40 hover:text-white"
-              >
-                ×
-              </button>
-            )}
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-gray-500 dark:text-white/60 pl-1">Unit</label>
-            <div style={{ position: 'relative' }}>
-              <select
-                value={form.base_unit}
-                onChange={(e) => {
-                  const newUnit = e.target.value as BaseUnit;
-                  if (newUnit === form.base_unit) return;
-                  // Adjust base_amount to a sensible default for the new unit,
-                  // but leave the nutrient values alone — auto-converting them
-                  // mid-edit overwrites what the user is actively typing. The
-                  // dynamic field labels make it clear what each value means.
-                  if (newUnit === 'servings') set('base_amount', '1');
-                  else if (newUnit === 'grams' || newUnit === 'ml') set('base_amount', '100');
-                  set('base_unit', newUnit);
-                }}
-                style={selectStyle}
-                className="cursor-pointer"
-              >
-                <option value="grams">Grams</option>
-                <option value="ml">ml</option>
-                <option value="servings">Servings</option>
-              </select>
-              <ChevronDown
-                style={{
-                  position: 'absolute',
-                  right: 10,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  width: 14,
-                  height: 14,
-                  color: 'var(--color-muted-foreground)',
-                  pointerEvents: 'none',
-                }}
-              />
-            </div>
-          </div>
-        </div>
+  function setKj(v: string) {
+    setKjDraft(v);
+    setKjFromUser(true);
+    set('calories_per_100g', kjToKcalStr(v));
+  }
 
-        {/* Energy row — kcal is canonical (saved to DB), kJ is a paired UI
-            calculator for AU/EU labels that only print kilojoules. Both
-            fields stay in sync; only kcal persists. */}
-        <div className="grid grid-cols-2 gap-2 sm:gap-3">
-          <div className="relative">
-            <GlassInput
-              label={`Calories (per ${formatBaseLabel(form.base_unit, form.base_amount)}) *`}
-              type="number"
-              inputMode="decimal"
-              value={form.calories_per_100g}
-              onChange={(e) => {
-                set('calories_per_100g', e.target.value);
-                setKjFromUser(false); // kJ re-derives from kcal
-              }}
-              min={0}
-              step={0.1}
-              placeholder="0"
-            />
-            {form.calories_per_100g && (
-              <button
-                type="button"
-                onClick={() => {
-                  set('calories_per_100g', '');
-                  setKjDraft('');
-                  setKjFromUser(false);
-                }}
-                className="absolute right-3 top-9 text-white/40 hover:text-white"
-              >
-                ×
-              </button>
-            )}
-            {errors.calories_per_100g && (
-              <p className="text-xs text-red-400 mt-1 pl-1">{errors.calories_per_100g}</p>
-            )}
-          </div>
-          <div className="relative">
-            <GlassInput
-              label={`Energy (kJ, per ${formatBaseLabel(form.base_unit, form.base_amount)})`}
-              type="number"
-              inputMode="decimal"
-              value={kjFromUser ? kjDraft : kcalToKjStr(form.calories_per_100g)}
-              onChange={(e) => {
-                const v = e.target.value;
-                setKjDraft(v);
-                setKjFromUser(true);
-                set('calories_per_100g', kjToKcalStr(v));
-              }}
-              min={0}
-              step={1}
-              placeholder="0"
-            />
-            {(kjFromUser ? kjDraft : kcalToKjStr(form.calories_per_100g)) && (
-              <button
-                type="button"
-                onClick={() => {
-                  set('calories_per_100g', '');
-                  setKjDraft('');
-                  setKjFromUser(false);
-                }}
-                className="absolute right-3 top-9 text-white/40 hover:text-white"
-              >
-                ×
-              </button>
-            )}
-          </div>
-        </div>
+  function aiClick() {
+    if (!form.name.trim()) {
+      // AI needs a name to guess from — point at the name box instead.
+      setAiNameHint(true);
+      nameInputRef.current?.focus();
+      return;
+    }
+    setAiNameHint(false);
+    handleAiGuess();
+  }
 
-        <div className="grid grid-cols-2 gap-2 sm:gap-3">
-          <div className="relative">
-            <GlassInput
-              label={`Protein (per ${formatBaseLabel(form.base_unit, form.base_amount)})`}
-              type="number"
-              inputMode="decimal"
-              value={form.protein_per_100g}
-              onChange={(e) => set('protein_per_100g', e.target.value)}
-              min={0}
-              step={0.1}
-              placeholder="0"
-            />
-            {form.protein_per_100g && (
-              <button
-                type="button"
-                onClick={() => set('protein_per_100g', '')}
-                className="absolute right-3 top-9 text-white/40 hover:text-white"
-              >
-                ×
-              </button>
-            )}
-          </div>
-          <div className="relative">
-            <GlassInput
-              label={`Carbs (per ${formatBaseLabel(form.base_unit, form.base_amount)})`}
-              type="number"
-              inputMode="decimal"
-              value={form.carbs_per_100g}
-              onChange={(e) => set('carbs_per_100g', e.target.value)}
-              min={0}
-              step={0.1}
-              placeholder="0"
-            />
-            {form.carbs_per_100g && (
-              <button
-                type="button"
-                onClick={() => set('carbs_per_100g', '')}
-                className="absolute right-3 top-9 text-white/40 hover:text-white"
-              >
-                ×
-              </button>
-            )}
-          </div>
-        </div>
+  // Per 100 g / ml, from the entered numbers when the weight is known.
+  const kcalNum = parseFloat(form.calories_per_100g);
+  const protNum = parseFloat(form.protein_per_100g);
+  const carbNum = parseFloat(form.carbs_per_100g);
+  const fatNum = parseFloat(form.fat_per_100g);
+  const amountNum = parseFloat(form.base_amount) || 0;
+  const servingG = parseFloat(form.serving_size_g) || 0;
+  const weightOfBase = form.base_unit === 'servings' ? amountNum * servingG : amountNum;
+  const per100Unit = form.base_unit === 'ml' ? 'ml' : 'g';
+  const per100 = weightOfBase > 0 && Number.isFinite(kcalNum)
+    ? { kcal: (kcalNum * 100) / weightOfBase, protein: Number.isFinite(protNum) ? (protNum * 100) / weightOfBase : null }
+    : null;
+  const protPer100kcal = Number.isFinite(kcalNum) && kcalNum > 0 && Number.isFinite(protNum)
+    ? (protNum * 100) / kcalNum : null;
+  const ppkRating = protPer100kcal == null ? null
+    : protPer100kcal >= 10 ? { text: 'great', color: 'var(--color-success)' }
+    : protPer100kcal >= 6 ? { text: 'good', color: 'var(--color-success)' }
+    : protPer100kcal >= 3 ? { text: 'ok', color: 'var(--color-muted-foreground)' }
+    : { text: 'low', color: 'var(--color-warning)' };
+  const pCal = (Number.isFinite(protNum) ? protNum : 0) * 4;
+  const cCal = (Number.isFinite(carbNum) ? carbNum : 0) * 4;
+  const fCal = (Number.isFinite(fatNum) ? fatNum : 0) * 9;
+  const macroCal = pCal + cCal + fCal;
+  const split = macroCal > 0
+    ? { p: Math.round((pCal / macroCal) * 100), c: Math.round((cCal / macroCal) * 100), f: Math.round((fCal / macroCal) * 100) }
+    : null;
 
-        <div className="grid grid-cols-2 gap-2 sm:gap-3">
-          <div className="relative">
-            <GlassInput
-              label={`Fat (per ${formatBaseLabel(form.base_unit, form.base_amount)})`}
-              type="number"
-              inputMode="decimal"
-              value={form.fat_per_100g}
-              onChange={(e) => set('fat_per_100g', e.target.value)}
-              min={0}
-              step={0.1}
-              placeholder="0"
-            />
-            {form.fat_per_100g && (
-              <button
-                type="button"
-                onClick={() => set('fat_per_100g', '')}
-                className="absolute right-3 top-9 text-white/40 hover:text-white"
-              >
-                ×
-              </button>
-            )}
-          </div>
-          <div className="relative">
-            <GlassInput
-              label={`Fibre (per ${formatBaseLabel(form.base_unit, form.base_amount)})`}
-              type="number"
-              inputMode="decimal"
-              value={form.fiber_per_100g}
-              onChange={(e) => set('fiber_per_100g', e.target.value)}
-              min={0}
-              step={0.1}
-              placeholder="0"
-            />
-            {form.fiber_per_100g && (
-              <button
-                type="button"
-                onClick={() => set('fiber_per_100g', '')}
-                className="absolute right-3 top-9 text-white/40 hover:text-white"
-              >
-                ×
-              </button>
-            )}
-          </div>
-        </div>
+  const fmt1 = (n: number) => String(Math.round(n * 10) / 10);
+  const errText: React.CSSProperties = { fontSize: 12, color: 'var(--color-critical)', marginTop: -2, paddingLeft: 2 };
+  const iconSm: React.CSSProperties = { width: 16, height: 16 };
 
-        <div className="relative">
-          <GlassInput
-            label="Serving Size (g) — optional"
-            type="number"
-            inputMode="decimal"
-            value={form.serving_size_g}
-            onChange={(e) => set('serving_size_g', e.target.value)}
-            min={1}
-            placeholder="e.g. 30 for 1 slice"
-          />
-          {form.serving_size_g && (
-            <button
-              type="button"
-              onClick={() => set('serving_size_g', '')}
-              className="absolute right-3 top-9 text-white/40 hover:text-white"
-            >
-              ×
-            </button>
-          )}
-        </div>
+  const scanInput = isNew ? (
+    /* Hidden file input — `capture="environment"` makes mobile browsers open
+       the rear camera directly; on desktop it falls back to a file picker.
+       NOTE on iOS: do NOT use `display: none` here (with the body scroll lock
+       active, iOS suspends pointer events on the sheet after the camera closes
+       if the input was display:none). Visually hidden instead, and the value
+       reset is deferred out of the onChange tick for the same reason. */
+    <input
+      ref={scanInputRef}
+      type="file"
+      accept="image/*"
+      capture="environment"
+      tabIndex={-1}
+      aria-hidden="true"
+      style={{
+        position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden',
+        clip: 'rect(0,0,0,0)', whiteSpace: 'nowrap', border: 0, opacity: 0, pointerEvents: 'none',
+      }}
+      onChange={(e) => {
+        const target = e.target;
+        const f = target.files?.[0];
+        if (f) handleScanFile(f);
+        setTimeout(() => {
+          target.value = '';
+          target.blur();
+        }, 0);
+      }}
+    />
+  ) : null;
 
-        {serverError && (
-          <p className="text-sm text-red-400 bg-red-500/10 border border-red-400/20 rounded-xl px-3 py-2">{serverError}</p>
-        )}
+  const openScan = () => scanInputRef.current?.click();
 
-        {/* Add to Journal option - only for new foods */}
-        {!editingFood && onAddToJournal && (
-          <div className="p-3 rounded-2xl bg-white/5 border border-white/10 space-y-3">
-            <label className="flex items-center gap-3 cursor-pointer">
-              <div
-                onClick={() => setAddToJournal(!addToJournal)}
-                className={`w-10 h-6 rounded-full transition-all duration-200 border ${
-                  addToJournal
-                    ? 'bg-[#2E8B57]/30 border-[#2E8B57]/50'
-                    : 'bg-white/10 border-white/20'
-                }`}
-              >
-                <div
-                  className={`w-5 h-5 rounded-full bg-white shadow-md transform transition-transform duration-200 ${
-                    addToJournal ? 'translate-x-4.5' : 'translate-x-0.5'
-                  }`}
-                />
-              </div>
-              <span className="text-sm text-white">Add to Food Journal</span>
-            </label>
-            {addToJournal && (
-              <div className="grid grid-cols-2 gap-2">
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium text-gray-500 dark:text-white/60 pl-1">Meal</label>
-                  <div style={{ position: 'relative' }}>
-                    <select
-                      value={journalMealType}
-                      onChange={(e) => setJournalMealType(e.target.value as MealType)}
-                      style={selectStyle}
-                      className="cursor-pointer"
-                    >
-                      {MEAL_TYPES.map((m) => (
-                        <option key={m} value={m}>{MEAL_LABELS[m]}</option>
-                      ))}
-                    </select>
-                    <ChevronDown
-                      style={{
-                        position: 'absolute',
-                        right: 10,
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        width: 14,
-                        height: 14,
-                        color: 'var(--color-muted-foreground)',
-                        pointerEvents: 'none',
-                      }}
-                    />
-                  </div>
-                </div>
-                <GlassInput
-                  label="Servings"
-                  type="number"
-                  inputMode="decimal"
-                  value={journalServings}
-                  onChange={(e) => setJournalServings(e.target.value)}
-                  min={0}
-                  step={0.1}
-                  placeholder="1"
-                />
-              </div>
-            )}
-          </div>
-        )}
+  const scanBtnInner = scanning ? (
+    <><Loader2 className="animate-spin" style={iconSm} /> Reading the label…</>
+  ) : (
+    <><Camera style={iconSm} /> Scan label</>
+  );
+  const aiBtnInner = (label: string) => aiEstimating ? (
+    <><Loader2 className="animate-spin" style={iconSm} /> AI is guessing…</>
+  ) : (
+    <><Sparkles style={iconSm} /> {label}</>
+  );
 
-        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-1">
-          <GlassButton variant="default" className="flex-1" onClick={onClose}>Cancel</GlassButton>
-          {addToJournal ? (
-            <GlassButton variant="primary" className="flex-1" onClick={() => handleSubmit(true)} disabled={saving}>
-              {saving ? 'Saving…' : 'Add Food & Log'}
-            </GlassButton>
-          ) : (
-            <GlassButton variant="primary" className="flex-1" onClick={() => handleSubmit(false)} disabled={saving}>
-              {saving ? 'Saving…' : 'Add Food'}
-            </GlassButton>
-          )}
+  const scanCard = scanResult && !scanError ? (
+    <div className="fs-card" style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 4,
+      borderColor: 'color-mix(in srgb, var(--color-primary) 40%, transparent)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 600, color: 'var(--color-primary)' }}>
+        <Check style={iconSm} /> Label scanned
+        <span className="fs-meta" style={{ fontWeight: 500, marginLeft: 'auto' }}>{scanResult.confidence} confidence</span>
+      </div>
+      <div style={{ fontSize: 13, lineHeight: 1.45 }}>{scanResult.reasoning}</div>
+      <div className="fs-meta" style={{ whiteSpace: 'normal' }}>Check every number before saving — label reading isn&rsquo;t perfect.</div>
+      <button type="button" onClick={openScan} disabled={scanning}
+        style={{ alignSelf: 'flex-start', border: 0, background: 'transparent', padding: '2px 0', font: 'inherit', fontSize: 13,
+          fontWeight: 600, color: 'var(--color-primary)', cursor: 'pointer' }}>
+        {scanning ? 'Reading the label…' : 'Scan again'}
+      </button>
+    </div>
+  ) : null;
+
+  const aiCard = aiResult && !aiError ? (
+    <div className="fs-ai">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 600 }}>
+        <Sparkles style={iconSm} /> AI guess · {aiResult.portion}
+      </div>
+      <div style={{ fontSize: 13, lineHeight: 1.45, color: 'var(--color-foreground)' }}>{aiResult.reasoning}</div>
+      <div className="fs-meta">Filled as &ldquo;per 1 serving&rdquo; — change anything that looks off.</div>
+    </div>
+  ) : null;
+
+  const scanAiErrors = (
+    <>
+      {scanError && <div className="fs-err">{scanError}</div>}
+      {aiError && <div className="fs-err">{aiError}</div>}
+      {aiNameHint && !form.name.trim() && (
+        <div className="fs-meta" style={{ whiteSpace: 'normal' }}>Type the food&rsquo;s name first, then AI can guess it.</div>
+      )}
+    </>
+  );
+
+  const nameField = (
+    <label className="fs-field">
+      <span className="fs-label">Name</span>
+      <input ref={nameInputRef} className="fs-input" type="text" value={form.name} placeholder="e.g. Chicken breast"
+        onChange={(e) => set('name', e.target.value)} />
+      {errors.name && <span style={errText}>{errors.name}</span>}
+    </label>
+  );
+
+  const servingField = (
+    <NumBox label="Serving size" value={form.serving_size_g} onChange={(v) => set('serving_size_g', v)}
+      unit="g" placeholder="optional" />
+  );
+
+  const unitSeg = (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+      <div style={{ flex: 1, minWidth: 0, display: 'flex' }}>
+        <div style={{ flex: 1 }}>
+          <Seg label="Numbers are per" value={form.base_unit} onChange={changeUnit}
+            options={[
+              { value: 'servings', label: form.base_unit === 'servings' && amountNum !== 1 ? `${form.base_amount || 0} serv.` : wide ? '1 serving' : 'Serving' },
+              { value: 'grams', label: form.base_unit === 'grams' ? `${form.base_amount || 0} g` : '100 g' },
+              { value: 'ml', label: form.base_unit === 'ml' ? `${form.base_amount || 0} ml` : '100 ml' },
+            ]} />
         </div>
       </div>
-    </GlassModal>
+      <label className="fs-num" style={{ width: 112, flex: 'none', height: 'auto', minHeight: 44 }} aria-label="Amount">
+        <input type="number" inputMode="decimal" min={1} step="any" value={form.base_amount} placeholder="1"
+          onChange={(e) => set('base_amount', e.target.value)} />
+        <span className="u">{unitShort === 'servings' ? 'serv.' : unitShort}</span>
+      </label>
+    </div>
+  );
+
+  const numbers = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div className="fs-field">
+        <span className="fs-label">Numbers are per</span>
+        {unitSeg}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 10 }}>
+        <NumBox big label={<>Calories <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500 }}>· per {perLabel}</span></>}
+          value={form.calories_per_100g} onChange={setCalories} unit="kcal" step="0.1" />
+        <NumBox big label="Energy" value={kjValue} onChange={setKj} unit="kJ" step="1" />
+      </div>
+      {errors.calories_per_100g && <span style={errText}>{errors.calories_per_100g}</span>}
+      <div style={{ display: 'grid', gridTemplateColumns: macroCols4 ? 'repeat(4, minmax(0, 1fr))' : 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+        <NumBox label="Protein" value={form.protein_per_100g} onChange={(v) => set('protein_per_100g', v)} unit="g" step="0.1" />
+        <NumBox label="Carbs" value={form.carbs_per_100g} onChange={(v) => set('carbs_per_100g', v)} unit="g" step="0.1" />
+        <NumBox label="Fat" value={form.fat_per_100g} onChange={(v) => set('fat_per_100g', v)} unit="g" step="0.1" />
+        <NumBox label="Fibre" value={form.fiber_per_100g} onChange={(v) => set('fiber_per_100g', v)} unit="g" step="0.1" />
+      </div>
+      {(per100 || protPer100kcal != null) && (
+        <div className="fs-card" style={{ padding: '10px 14px', display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+          {per100 && (
+            <div style={{ flex: '1 1 150px', minWidth: 0 }}>
+              <div className="fs-label">Per 100 {per100Unit}</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 600, marginTop: 4 }}>
+                {Math.round(per100.kcal)} <span className="fs-meta">kcal</span>
+                {per100.protein != null && <> · {fmt1(per100.protein)} <span className="fs-meta">g protein</span></>}
+              </div>
+            </div>
+          )}
+          {protPer100kcal != null && ppkRating && (
+            <div style={{ flex: '1 1 150px', minWidth: 0 }}>
+              <div className="fs-label">Protein per 100 kcal</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 600, marginTop: 4, color: ppkRating.color }}>
+                {fmt1(protPer100kcal)} g · {ppkRating.text}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      {split && (
+        <div className="fs-card" style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span className="fs-meta" style={{ flex: 'none' }}>Split</span>
+          <div className="fs-bar" style={{ flex: 1, display: 'flex' }}>
+            <div style={{ width: `${split.p}%`, background: 'var(--color-success)', borderRadius: 0 }} />
+            <div style={{ width: `${split.c}%`, background: 'var(--color-warning)', borderRadius: 0 }} />
+            <div style={{ width: `${split.f}%`, background: 'color-mix(in srgb, var(--color-warning) 55%, var(--color-critical))', borderRadius: 0 }} />
+          </div>
+          <span className="fs-meta" style={{ flex: 'none', fontFamily: 'var(--font-mono)' }}>
+            P {split.p} · C {split.c} · F {split.f}%
+          </span>
+        </div>
+      )}
+    </div>
+  );
+
+  const saveLabel = saving ? 'Saving…'
+    : editingFood ? 'Save changes'
+    : addToJournal ? 'Save and log'
+    : 'Save food';
+  const saveBtn = (
+    <button type="button" className="fs-btn" style={{ width: '100%', flex: wide ? 1 : undefined }}
+      onClick={() => handleSubmit(addToJournal)} disabled={saving}>
+      {saveLabel}
+    </button>
+  );
+
+  const logRow = canLog ? (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      {wide && <Toggle on={addToJournal} onChange={setAddToJournal} label="Also log to a meal" />}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.25 }}>Also log to {MEAL_LABELS[journalMealType]}</div>
+        <div className="fs-meta">
+          {addToJournal ? `${journalServings || 0} ${servingsNum === 1 ? 'serving' : 'servings'} · today` : 'Off'}
+        </div>
+      </div>
+      {addToJournal && (
+        <Stepper value={servingsNum} step={0.5} onChange={(n) => setJournalServings(String(n))} />
+      )}
+      {!wide && <Toggle on={addToJournal} onChange={setAddToJournal} label="Also log to a meal" />}
+    </div>
+  ) : null;
+
+  const mealPick = canLog && addToJournal ? (
+    <Seg small label="Meal" value={journalMealType} onChange={setJournalMealType}
+      options={MEAL_TYPES.map((m) => ({ value: m, label: MEAL_LABELS[m] }))} />
+  ) : null;
+
+  const action = (
+    <>
+      {serverError && <div className="fs-err">{serverError}</div>}
+      {mealPick}
+      {logRow}
+      {saveBtn}
+    </>
+  );
+
+  const scanAiButtons = isNew ? (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+      <button type="button" className="fs-btn2 blue" onClick={openScan} disabled={scanning}
+        style={{ height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontWeight: 600 }}>
+        {scanBtnInner}
+      </button>
+      <button type="button" className="fs-btn2 ai" onClick={aiClick} disabled={aiEstimating}
+        style={{ height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontWeight: 600 }}>
+        {aiBtnInner('AI guess')}
+      </button>
+    </div>
+  ) : null;
+
+  const leftWide = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {isNew && (scanCard ?? (
+        <button type="button" className="fs-btn2 blue dashed" onClick={openScan} disabled={scanning}
+          style={{ height: 96, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontWeight: 600 }}>
+          {scanBtnInner}
+        </button>
+      ))}
+      {isNew && (
+        <button type="button" className="fs-btn2 ai" onClick={aiClick} disabled={aiEstimating}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontWeight: 600 }}>
+          {aiBtnInner(scanResult ? 'Let AI guess instead' : 'Let AI guess')}
+        </button>
+      )}
+      {scanAiErrors}
+      {aiCard}
+      {nameField}
+      {servingField}
+    </div>
+  );
+
+  const phoneBody = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {scanAiButtons}
+      {scanAiErrors}
+      {scanCard}
+      {aiCard}
+      {nameField}
+      {numbers}
+      {servingField}
+      {/* room so the floating tray never covers the last field */}
+      <div style={{ height: 8 }} />
+    </div>
+  );
+
+  return (
+    <FoodSheet
+      isOpen={isOpen}
+      onClose={onClose}
+      title={editingFood ? 'Edit food' : 'New food'}
+      subtitle={editingFood ? 'Change anything, then save' : 'Fill it in, scan the label, or let AI guess'}
+      padded
+      side={numbers}
+      sideFoot={wide ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {serverError && <div className="fs-err">{serverError}</div>}
+          {mealPick}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {logRow && <div style={{ flex: 1.3, minWidth: 0 }}>{logRow}</div>}
+            {saveBtn}
+          </div>
+        </div>
+      ) : undefined}
+      tray={action}
+      sideWidth={sideWide ? 520 : 380}
+    >
+      {scanInput}
+      {wide ? leftWide : phoneBody}
+    </FoodSheet>
   );
 }
 
