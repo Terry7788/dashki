@@ -2,12 +2,12 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Loader2, Clock, Search, Copy, MoreHorizontal, Move, Sunrise, Sun, Cookie, Moon, X, Apple, Sparkles, BookOpen } from 'lucide-react';
-import { GlassCard, GlassButton, GlassInput, GlassModal, CalorieRing, MacroBar, Pill, MicroLabel, MonoNum, EmptyState, CardShell } from '@/components/ui';
+import { ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Loader2, Clock, Search, Copy, MoreHorizontal, Move, Sunrise, Sun, Cookie, Moon, X, Sparkles, BookOpen, Check } from 'lucide-react';
+import Link from 'next/link';
+import { FoodSheet, Seg, MealBar, SearchBox, Chips, NumBox, TextBox, Stepper, FoodAmount, foodTotals, defaultAmount, useIsWide } from '@/components/food/FoodSheet';
+import { GlassCard, GlassButton, GlassInput, GlassModal, CalorieRing, MacroBar, MicroLabel, MonoNum, EmptyState, CardShell } from '@/components/ui';
 import {
   FOOD_TAGS,
-  TAG_TONES,
-  TAG_ICONS,
   inferTag,
   unitLabel,
 } from '@/lib/foodTags';
@@ -23,7 +23,7 @@ import {
   estimateFood,
   createFood,
 } from '@/lib/api';
-import type { JournalEntry, MealType, Food, SavedMeal, Unit } from '@/lib/types';
+import type { JournalEntry, MealType, Food, SavedMeal, SavedMealItem, Unit } from '@/lib/types';
 import { useSocketEvent } from '@/lib/useSocketEvent';
 import { useIsNarrow } from '@/lib/useIsNarrow';
 import { QuantityInput } from '@/components/QuantityInput';
@@ -72,7 +72,10 @@ function JournalSkeleton() {
   );
 }
 
-// ─── Food Picker (shared between Foods tab & Meals) ────────────────────────
+// ─── Add Food sheet (Fold 8 redesign, 2026-11-12) ─────────────────────────
+// Folded: one full-height sheet, picked foods open their amount under the row and a
+// tray at the bottom keeps the total + Add button. Unfolded: list on the left,
+// "Your plate" / the chosen saved meal on the right. Parts: components/food/FoodSheet.
 
 interface SelectedFood {
   food: Food;
@@ -80,36 +83,16 @@ interface SelectedFood {
   unit: Unit;
 }
 
-interface FoodPickerProps {
-  /**
-   * Selected foods are state-of-the-modal, owned by the parent so the
-   * sticky bottom bar can render the summary + Add button across the
-   * whole modal panel (not just inside the picker).
-   */
-  selectedFoods: SelectedFood[];
-  setSelectedFoods: (next: SelectedFood[]) => void;
-}
-
-
-function FoodPicker({ selectedFoods, setSelectedFoods }: FoodPickerProps) {
-  const isNarrow = useIsNarrow();
-  const [query, setQuery] = useState('');
-  const [tag, setTag] = useState<FoodTag | 'All'>('All');
+function useFoodSearch(query: string, enabled: boolean) {
   const [foods, setFoods] = useState<Food[]>([]);
   const [loading, setLoading] = useState(false);
-  const [expandedId, setExpandedId] = useState<number | null>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
-
   useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(async () => {
+    if (!enabled) return;
+    const t = setTimeout(async () => {
       setLoading(true);
       try {
-        const url = query.trim()
-          ? `${BASE_URL}/api/foods?search=${encodeURIComponent(query.trim())}`
-          : `${BASE_URL}/api/foods`;
-        const res = await fetch(url);
+        const q = query.trim();
+        const res = await fetch(q ? `${BASE_URL}/api/foods?search=${encodeURIComponent(q)}` : `${BASE_URL}/api/foods`);
         if (res.ok) setFoods(await res.json());
       } catch {
         /* ignore */
@@ -117,636 +100,33 @@ function FoodPicker({ selectedFoods, setSelectedFoods }: FoodPickerProps) {
         setLoading(false);
       }
     }, 250);
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, [query]);
-
-  // Auto-focus the search input on mount on devices with hover (keyboards).
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const isHoverCapable = window.matchMedia('(hover: hover)').matches;
-    if (isHoverCapable && searchInputRef.current) {
-      const t = setTimeout(() => searchInputRef.current?.focus(), 150);
-      return () => clearTimeout(t);
-    }
-  }, []);
-
-  // Apply tag filter client-side (search already done by the API).
-  const visible = useMemo(
-    () => (tag === 'All' ? foods : foods.filter((f) => inferTag(f) === tag)),
-    [foods, tag]
-  );
-
-  function toggleFood(food: Food) {
-    const existing = selectedFoods.find((sf) => sf.food.id === food.id);
-    if (existing) {
-      setSelectedFoods(selectedFoods.filter((sf) => sf.food.id !== food.id));
-      if (expandedId === food.id) setExpandedId(null);
-    } else {
-      const units = food.units ?? [
-        { unit: 'serving' as Unit, label: 'serving', default: true },
-      ];
-      const def = units.find((u) => u.default) ?? units[0];
-      const startQty =
-        def.unit === 'serving'
-          ? 1
-          : food.base_amount ?? food.baseAmount ?? 100;
-      setSelectedFoods([
-        ...selectedFoods,
-        { food, quantity: startQty, unit: def.unit },
-      ]);
-      // Auto-expand the quantity editor so the user can tweak immediately.
-      setExpandedId(food.id);
-    }
-  }
-
-  function setQuantityForFood(
-    foodId: number,
-    next: { quantity: number; unit: Unit }
-  ) {
-    const clamped = { quantity: Math.max(0, next.quantity), unit: next.unit };
-    setSelectedFoods(
-      selectedFoods.map((sf) =>
-        sf.food.id === foodId ? { ...sf, ...clamped } : sf
-      )
-    );
-  }
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {/* Search */}
-      <div style={{ position: 'relative' }}>
-        <Search
-          style={{
-            position: 'absolute',
-            left: 10,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            width: 14,
-            height: 14,
-            color: 'var(--color-placeholder)',
-            strokeWidth: 1.75,
-          }}
-        />
-        <input
-          ref={searchInputRef}
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search foods…"
-          style={{
-            width: '100%',
-            padding: '8px 32px 8px 32px',
-            background: 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 4,
-            color: 'var(--color-foreground)',
-            fontFamily: 'inherit',
-            fontSize: 14,
-          }}
-        />
-        {query && (
-          <button
-            onClick={() => setQuery('')}
-            type="button"
-            style={{
-              position: 'absolute',
-              right: 6,
-              top: '50%',
-              transform: 'translateY(-50%)',
-              background: 'transparent',
-              border: 0,
-              padding: 4,
-              color: 'var(--color-muted-foreground)',
-              cursor: 'pointer',
-              display: 'flex',
-            }}
-            aria-label="Clear search"
-          >
-            <X style={{ width: 14, height: 14 }} />
-          </button>
-        )}
-      </div>
-
-      {/* Tag chips */}
-      <div
-        style={{
-          display: 'flex',
-          gap: 6,
-          flexWrap: 'wrap',
-        }}
-      >
-        {FOOD_TAGS.map((t) => {
-          const active = tag === t;
-          return (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setTag(t)}
-              className="cursor-pointer"
-              style={{
-                padding: '4px 10px',
-                borderRadius: 9999,
-                fontSize: 12,
-                fontWeight: 600,
-                background: active
-                  ? 'var(--color-foreground)'
-                  : 'var(--color-surface-warm)',
-                color: active
-                  ? 'var(--color-background)'
-                  : 'var(--color-muted-foreground)',
-                border:
-                  '1px solid ' +
-                  (active ? 'var(--color-foreground)' : 'var(--color-border)'),
-                fontFamily: 'inherit',
-              }}
-            >
-              {t}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Table-style list (matches Food Database page) */}
-      <div
-        style={{
-          border: '1px solid var(--color-border)',
-          borderRadius: 8,
-          overflow: 'hidden',
-          background: 'var(--color-surface)',
-        }}
-      >
-        <div
-          style={{
-            maxHeight: 'calc(100vh - 420px)',
-            minHeight: 320,
-            overflowY: 'auto',
-            overflowX: 'hidden',
-          }}
-        >
-          {loading && (
-            <div
-              style={{
-                padding: 24,
-                textAlign: 'center',
-                fontSize: 13,
-                color: 'var(--color-muted-foreground)',
-              }}
-            >
-              Searching…
-            </div>
-          )}
-          {!loading && visible.length === 0 && (
-            <div
-              style={{
-                padding: 24,
-                textAlign: 'center',
-                fontSize: 13,
-                color: 'var(--color-muted-foreground)',
-              }}
-            >
-              No foods match.
-            </div>
-          )}
-          {!loading && visible.length > 0 && !isNarrow && (
-            <table
-              style={{
-                width: '100%',
-                tableLayout: 'fixed',
-                borderCollapse: 'collapse',
-              }}
-            >
-              <colgroup>
-                <col />
-                <col style={{ width: 70 }} />
-                <col style={{ width: 80 }} />
-                <col style={{ width: 64 }} />
-                <col style={{ width: 44 }} />
-              </colgroup>
-              <thead
-                style={{
-                  position: 'sticky',
-                  top: 0,
-                  background: 'var(--color-surface)',
-                  zIndex: 1,
-                }}
-              >
-                <tr>
-                  <th style={MODAL_TH}>Food</th>
-                  <th style={{ ...MODAL_TH, textAlign: 'right' }}>Cal</th>
-                  <th style={{ ...MODAL_TH, textAlign: 'right' }}>Protein</th>
-                  <th style={MODAL_TH}>Tag</th>
-                  <th style={MODAL_TH}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {visible.map((food) => {
-                  const selected = selectedFoods.find(
-                    (sf) => sf.food.id === food.id
-                  );
-                  const isSelected = !!selected;
-                  const isExpanded = expandedId === food.id;
-                  const inferred = inferTag(food);
-                  const IconCmp = inferred ? TAG_ICONS[inferred] : Apple;
-                  const cal = food.calories ?? food.calories_per_100g ?? 0;
-                  const protein = food.protein ?? food.protein_per_100g ?? 0;
-                  return (
-                    <Fragment key={food.id}>
-                      <tr
-                        style={{
-                          background: isSelected
-                            ? 'var(--color-badge-bg)'
-                            : 'transparent',
-                          cursor: 'pointer',
-                          transition: 'background 120ms',
-                        }}
-                        onClick={() => {
-                          if (isSelected) {
-                            // Toggle the inline editor for selected rows
-                            setExpandedId(isExpanded ? null : food.id);
-                          } else {
-                            toggleFood(food);
-                          }
-                        }}
-                      >
-                        <td style={{ ...MODAL_TD, overflow: 'hidden' }}>
-                          <div
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 10,
-                              minWidth: 0,
-                            }}
-                          >
-                            <span
-                              style={{
-                                width: 28,
-                                height: 28,
-                                borderRadius: 6,
-                                background: 'var(--color-surface-warm)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                border: '1px solid var(--color-border)',
-                                flexShrink: 0,
-                              }}
-                            >
-                              <IconCmp
-                                style={{
-                                  width: 13,
-                                  height: 13,
-                                  color: 'var(--color-muted-foreground)',
-                                }}
-                              />
-                            </span>
-                            <div style={{ minWidth: 0, flex: 1 }}>
-                              <div
-                                style={{
-                                  fontSize: 14,
-                                  fontWeight: 500,
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  whiteSpace: 'nowrap',
-                                }}
-                              >
-                                {food.name}
-                              </div>
-                              <div
-                                style={{
-                                  fontSize: 11,
-                                  color: 'var(--color-muted-foreground)',
-                                  marginTop: 1,
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  whiteSpace: 'nowrap',
-                                }}
-                              >
-                                {unitLabel(food)}
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-                        <td style={{ ...MODAL_TD, textAlign: 'right' }}>
-                          <MonoNum size={13}>{cal}</MonoNum>
-                          <span
-                            style={{
-                              fontSize: 10,
-                              color: 'var(--color-muted-foreground)',
-                              marginLeft: 2,
-                            }}
-                          >
-                            kcal
-                          </span>
-                        </td>
-                        <td style={{ ...MODAL_TD, textAlign: 'right' }}>
-                          <MonoNum size={13}>{protein}</MonoNum>
-                          <span
-                            style={{
-                              fontSize: 10,
-                              color: 'var(--color-muted-foreground)',
-                              marginLeft: 2,
-                            }}
-                          >
-                            g
-                          </span>
-                        </td>
-                        <td style={MODAL_TD}>
-                          {inferred ? (
-                            <Pill tone={TAG_TONES[inferred]}>{inferred}</Pill>
-                          ) : (
-                            <span
-                              style={{
-                                fontSize: 12,
-                                color: 'var(--color-muted-foreground)',
-                              }}
-                            >
-                              —
-                            </span>
-                          )}
-                        </td>
-                        <td style={{ ...MODAL_TD, textAlign: 'right' }}>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleFood(food);
-                            }}
-                            className="cursor-pointer"
-                            style={{
-                              width: 28,
-                              height: 28,
-                              borderRadius: 9999,
-                              background: isSelected
-                                ? 'var(--color-success)'
-                                : 'var(--color-primary)',
-                              color: 'var(--color-primary-foreground)',
-                              border: 0,
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontFamily: 'inherit',
-                            }}
-                            aria-label={isSelected ? 'Unstage' : 'Stage'}
-                          >
-                            {isSelected ? (
-                              <span
-                                style={{
-                                  fontSize: 13,
-                                  fontWeight: 700,
-                                }}
-                              >
-                                ✓
-                              </span>
-                            ) : (
-                              <Plus
-                                style={{
-                                  width: 14,
-                                  height: 14,
-                                  strokeWidth: 2.5,
-                                }}
-                              />
-                            )}
-                          </button>
-                        </td>
-                      </tr>
-                      {isSelected && isExpanded && selected && (
-                        <tr style={{ background: 'var(--color-surface-warm)' }}>
-                          <td
-                            colSpan={5}
-                            style={{
-                              padding: '8px 12px',
-                              borderBottom:
-                                '1px solid var(--color-border)',
-                            }}
-                          >
-                            <QuantityInput
-                              food={food}
-                              quantity={selected.quantity}
-                              unit={selected.unit}
-                              onChange={(next) =>
-                                setQuantityForFood(food.id, next)
-                              }
-                            />
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-
-          {/* Mobile card list — full food names get full width here */}
-          {!loading && visible.length > 0 && isNarrow && (
-            <ul
-              style={{
-                listStyle: 'none',
-                padding: 0,
-                margin: 0,
-                display: 'flex',
-                flexDirection: 'column',
-              }}
-            >
-              {visible.map((food) => {
-                const selected = selectedFoods.find(
-                  (sf) => sf.food.id === food.id
-                );
-                const isSelected = !!selected;
-                const isExpanded = expandedId === food.id;
-                const inferred = inferTag(food);
-                const IconCmp = inferred ? TAG_ICONS[inferred] : Apple;
-                const cal = food.calories ?? food.calories_per_100g ?? 0;
-                const protein = food.protein ?? food.protein_per_100g ?? 0;
-                return (
-                  <li
-                    key={food.id}
-                    style={{
-                      borderBottom: '1px solid var(--color-border)',
-                      background: isSelected
-                        ? 'var(--color-badge-bg)'
-                        : 'transparent',
-                      transition: 'background 120ms',
-                    }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (isSelected) {
-                          setExpandedId(isExpanded ? null : food.id);
-                        } else {
-                          toggleFood(food);
-                        }
-                      }}
-                      style={{
-                        display: 'flex',
-                        gap: 10,
-                        alignItems: 'flex-start',
-                        padding: '10px 12px',
-                        width: '100%',
-                        background: 'transparent',
-                        border: 0,
-                        textAlign: 'left',
-                        fontFamily: 'inherit',
-                        color: 'var(--color-foreground)',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <span
-                        style={{
-                          width: 28,
-                          height: 28,
-                          borderRadius: 6,
-                          background: 'var(--color-surface-warm)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          border: '1px solid var(--color-border)',
-                          flexShrink: 0,
-                          marginTop: 2,
-                        }}
-                      >
-                        <IconCmp
-                          style={{
-                            width: 13,
-                            height: 13,
-                            color: 'var(--color-muted-foreground)',
-                          }}
-                        />
-                      </span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div
-                          style={{
-                            fontSize: 14,
-                            fontWeight: 500,
-                            lineHeight: 1.3,
-                            wordBreak: 'break-word',
-                          }}
-                        >
-                          {food.name}
-                        </div>
-                        <div
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 6,
-                            marginTop: 4,
-                            fontSize: 11,
-                            color: 'var(--color-muted-foreground)',
-                            flexWrap: 'wrap',
-                          }}
-                        >
-                          <span>{unitLabel(food)}</span>
-                          <span style={{ opacity: 0.4 }}>·</span>
-                          <span style={{ fontFamily: 'var(--font-mono)' }}>
-                            <span
-                              style={{
-                                color: 'var(--color-foreground)',
-                                fontWeight: 600,
-                              }}
-                            >
-                              {cal}
-                            </span>{' '}
-                            kcal
-                          </span>
-                          <span style={{ opacity: 0.4 }}>·</span>
-                          <span style={{ fontFamily: 'var(--font-mono)' }}>
-                            <span
-                              style={{
-                                color: 'var(--color-foreground)',
-                                fontWeight: 600,
-                              }}
-                            >
-                              {protein}
-                            </span>
-                            g
-                          </span>
-                          {inferred && <Pill tone={TAG_TONES[inferred]}>{inferred}</Pill>}
-                        </div>
-                      </div>
-                      <span
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleFood(food);
-                        }}
-                        role="button"
-                        aria-label={isSelected ? 'Unstage' : 'Stage'}
-                        style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: 9999,
-                          background: isSelected
-                            ? 'var(--color-success)'
-                            : 'var(--color-primary)',
-                          color: 'var(--color-primary-foreground)',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          flexShrink: 0,
-                        }}
-                      >
-                        {isSelected ? (
-                          <span style={{ fontSize: 14, fontWeight: 700 }}>✓</span>
-                        ) : (
-                          <Plus
-                            style={{
-                              width: 16,
-                              height: 16,
-                              strokeWidth: 2.5,
-                            }}
-                          />
-                        )}
-                      </span>
-                    </button>
-
-                    {isSelected && isExpanded && selected && (
-                      <div
-                        style={{
-                          padding: '8px 12px 12px',
-                          background: 'var(--color-surface-warm)',
-                          borderTop: '1px solid var(--color-border)',
-                        }}
-                      >
-                        <QuantityInput
-                          food={food}
-                          quantity={selected.quantity}
-                          unit={selected.unit}
-                          onChange={(next) =>
-                            setQuantityForFood(food.id, next)
-                          }
-                        />
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+    return () => clearTimeout(t);
+  }, [query, enabled]);
+  return { foods, loading };
 }
 
-const MODAL_TH: React.CSSProperties = {
-  padding: '10px 12px',
-  textAlign: 'left',
-  fontSize: 10,
-  fontWeight: 600,
-  textTransform: 'uppercase',
-  letterSpacing: '0.06em',
-  color: 'var(--color-muted-foreground)',
-  borderBottom: '1px solid var(--color-border)',
-};
+/** Calories/protein of a saved meal item at a given amount, using the food's own base. */
+function mealItemTotals(item: SavedMealItem, quantity: number, unit: Unit) {
+  try {
+    return nutritionFor(
+      {
+        base_amount: item.baseAmount ?? 1,
+        base_unit: (item.baseUnit ?? 'serving') as Unit,
+        serving_size_g: item.serving_size_g ?? null,
+        calories: item.calories ?? 0,
+        protein: item.protein ?? null,
+      },
+      quantity,
+      unit
+    );
+  } catch {
+    return { calories: (item.calories || 0) * quantity, protein: (item.protein || 0) * quantity };
+  }
+}
 
-const MODAL_TD: React.CSSProperties = {
-  padding: '8px 12px',
-  borderBottom: '1px solid var(--color-border)',
-  verticalAlign: 'middle',
-};
-
-// ─── Add Food Modal ────────────────────────────────────────────────────────
+const itemQty = (item: SavedMealItem) => item.quantity ?? item.servings ?? 1;
+const itemUnit = (item: SavedMealItem) => (item.unit as Unit) ?? 'serving';
+const fmtQty = (q: number, u: Unit) => `${Math.round(q * 100) / 100}${u === 'serving' ? '' : ` ${u}`}`;
 
 interface AddFoodModalProps {
   isOpen: boolean;
@@ -754,41 +134,54 @@ interface AddFoodModalProps {
   mealType: MealType;
   date: string;
   onAdded: (entry: JournalEntry) => void;
+  /** Calories still left today before this log (goal − eaten); shows "after this" in the totals. */
+  caloriesLeft?: number;
 }
 
-function AddFoodModal({ isOpen, onClose, mealType: initialMealType, date, onAdded }: AddFoodModalProps) {
-  const isNarrow = useIsNarrow();
+function AddFoodModal({ isOpen, onClose, mealType: initialMealType, date, onAdded, caloriesLeft }: AddFoodModalProps) {
+  const wide = useIsWide();
   const [mealType, setMealType] = useState<MealType>(initialMealType);
   useEffect(() => {
     if (isOpen) setMealType(initialMealType);
   }, [isOpen, initialMealType]);
   const [tab, setTab] = useState<'foods' | 'meals' | 'quick'>('foods');
-  const [savedMeals, setSavedMeals] = useState<SavedMeal[]>([]);
-  const [loadingMeals, setLoadingMeals] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [mealQuery, setMealQuery] = useState('');
 
-  // Quick Add state
+  // Foods tab
+  const [query, setQuery] = useState('');
+  const [tag, setTag] = useState<FoodTag | 'All'>('All');
+  const { foods, loading } = useFoodSearch(query, isOpen && tab === 'foods');
+  const visible = useMemo(() => (tag === 'All' ? foods : foods.filter((f) => inferTag(f) === tag)), [foods, tag]);
+  const [selectedFoods, setSelectedFoods] = useState<SelectedFood[]>([]);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+
+  // Saved meals tab
+  const [savedMeals, setSavedMeals] = useState<SavedMeal[]>([]);
+  const [loadingMeals, setLoadingMeals] = useState(false);
+  const [mealQuery, setMealQuery] = useState('');
+  const [openMeal, setOpenMeal] = useState<SavedMeal | null>(null);
+  const [mealAmounts, setMealAmounts] = useState<Record<number, number>>({});
+
+  // Quick add
   const [quickName, setQuickName] = useState('');
   const [quickCalories, setQuickCalories] = useState('');
   const [quickProtein, setQuickProtein] = useState('');
-  // Hidden Quick Add macros — only populated by AI guess, used when the user
-  // clicks "Add to Journal and Database" so the saved Food row gets full macros.
+  // Only filled by the AI guess; used when "Add and save to my foods" creates the Food row.
   const [quickCarbs, setQuickCarbs] = useState<number | null>(null);
   const [quickFat, setQuickFat] = useState<number | null>(null);
-  // AI estimate state for Quick Add
   const [aiEstimating, setAiEstimating] = useState(false);
   const [aiError, setAiError] = useState('');
   const [aiResult, setAiResult] = useState<{ portion: string; reasoning: string } | null>(null);
 
-  // Lifted from FoodPicker so the sticky bottom bar (rendered as the modal's
-  // footer) can show the running total + Add button across the whole panel
-  // rather than below the food list.
-  const [selectedFoods, setSelectedFoods] = useState<SelectedFood[]>([]);
-  // Reset selection whenever the modal closes so re-opening starts fresh.
+  // Fresh start every time it opens.
   useEffect(() => {
-    if (!isOpen) setSelectedFoods([]);
+    if (!isOpen) {
+      setSelectedFoods([]);
+      setExpandedId(null);
+      setOpenMeal(null);
+      setError('');
+    }
   }, [isOpen]);
 
   useEffect(() => {
@@ -800,6 +193,20 @@ function AddFoodModal({ isOpen, onClose, mealType: initialMealType, date, onAdde
         .finally(() => setLoadingMeals(false));
     }
   }, [tab, savedMeals.length]);
+
+  function toggleFood(food: Food) {
+    if (selectedFoods.some((sf) => sf.food.id === food.id)) {
+      setSelectedFoods(selectedFoods.filter((sf) => sf.food.id !== food.id));
+      if (expandedId === food.id) setExpandedId(null);
+    } else {
+      setSelectedFoods([...selectedFoods, { food, ...defaultAmount(food) }]);
+      setExpandedId(food.id); // amount editor opens straight away
+    }
+  }
+
+  function setAmount(foodId: number, next: { quantity: number; unit: Unit }) {
+    setSelectedFoods(selectedFoods.map((sf) => (sf.food.id === foodId ? { ...sf, quantity: Math.max(0, next.quantity), unit: next.unit } : sf)));
+  }
 
   async function handleAddSelectedFoods() {
     if (selectedFoods.length === 0) return;
@@ -827,36 +234,51 @@ function AddFoodModal({ isOpen, onClose, mealType: initialMealType, date, onAdde
     }
   }
 
-  async function handleAddMeal(meal: SavedMeal) {
+  // The list endpoint doesn't include items — fetch the full meal when it's opened or logged.
+  async function fullMeal(meal: SavedMeal): Promise<SavedMeal> {
+    if (meal.items) return meal;
+    const res = await fetch(`${BASE_URL}/api/meals/saved/${meal.id}`);
+    if (!res.ok) return meal;
+    const full: SavedMeal = await res.json();
+    setSavedMeals((prev) => prev.map((m) => (m.id === full.id ? full : m)));
+    return full;
+  }
+
+  async function openSavedMeal(meal: SavedMeal) {
+    if (openMeal?.id === meal.id && !wide) {
+      setOpenMeal(null);
+      return;
+    }
+    setOpenMeal(meal);
+    setMealAmounts({});
+    try {
+      const full = await fullMeal(meal);
+      setOpenMeal((cur) => (cur?.id === full.id ? full : cur));
+    } catch { /* keep the summary */ }
+  }
+
+  /** Logs every item of a saved meal; `amounts` (item id → quantity) changes amounts for this log only. */
+  async function handleAddMeal(meal: SavedMeal, amounts: Record<number, number> = {}) {
     setSaving(true);
     setError('');
     try {
-      // The list endpoint doesn't include items — fetch the full meal detail first
-      let fullMeal = meal;
-      if (!meal.items) {
-        const res = await fetch(`${BASE_URL}/api/meals/saved/${meal.id}`);
-        if (res.ok) {
-          fullMeal = await res.json();
-        }
-      }
-
-      if (!fullMeal.items || fullMeal.items.length === 0) {
+      const full = await fullMeal(meal);
+      if (!full.items || full.items.length === 0) {
         setError('This meal has no items');
         setSaving(false);
         return;
       }
-
-      for (const item of fullMeal.items) {
+      for (const item of full.items) {
         // Server computes snapshots when food_id is set; log in each item's native unit
-        const quantity = item.quantity ?? item.servings ?? 1;
-        const unit = (item.unit as Unit) ?? 'serving';
+        const quantity = amounts[item.id] ?? itemQty(item);
+        if (quantity <= 0) continue;
         const entry = await addJournalEntry({
           date,
           meal_type: mealType,
           food_id: item.foodId,
           food_name_snapshot: item.name ?? `Food ${item.foodId}`,
           quantity,
-          unit,
+          unit: itemUnit(item),
         });
         onAdded(entry);
       }
@@ -886,8 +308,18 @@ function AddFoodModal({ isOpen, onClose, mealType: initialMealType, date, onAdde
     }
   }
 
-  // "Add to Journal and Database" — creates a Food row (per 1 serving) using
-  // the typed/AI-filled macros, then adds a journal entry that references it.
+  function resetQuick() {
+    setQuickName('');
+    setQuickCalories('');
+    setQuickProtein('');
+    setQuickCarbs(null);
+    setQuickFat(null);
+    setAiResult(null);
+    setAiError('');
+  }
+
+  // "Add and save to my foods": creates a Food row (per 1 serving) from the typed/AI
+  // numbers, then logs a journal entry that references it.
   async function handleQuickAddAndSave() {
     const cal = parseFloat(quickCalories);
     const pro = parseFloat(quickProtein) || 0;
@@ -913,13 +345,7 @@ function AddFoodModal({ isOpen, onClose, mealType: initialMealType, date, onAdde
         unit: 'serving',
       });
       onAdded(entry);
-      setQuickName('');
-      setQuickCalories('');
-      setQuickProtein('');
-      setQuickCarbs(null);
-      setQuickFat(null);
-      setAiResult(null);
-      setAiError('');
+      resetQuick();
       onClose();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to save food');
@@ -945,13 +371,7 @@ function AddFoodModal({ isOpen, onClose, mealType: initialMealType, date, onAdde
         protein_snapshot: Math.round(pro * 10) / 10,
       });
       onAdded(entry);
-      setQuickName('');
-      setQuickCalories('');
-      setQuickProtein('');
-      setQuickCarbs(null);
-      setQuickFat(null);
-      setAiResult(null);
-      setAiError('');
+      resetQuick();
       onClose();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to add entry');
@@ -960,818 +380,396 @@ function AddFoodModal({ isOpen, onClose, mealType: initialMealType, date, onAdde
     }
   }
 
-  // Chip-row tab button — matches the design's foreground-inverted active state.
-  function chipStyle(active: boolean): React.CSSProperties {
-    return {
-      padding: '4px 12px',
-      borderRadius: 9999,
-      fontSize: 12,
-      fontWeight: 600,
-      background: active ? 'var(--color-foreground)' : 'var(--color-surface)',
-      color: active
-        ? 'var(--color-background)'
-        : 'var(--color-muted-foreground)',
-      border:
-        '1px solid ' +
-        (active ? 'var(--color-foreground)' : 'var(--color-border)'),
-      cursor: 'pointer',
-      fontFamily: 'inherit',
-    };
-  }
-
-  // Selection summary for the sticky footer
-  const footerTotals = selectedFoods.reduce(
+  // ── Totals ──
+  const plate = selectedFoods.reduce(
     (acc, sf) => {
-      try {
-        const foodForCalc = {
-          base_amount: sf.food.base_amount ?? sf.food.baseAmount ?? 100,
-          base_unit: (sf.food.base_unit ?? sf.food.baseUnit ?? 'serving') as Unit,
-          serving_size_g: sf.food.serving_size_g ?? null,
-          calories: sf.food.calories ?? 0,
-          protein: sf.food.protein ?? null,
-        };
-        const r = nutritionFor(foodForCalc, sf.quantity, sf.unit);
-        return { calories: acc.calories + r.calories, protein: acc.protein + r.protein };
-      } catch {
-        return acc;
-      }
+      const t = foodTotals(sf.food, sf.quantity, sf.unit);
+      return { calories: acc.calories + t.calories, protein: acc.protein + t.protein };
     },
     { calories: 0, protein: 0 }
   );
-  const totalCalories = footerTotals.calories;
-  const totalProtein = footerTotals.protein;
-
-  // Leading footer slot — running total when foods are selected.
-  const leadingFooter =
-    tab === 'foods' && selectedFoods.length > 0 ? (
-      <div style={{ minWidth: 0 }}>
-        <div
-          style={{
-            fontSize: 13,
-            fontWeight: 600,
-            color: 'var(--color-foreground)',
-            fontFamily: 'var(--font-mono)',
-          }}
-        >
-          {selectedFoods.length} staged · {Math.round(totalCalories)} kcal
-        </div>
-        <div
-          style={{
-            fontSize: 11,
-            color: 'var(--color-muted-foreground)',
-            fontFamily: 'var(--font-mono)',
-          }}
-        >
-          {totalProtein.toFixed(1)}g protein
-        </div>
-      </div>
-    ) : null;
-
-  const footerActions =
-    tab === 'foods' ? (
-      <>
-        <GlassButton variant="ghost" size="sm" onClick={onClose}>
-          Cancel
-        </GlassButton>
-        <GlassButton
-          variant="primary"
-          size="sm"
-          onClick={handleAddSelectedFoods}
-          disabled={saving || selectedFoods.length === 0}
-        >
-          {saving ? 'Adding…' : `Add to ${MEAL_LABELS[mealType]}`}
-        </GlassButton>
-      </>
-    ) : tab === 'quick' ? null : (
-      <GlassButton variant="ghost" size="sm" onClick={onClose}>
-        Cancel
-      </GlassButton>
+  const mealLabel = MEAL_LABELS[mealType];
+  const day = new Date(date + 'T00:00:00');
+  const dayLabel = formatDateLabel(day);
+  const subtitle = dayLabel === 'Today' || dayLabel === 'Yesterday'
+    ? `${dayLabel} · ${day.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}`
+    : dayLabel;
+  const matchedMeals = savedMeals.filter((m) => !mealQuery || m.name.toLowerCase().includes(mealQuery.toLowerCase()));
+  const mealTotals = (meal: SavedMeal, amounts: Record<number, number> = {}) =>
+    (meal.items || []).reduce(
+      (acc, item) => {
+        const t = mealItemTotals(item, amounts[item.id] ?? itemQty(item), itemUnit(item));
+        return { calories: acc.calories + t.calories, protein: acc.protein + t.protein };
+      },
+      { calories: 0, protein: 0 }
     );
 
-  // Subtitle uses Melbourne-friendly day label so the user always sees
-  // the destination day + meal.
-  const subtitle = `Logging to ${MEAL_LABELS[mealType]} · ${formatDateLabel(
-    new Date(date + 'T00:00:00')
-  )}`;
+  // ── Pieces ──
+  const tabs = (
+    <Seg
+      label="Add from"
+      small={wide}
+      value={tab}
+      onChange={(t) => { setTab(t); setError(''); }}
+      options={[
+        { value: 'foods', label: 'Foods' },
+        { value: 'meals', label: 'Saved meals' },
+        { value: 'quick', label: 'Quick add' },
+      ]}
+    />
+  );
+  const errorBox = error ? <div className="fs-err" style={{ margin: wide ? '0' : '0 0 4px' }}>{error}</div> : null;
+
+  const totalsCard = (
+    <div className="fs-card" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 600, flex: 1 }}>
+          {Math.round(plate.calories)} <span className="fs-meta">kcal</span>
+        </span>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 600 }}>
+          {plate.protein.toFixed(1)} <span className="fs-meta">g protein</span>
+        </span>
+      </div>
+      {caloriesLeft != null && (
+        <>
+          <div className="fs-bar">
+            <div style={{
+              width: `${Math.min(100, caloriesLeft > 0 ? (plate.calories / caloriesLeft) * 100 : 100)}%`,
+              background: plate.calories > caloriesLeft ? 'var(--color-critical)' : '#FFB27A',
+            }} />
+          </div>
+          <div className="fs-meta">
+            {caloriesLeft - plate.calories >= 0
+              ? `After this: ${Math.round(caloriesLeft - plate.calories).toLocaleString()} kcal left`
+              : `After this: ${Math.round(plate.calories - caloriesLeft).toLocaleString()} kcal over`}
+          </div>
+        </>
+      )}
+    </div>
+  );
+  const addFoodsBtn = (
+    <button type="button" className="fs-btn" onClick={handleAddSelectedFoods} disabled={saving || selectedFoods.length === 0}>
+      {saving ? 'Adding…' : selectedFoods.length > 1 ? `Add ${selectedFoods.length} to ${mealLabel}` : `Add to ${mealLabel}`}
+    </button>
+  );
+
+  function foodRow(food: Food) {
+    const sel = selectedFoods.find((sf) => sf.food.id === food.id);
+    const expanded = !wide && !!sel && expandedId === food.id;
+    const cal = food.calories ?? food.calories_per_100g ?? 0;
+    const protein = food.protein ?? food.protein_per_100g ?? 0;
+    return (
+      <Fragment key={food.id}>
+        <div
+          className={`fs-row${sel ? ' on' : ''}`}
+          onClick={() => (sel && !wide ? setExpandedId(expanded ? null : food.id) : toggleFood(food))}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="fs-name">{food.name}</div>
+            <div className="fs-meta">{unitLabel(food)}</div>
+          </div>
+          {wide && <span className="fs-col" style={{ width: 64 }}>{protein} g</span>}
+          <span className="fs-kcal" style={{ minWidth: 44 }}>{cal}<small>kcal</small></span>
+          <button type="button" className={`fs-add${sel ? ' on' : ''}`} aria-label={sel ? 'Remove' : 'Add'}
+            onClick={(e) => { e.stopPropagation(); toggleFood(food); }}>
+            {sel ? <Check style={{ width: 16, height: 16, strokeWidth: 3 }} /> : <Plus style={{ width: 16, height: 16, strokeWidth: 2.5 }} />}
+          </button>
+        </div>
+        {expanded && sel && (
+          <div className="fs-rowx on fs-flash">
+            <FoodAmount food={food} quantity={sel.quantity} unit={sel.unit} showKcal onChange={(n) => setAmount(food.id, n)} />
+          </div>
+        )}
+      </Fragment>
+    );
+  }
+
+  // ── Per tab ──
+  let top: React.ReactNode;
+  let body: React.ReactNode;
+  let side: React.ReactNode;
+  let sideFoot: React.ReactNode;
+  let tray: React.ReactNode;
+  let foot: React.ReactNode;
+  let padded = false;
+
+  if (tab === 'foods') {
+    top = (
+      <>
+        {wide ? (
+          <div style={{ display: 'flex', gap: 10 }}>
+            <div style={{ flex: 1, minWidth: 0 }}><SearchBox value={query} onChange={setQuery} placeholder="Search foods" autoFocus /></div>
+            <div style={{ width: 280, flex: 'none' }}>{tabs}</div>
+          </div>
+        ) : (
+          <>
+            <SearchBox value={query} onChange={setQuery} placeholder="Search foods" autoFocus />
+            {tabs}
+          </>
+        )}
+        <Chips options={FOOD_TAGS} value={tag} onChange={setTag} />
+        {errorBox}
+      </>
+    );
+    body = (
+      <>
+        {wide && visible.length > 0 && (
+          <div className="fs-colhead"><span style={{ flex: 1 }}>Food</span><span style={{ width: 64, textAlign: 'right' }}>Protein</span><span style={{ width: 44, textAlign: 'right' }}>kcal</span><span style={{ width: 36 }} /></div>
+        )}
+        {loading && foods.length === 0 && <div className="fs-empty">Searching…</div>}
+        {!loading && visible.length === 0 && <div className="fs-empty">No foods match.</div>}
+        {visible.map(foodRow)}
+        {!wide && selectedFoods.length > 0 && <div style={{ height: 8 }} />}
+      </>
+    );
+    side = (
+      <>
+        <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: 4 }}>
+          <span style={{ fontSize: 15, fontWeight: 700, flex: 1 }}>Your plate</span>
+          {selectedFoods.length > 0 && (
+            <button type="button" onClick={() => setSelectedFoods([])} style={{ border: 0, background: 'none', color: 'var(--color-primary)', fontWeight: 600, fontSize: 12, cursor: 'pointer', font: 'inherit' }}>Clear</button>
+          )}
+        </div>
+        {selectedFoods.length === 0 ? (
+          <div className="fs-empty" style={{ padding: '40px 8px' }}>Tap + on a food to add it here.</div>
+        ) : (
+          selectedFoods.map((sf) => (
+            <div key={sf.food.id} className="fs-flash" style={{ padding: '10px 0', borderBottom: '1px solid var(--color-border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="fs-name" style={{ fontSize: 14 }}>{sf.food.name}</div>
+                  <div className="fs-meta">{Math.round(foodTotals(sf.food, sf.quantity, sf.unit).calories)} kcal</div>
+                </div>
+                <button type="button" aria-label="Remove" onClick={() => toggleFood(sf.food)} style={{ border: 0, background: 'none', color: 'var(--color-muted-foreground)', cursor: 'pointer', padding: 4, display: 'flex' }}>
+                  <X style={{ width: 16, height: 16 }} />
+                </button>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <FoodAmount food={sf.food} quantity={sf.quantity} unit={sf.unit} onChange={(n) => setAmount(sf.food.id, n)} />
+              </div>
+            </div>
+          ))
+        )}
+      </>
+    );
+    sideFoot = <>{totalsCard}{addFoodsBtn}</>;
+    if (selectedFoods.length > 0) {
+      tray = (
+        <>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 17, fontWeight: 600 }}>{Math.round(plate.calories)} kcal</span>
+            <span className="fs-meta" style={{ flex: 1 }}>
+              {plate.protein.toFixed(0)} g protein · {selectedFoods.length} {selectedFoods.length === 1 ? 'food' : 'foods'}
+              {caloriesLeft != null && ` · ${Math.round(caloriesLeft - plate.calories).toLocaleString()} left`}
+            </span>
+            <button type="button" onClick={() => { setSelectedFoods([]); setExpandedId(null); }} style={{ border: 0, background: 'none', color: 'var(--color-primary)', fontWeight: 600, fontSize: 12, cursor: 'pointer', font: 'inherit' }}>Clear</button>
+          </div>
+          {addFoodsBtn}
+        </>
+      );
+    }
+  } else if (tab === 'meals') {
+    top = (
+      <>
+        {wide ? (
+          <div style={{ display: 'flex', gap: 10 }}>
+            <div style={{ flex: 1, minWidth: 0 }}><SearchBox value={mealQuery} onChange={setMealQuery} placeholder="Search saved meals" /></div>
+            <div style={{ width: 280, flex: 'none' }}>{tabs}</div>
+          </div>
+        ) : (
+          <>
+            <SearchBox value={mealQuery} onChange={setMealQuery} placeholder="Search saved meals" />
+            {tabs}
+          </>
+        )}
+        {errorBox}
+      </>
+    );
+    const newMealLink = (
+      <Link href="/meals" className="fs-btn2 dashed" onClick={onClose} style={{ textDecoration: 'none' }}>
+        <Plus style={{ width: 16, height: 16 }} /> New saved meal
+      </Link>
+    );
+    const listState = loadingMeals ? (
+      <div className="fs-empty"><Loader2 className="animate-spin" style={{ width: 18, height: 18, display: 'inline-block' }} /></div>
+    ) : savedMeals.length === 0 ? (
+      <div className="fs-empty">No saved meals yet.</div>
+    ) : matchedMeals.length === 0 ? (
+      <div className="fs-empty">No saved meals match.</div>
+    ) : null;
+
+    if (wide) {
+      body = (
+        <>
+          {listState}
+          {!listState && matchedMeals.map((meal) => {
+            const t = mealTotals(meal);
+            const on = openMeal?.id === meal.id;
+            return (
+              <div key={meal.id} className={`fs-row${on ? ' on' : ''}`} onClick={() => openSavedMeal(meal)}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="fs-name">{meal.name}</div>
+                  <div className="fs-meta">
+                    {meal.items ? `${meal.items.length} ${meal.items.length === 1 ? 'item' : 'items'} · ${meal.items.map((i) => i.name).join(', ')}` : meal.description || 'Saved meal'}
+                  </div>
+                </div>
+                {meal.items && <span className="fs-col" style={{ width: 56 }}>{Math.round(t.protein)} g</span>}
+                {meal.items && <span className="fs-kcal" style={{ width: 52 }}>{Math.round(t.calories)}</span>}
+                <ChevronRight style={{ width: 16, height: 16, color: 'var(--color-muted-foreground)', flex: 'none' }} />
+              </div>
+            );
+          })}
+          <div style={{ padding: '14px 16px', maxWidth: 260 }}>{newMealLink}</div>
+        </>
+      );
+      if (openMeal) {
+        const t = mealTotals(openMeal, mealAmounts);
+        side = (
+          <>
+            <div style={{ fontSize: 17, fontWeight: 700 }}>{openMeal.name}</div>
+            <div className="fs-meta" style={{ marginBottom: 6 }}>
+              {openMeal.items ? `${openMeal.items.length} ${openMeal.items.length === 1 ? 'food' : 'foods'} · ${Math.round(t.calories)} kcal · ${Math.round(t.protein)} g protein` : 'Loading…'}
+            </div>
+            {(openMeal.items || []).map((item) => {
+              const u = itemUnit(item);
+              const q = mealAmounts[item.id] ?? itemQty(item);
+              return (
+                <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--color-border)' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="fs-name" style={{ fontSize: 14 }}>{item.name}</div>
+                    <div className="fs-meta">{Math.round(mealItemTotals(item, q, u).calories)} kcal</div>
+                  </div>
+                  <Stepper value={q} step={u === 'serving' ? 0.5 : 10} unit={u === 'serving' ? undefined : u}
+                    onChange={(v) => setMealAmounts({ ...mealAmounts, [item.id]: v })} />
+                </div>
+              );
+            })}
+            {openMeal.items && <div className="fs-meta" style={{ marginTop: 8, whiteSpace: 'normal' }}>Amounts changed here are for this log only.</div>}
+          </>
+        );
+        sideFoot = (
+          <button type="button" className="fs-btn" disabled={saving || !openMeal.items} onClick={() => handleAddMeal(openMeal, mealAmounts)}>
+            {saving ? 'Adding…' : `Log ${Math.round(t.calories)} kcal to ${mealLabel}`}
+          </button>
+        );
+      } else {
+        side = <div className="fs-empty" style={{ padding: '60px 8px' }}>Pick a saved meal to see its foods.</div>;
+      }
+    } else {
+      padded = true;
+      body = (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 4 }}>
+          {listState}
+          {!listState && matchedMeals.map((meal) => {
+            const on = openMeal?.id === meal.id;
+            const m = on && openMeal ? openMeal : meal;
+            const t = mealTotals(m);
+            return (
+              <div key={meal.id} className="fs-card" style={{ padding: '12px 14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }} onClick={() => openSavedMeal(meal)}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="fs-name">{meal.name}</div>
+                    <div className="fs-meta">
+                      {m.items ? `${m.items.length} ${m.items.length === 1 ? 'item' : 'items'} · ${m.items.map((i) => i.name).join(', ')}` : meal.description || 'Tap to see what’s in it'}
+                    </div>
+                  </div>
+                  {m.items && <span className="fs-kcal">{Math.round(t.calories)}<small>{Math.round(t.protein)} g P</small></span>}
+                  {!on && (
+                    <button type="button" className="fs-btn" style={{ width: 'auto', height: 36, padding: '0 14px', fontSize: 13, borderRadius: 12 }}
+                      disabled={saving} onClick={(e) => { e.stopPropagation(); handleAddMeal(meal); }}>
+                      Log
+                    </button>
+                  )}
+                </div>
+                {on && (
+                  <div className="fs-flash" style={{ borderTop: '1px solid var(--color-border)', marginTop: 10, paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {!m.items && <div className="fs-meta">Loading…</div>}
+                    {(m.items || []).map((item) => (
+                      <div key={item.id} style={{ display: 'flex', fontSize: 13, gap: 8 }}>
+                        <span className="fs-meta" style={{ flex: 1, fontSize: 13 }}>{item.name} · {fmtQty(itemQty(item), itemUnit(item))}</span>
+                        <span style={{ fontFamily: 'var(--font-mono)' }}>{Math.round(mealItemTotals(item, itemQty(item), itemUnit(item)).calories)}</span>
+                      </div>
+                    ))}
+                    <button type="button" className="fs-btn" style={{ height: 44, fontSize: 14, marginTop: 6 }} disabled={saving || !m.items}
+                      onClick={() => handleAddMeal(m)}>
+                      {saving ? 'Adding…' : `Log to ${mealLabel}`}
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      );
+      foot = newMealLink;
+    }
+  } else {
+    padded = true;
+    top = <>{tabs}</>;
+    const canAdd = !!quickName.trim() && !!quickCalories && !saving;
+    body = (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: wide ? 560 : undefined, paddingTop: 4 }}>
+        {errorBox}
+        <TextBox label="What did you eat?" value={quickName} placeholder="e.g. 2 slices of pepperoni pizza"
+          onChange={(v) => { setQuickName(v); if (aiResult) setAiResult(null); if (aiError) setAiError(''); }} />
+        <button type="button" className="fs-btn2 ai" onClick={handleAiGuess} disabled={!quickName.trim() || aiEstimating}>
+          {aiEstimating
+            ? <><Loader2 className="animate-spin" style={{ width: 16, height: 16 }} /> AI is guessing…</>
+            : <><Sparkles style={{ width: 16, height: 16 }} /> Let AI guess calories and protein</>}
+        </button>
+        {aiError && <div className="fs-err">{aiError}</div>}
+        {aiResult && !aiError && (
+          <div className="fs-ai fs-flash">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600 }}>
+              <Sparkles style={{ width: 15, height: 15 }} /> AI guess · {aiResult.portion}
+            </div>
+            <div className="fs-meta">{aiResult.reasoning} Change the numbers if yours was different.</div>
+          </div>
+        )}
+        <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 10 }}>
+          <NumBox big label="Calories" value={quickCalories} onChange={setQuickCalories} unit="kcal" />
+          <NumBox big label="Protein" value={quickProtein} onChange={setQuickProtein} unit="g" step="0.1" />
+        </div>
+        <div className="fs-meta" style={{ whiteSpace: 'normal' }}>Only logs it to this day. “Add and save” also keeps it in your foods.</div>
+        {wide && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 4 }}>
+            <button type="button" className="fs-btn2" style={{ height: 52 }} onClick={handleQuickAddAndSave} disabled={!canAdd}>
+              <BookOpen style={{ width: 16, height: 16 }} /> {saving ? 'Saving…' : 'Add and save to my foods'}
+            </button>
+            <button type="button" className="fs-btn" onClick={handleQuickAdd} disabled={!canAdd}>{saving ? 'Adding…' : `Add to ${mealLabel}`}</button>
+          </div>
+        )}
+      </div>
+    );
+    if (!wide) {
+      foot = (
+        <>
+          <button type="button" className="fs-btn" onClick={handleQuickAdd} disabled={!canAdd}>{saving ? 'Adding…' : `Add to ${mealLabel}`}</button>
+          <button type="button" className="fs-btn2" onClick={handleQuickAddAndSave} disabled={!canAdd}>
+            <BookOpen style={{ width: 16, height: 16 }} /> Add and save to my foods
+          </button>
+        </>
+      );
+    }
+  }
 
   return (
-    <GlassModal
+    <FoodSheet
       isOpen={isOpen}
       onClose={onClose}
       title="Add food"
       subtitle={subtitle}
-      size="lg"
-      mobileFullscreen
-      lockTabletHeight
-      footer={footerActions}
-      leadingFooter={leadingFooter}
-      headerTrailing={
-        <div style={{ display: 'flex', gap: 0, padding: 3, background: 'var(--color-surface-warm)', border: '1px solid var(--color-border)', borderRadius: 6 }}>
-          {MEAL_TYPES.map((m) => {
-            const active = m === mealType;
-            return (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setMealType(m)}
-                className="cursor-pointer"
-                style={{
-                  padding: '4px 10px',
-                  borderRadius: 4,
-                  fontSize: 11,
-                  fontWeight: 600,
-                  background: active ? 'var(--color-surface)' : 'transparent',
-                  color: active
-                    ? 'var(--color-foreground)'
-                    : 'var(--color-muted-foreground)',
-                  border: 0,
-                  fontFamily: 'inherit',
-                  boxShadow: active ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
-                }}
-              >
-                {MEAL_LABELS[m]}
-              </button>
-            );
-          })}
-        </div>
-      }
+      headerCenter={<div style={{ width: wide ? 360 : '100%' }}><MealBar value={mealType} onChange={setMealType} /></div>}
+      top={top}
+      side={tab === 'quick' ? undefined : side}
+      sideFoot={sideFoot}
+      tray={tray}
+      foot={foot}
+      sideWidth={tab === 'meals' ? 320 : 300}
+      padded={padded}
     >
-      <div className="space-y-4">
-        {/* Chip-row tabs matching the design */}
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button
-            type="button"
-            onClick={() => setTab('foods')}
-            style={chipStyle(tab === 'foods')}
-          >
-            Foods
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab('meals')}
-            style={chipStyle(tab === 'meals')}
-          >
-            Saved meals
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab('quick')}
-            style={chipStyle(tab === 'quick')}
-          >
-            Quick add
-          </button>
-        </div>
-
-        {error && (
-          <p
-            style={{
-              fontSize: 13,
-              color: 'var(--color-critical)',
-              background: 'rgba(201,28,43,0.10)',
-              border: '1px solid rgba(201,28,43,0.25)',
-              padding: '8px 12px',
-              borderRadius: 4,
-            }}
-          >
-            {error}
-          </p>
-        )}
-
-        {tab === 'foods' && (
-          <FoodPicker
-            selectedFoods={selectedFoods}
-            setSelectedFoods={setSelectedFoods}
-          />
-        )}
-
-        {tab === 'quick' && (
-          <div className="space-y-4">
-            <p
-              style={{
-                fontSize: 12,
-                color: 'var(--color-muted-foreground)',
-                margin: 0,
-              }}
-            >
-              Log calories without adding to your food database — great for one-off items.
-              Describe a portion (&ldquo;2 slices of pizza&rdquo;) or let AI assume a typical serving.
-            </p>
-            <GlassInput
-              label="Food name"
-              placeholder="e.g. 2 slices of pepperoni pizza"
-              value={quickName}
-              onChange={(e) => {
-                setQuickName(e.target.value);
-                if (aiResult) setAiResult(null);
-                if (aiError) setAiError('');
-              }}
-            />
-            <button
-              type="button"
-              onClick={handleAiGuess}
-              disabled={!quickName.trim() || aiEstimating}
-              className="cursor-pointer w-full"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                padding: '10px 14px',
-                background: 'var(--color-surface-warm)',
-                border: '1px dashed var(--color-border)',
-                borderRadius: 6,
-                color: 'var(--color-foreground)',
-                fontSize: 13,
-                fontWeight: 600,
-                fontFamily: 'inherit',
-                opacity: !quickName.trim() || aiEstimating ? 0.55 : 1,
-              }}
-            >
-              {aiEstimating ? (
-                <>
-                  <Loader2 className="animate-spin" style={{ width: 14, height: 14 }} />
-                  <span>AI is estimating…</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles style={{ width: 14, height: 14, color: 'var(--color-primary)' }} />
-                  <span>Let AI guess calories &amp; protein</span>
-                </>
-              )}
-            </button>
-            {aiError && (
-              <div
-                style={{
-                  fontSize: 12,
-                  color: 'var(--color-critical)',
-                  background: 'rgba(201,28,43,0.10)',
-                  border: '1px solid rgba(201,28,43,0.25)',
-                  padding: '8px 10px',
-                  borderRadius: 4,
-                }}
-              >
-                {aiError}
-              </div>
-            )}
-            {aiResult && !aiError && (
-              <div
-                style={{
-                  background: 'var(--color-surface-warm)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 6,
-                  padding: '10px 12px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 4,
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    fontSize: 11,
-                    fontWeight: 700,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                    color: 'var(--color-muted-foreground)',
-                  }}
-                >
-                  <Sparkles style={{ width: 11, height: 11, color: 'var(--color-primary)' }} />
-                  AI estimate · {aiResult.portion}
-                </div>
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: 'var(--color-foreground)',
-                    lineHeight: 1.5,
-                  }}
-                >
-                  {aiResult.reasoning}
-                </div>
-                <div
-                  style={{
-                    fontSize: 11,
-                    color: 'var(--color-muted-foreground)',
-                    fontStyle: 'italic',
-                    marginTop: 2,
-                  }}
-                >
-                  Edit the fields below if anything looks off.
-                </div>
-              </div>
-            )}
-            <div className="grid grid-cols-2 gap-3">
-              <GlassInput
-                label="Calories (kcal)"
-                type="number"
-                inputMode="decimal"
-                placeholder="e.g. 350"
-                value={quickCalories}
-                onChange={(e) => setQuickCalories(e.target.value)}
-                min={0}
-              />
-              <GlassInput
-                label="Protein (g) — optional"
-                type="number"
-                inputMode="decimal"
-                placeholder="e.g. 8"
-                value={quickProtein}
-                onChange={(e) => setQuickProtein(e.target.value)}
-                min={0}
-                step={0.1}
-              />
-            </div>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gap: 8,
-              }}
-            >
-              <GlassButton
-                variant="default"
-                className="justify-center"
-                onClick={handleQuickAddAndSave}
-                disabled={!quickName.trim() || !quickCalories || saving}
-              >
-                <span className="flex items-center gap-2">
-                  <BookOpen className="w-4 h-4" />
-                  {saving ? 'Saving…' : 'Add to Journal & Database'}
-                </span>
-              </GlassButton>
-              <GlassButton
-                variant="primary"
-                className="justify-center"
-                onClick={handleQuickAdd}
-                disabled={!quickName.trim() || !quickCalories || saving}
-              >
-                <span className="flex items-center gap-2">
-                  <Plus className="w-4 h-4" />
-                  {saving ? 'Adding…' : 'Add to Today'}
-                </span>
-              </GlassButton>
-            </div>
-          </div>
-        )}
-
-        {tab === 'meals' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {/* Search */}
-            <div style={{ position: 'relative' }}>
-              <Search
-                style={{
-                  position: 'absolute',
-                  left: 10,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  width: 14,
-                  height: 14,
-                  color: 'var(--color-placeholder)',
-                  strokeWidth: 1.75,
-                }}
-              />
-              <input
-                type="text"
-                value={mealQuery}
-                onChange={(e) => setMealQuery(e.target.value)}
-                placeholder="Search saved meals…"
-                style={{
-                  width: '100%',
-                  padding: '8px 32px 8px 32px',
-                  background: 'var(--color-surface)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 4,
-                  color: 'var(--color-foreground)',
-                  fontFamily: 'inherit',
-                  fontSize: 14,
-                }}
-              />
-              {mealQuery && (
-                <button
-                  onClick={() => setMealQuery('')}
-                  type="button"
-                  style={{
-                    position: 'absolute',
-                    right: 6,
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'transparent',
-                    border: 0,
-                    padding: 4,
-                    color: 'var(--color-muted-foreground)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                  }}
-                  aria-label="Clear search"
-                >
-                  <X style={{ width: 14, height: 14 }} />
-                </button>
-              )}
-            </div>
-
-            {/* Table-style saved meal picker */}
-            <div
-              style={{
-                border: '1px solid var(--color-border)',
-                borderRadius: 8,
-                overflow: 'hidden',
-                background: 'var(--color-surface)',
-              }}
-            >
-              <div
-                style={{
-                  maxHeight: 'calc(100vh - 420px)',
-                  minHeight: 320,
-                  overflowY: 'auto',
-                  overflowX: 'hidden',
-                }}
-              >
-                {loadingMeals ? (
-                  <div
-                    style={{
-                      padding: 32,
-                      textAlign: 'center',
-                      color: 'var(--color-muted-foreground)',
-                    }}
-                  >
-                    <Loader2
-                      style={{ width: 18, height: 18, display: 'inline-block' }}
-                      className="animate-spin"
-                    />
-                  </div>
-                ) : savedMeals.length === 0 ? (
-                  <div
-                    style={{
-                      padding: 24,
-                      textAlign: 'center',
-                      fontSize: 13,
-                      color: 'var(--color-muted-foreground)',
-                    }}
-                  >
-                    No saved meals yet.
-                  </div>
-                ) : (() => {
-                  const matched = savedMeals.filter(
-                    (m) =>
-                      !mealQuery ||
-                      m.name.toLowerCase().includes(mealQuery.toLowerCase())
-                  );
-                  if (matched.length === 0) {
-                    return (
-                      <div
-                        style={{
-                          padding: 24,
-                          textAlign: 'center',
-                          fontSize: 13,
-                          color: 'var(--color-muted-foreground)',
-                        }}
-                      >
-                        No meals match your search.
-                      </div>
-                    );
-                  }
-                  if (isNarrow) {
-                    return (
-                      <ul
-                        style={{
-                          listStyle: 'none',
-                          padding: 0,
-                          margin: 0,
-                          display: 'flex',
-                          flexDirection: 'column',
-                        }}
-                      >
-                        {matched.map((meal) => {
-                          const totals = (meal.items || []).reduce(
-                            (acc, item) => {
-                              const qty = item.quantity ?? item.servings ?? 1;
-                              return {
-                                calories:
-                                  acc.calories + (item.calories || 0) * qty,
-                                protein:
-                                  acc.protein + (item.protein || 0) * qty,
-                              };
-                            },
-                            { calories: 0, protein: 0 }
-                          );
-                          const count = meal.items?.length ?? 0;
-                          return (
-                            <li
-                              key={meal.id}
-                              style={{
-                                borderBottom: '1px solid var(--color-border)',
-                              }}
-                            >
-                              <button
-                                type="button"
-                                onClick={() => !saving && handleAddMeal(meal)}
-                                disabled={saving}
-                                style={{
-                                  display: 'flex',
-                                  gap: 10,
-                                  alignItems: 'flex-start',
-                                  padding: '10px 12px',
-                                  width: '100%',
-                                  background: 'transparent',
-                                  border: 0,
-                                  textAlign: 'left',
-                                  fontFamily: 'inherit',
-                                  color: 'var(--color-foreground)',
-                                  cursor: saving ? 'wait' : 'pointer',
-                                  opacity: saving ? 0.6 : 1,
-                                }}
-                              >
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div
-                                    style={{
-                                      fontSize: 14,
-                                      fontWeight: 500,
-                                      lineHeight: 1.3,
-                                      wordBreak: 'break-word',
-                                    }}
-                                  >
-                                    {meal.name}
-                                  </div>
-                                  {meal.description && (
-                                    <div
-                                      style={{
-                                        fontSize: 11,
-                                        color:
-                                          'var(--color-muted-foreground)',
-                                        marginTop: 2,
-                                        wordBreak: 'break-word',
-                                      }}
-                                    >
-                                      {meal.description}
-                                    </div>
-                                  )}
-                                  <div
-                                    style={{
-                                      display: 'flex',
-                                      gap: 6,
-                                      marginTop: 4,
-                                      fontSize: 11,
-                                      color:
-                                        'var(--color-muted-foreground)',
-                                      flexWrap: 'wrap',
-                                      fontFamily: 'var(--font-mono)',
-                                    }}
-                                  >
-                                    <span>{count} items</span>
-                                    <span style={{ opacity: 0.4 }}>·</span>
-                                    <span>
-                                      <span
-                                        style={{
-                                          color: 'var(--color-foreground)',
-                                          fontWeight: 600,
-                                        }}
-                                      >
-                                        {Math.round(totals.calories)}
-                                      </span>{' '}
-                                      kcal
-                                    </span>
-                                    <span style={{ opacity: 0.4 }}>·</span>
-                                    <span>
-                                      <span
-                                        style={{
-                                          color: 'var(--color-foreground)',
-                                          fontWeight: 600,
-                                        }}
-                                      >
-                                        {Math.round(totals.protein)}
-                                      </span>
-                                      g
-                                    </span>
-                                  </div>
-                                </div>
-                                <span
-                                  style={{
-                                    width: 32,
-                                    height: 32,
-                                    borderRadius: 9999,
-                                    background: 'var(--color-primary)',
-                                    color: 'var(--color-primary-foreground)',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    flexShrink: 0,
-                                  }}
-                                  aria-label="Log this meal"
-                                >
-                                  <Plus
-                                    style={{
-                                      width: 16,
-                                      height: 16,
-                                      strokeWidth: 2.5,
-                                    }}
-                                  />
-                                </span>
-                              </button>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    );
-                  }
-                  return (
-                    <table
-                      style={{
-                        width: '100%',
-                        tableLayout: 'fixed',
-                        borderCollapse: 'collapse',
-                      }}
-                    >
-                      <colgroup>
-                        <col />
-                        <col style={{ width: 60 }} />
-                        <col style={{ width: 70 }} />
-                        <col style={{ width: 80 }} />
-                        <col style={{ width: 44 }} />
-                      </colgroup>
-                      <thead
-                        style={{
-                          position: 'sticky',
-                          top: 0,
-                          background: 'var(--color-surface)',
-                          zIndex: 1,
-                        }}
-                      >
-                        <tr>
-                          <th style={MODAL_TH}>Meal</th>
-                          <th style={{ ...MODAL_TH, textAlign: 'right' }}>
-                            Items
-                          </th>
-                          <th style={{ ...MODAL_TH, textAlign: 'right' }}>
-                            Cal
-                          </th>
-                          <th style={{ ...MODAL_TH, textAlign: 'right' }}>
-                            Protein
-                          </th>
-                          <th style={MODAL_TH}></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {matched.map((meal) => {
-                          const totals = (meal.items || []).reduce(
-                            (acc, item) => {
-                              const qty =
-                                item.quantity ?? item.servings ?? 1;
-                              return {
-                                calories:
-                                  acc.calories +
-                                  (item.calories || 0) * qty,
-                                protein:
-                                  acc.protein +
-                                  (item.protein || 0) * qty,
-                              };
-                            },
-                            { calories: 0, protein: 0 }
-                          );
-                          const count = meal.items?.length ?? 0;
-                          return (
-                            <tr
-                              key={meal.id}
-                              onClick={() =>
-                                !saving && handleAddMeal(meal)
-                              }
-                              style={{
-                                cursor: saving ? 'wait' : 'pointer',
-                                opacity: saving ? 0.6 : 1,
-                                transition: 'background 120ms',
-                              }}
-                            >
-                              <td
-                                style={{ ...MODAL_TD, overflow: 'hidden' }}
-                              >
-                                <div style={{ minWidth: 0 }}>
-                                  <div
-                                    style={{
-                                      fontSize: 14,
-                                      fontWeight: 500,
-                                      overflow: 'hidden',
-                                      textOverflow: 'ellipsis',
-                                      whiteSpace: 'nowrap',
-                                    }}
-                                  >
-                                    {meal.name}
-                                  </div>
-                                  {meal.description && (
-                                    <div
-                                      style={{
-                                        fontSize: 11,
-                                        color:
-                                          'var(--color-muted-foreground)',
-                                        marginTop: 1,
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis',
-                                        whiteSpace: 'nowrap',
-                                      }}
-                                    >
-                                      {meal.description}
-                                    </div>
-                                  )}
-                                </div>
-                              </td>
-                              <td
-                                style={{
-                                  ...MODAL_TD,
-                                  textAlign: 'right',
-                                }}
-                              >
-                                <MonoNum size={13}>{count}</MonoNum>
-                              </td>
-                              <td
-                                style={{
-                                  ...MODAL_TD,
-                                  textAlign: 'right',
-                                }}
-                              >
-                                <MonoNum size={13}>
-                                  {Math.round(totals.calories)}
-                                </MonoNum>
-                                <span
-                                  style={{
-                                    fontSize: 10,
-                                    color:
-                                      'var(--color-muted-foreground)',
-                                    marginLeft: 2,
-                                  }}
-                                >
-                                  kcal
-                                </span>
-                              </td>
-                              <td
-                                style={{
-                                  ...MODAL_TD,
-                                  textAlign: 'right',
-                                }}
-                              >
-                                <MonoNum size={13}>
-                                  {Math.round(totals.protein)}
-                                </MonoNum>
-                                <span
-                                  style={{
-                                    fontSize: 10,
-                                    color:
-                                      'var(--color-muted-foreground)',
-                                    marginLeft: 2,
-                                  }}
-                                >
-                                  g
-                                </span>
-                              </td>
-                              <td
-                                style={{
-                                  ...MODAL_TD,
-                                  textAlign: 'right',
-                                }}
-                              >
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleAddMeal(meal);
-                                  }}
-                                  disabled={saving}
-                                  className="cursor-pointer"
-                                  style={{
-                                    width: 28,
-                                    height: 28,
-                                    borderRadius: 9999,
-                                    background: 'var(--color-primary)',
-                                    color:
-                                      'var(--color-primary-foreground)',
-                                    border: 0,
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    opacity: saving ? 0.5 : 1,
-                                  }}
-                                  aria-label="Log this meal"
-                                >
-                                  <Plus
-                                    style={{
-                                      width: 14,
-                                      height: 14,
-                                      strokeWidth: 2.5,
-                                    }}
-                                  />
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  );
-                })()}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </GlassModal>
+      {body}
+    </FoodSheet>
   );
 }
 
@@ -3466,6 +2464,7 @@ export default function JournalPage() {
         mealType={addMealType ?? 'breakfast'}
         date={dateStr}
         onAdded={handleEntryAdded}
+        caloriesLeft={goals.calories - totalCalories}
       />
       <EditEntryModal
         isOpen={!!editEntry}
