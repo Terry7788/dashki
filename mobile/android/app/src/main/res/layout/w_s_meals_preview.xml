@@ -10,7 +10,7 @@
 
     <LinearLayout android:id="@+id/calCol" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
         android:orientation="vertical" android:background="@drawable/w_s_press_b">
-        <FrameLayout android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="0.6"/>
+        <FrameLayout android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1"/>
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
             android:orientation="horizontal" android:gravity="bottom">
             <TextView android:id="@+id/calNum" android:layout_width="wrap_content" android:layout_height="wrap_content"
@@ -23,8 +23,7 @@
                 android:layout_marginBottom="4dp" android:text="1,385 / 2,200" android:textColor="#D5E3F2" android:textSize="14sp"/>
         </LinearLayout>
 
-        <FrameLayout android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1" android:minHeight="6dp"/>
-        <FrameLayout android:layout_width="match_parent" android:layout_height="16dp">
+        <FrameLayout android:layout_width="match_parent" android:layout_height="16dp" android:layout_marginTop="10dp">
             <ProgressBar android:id="@+id/segD" style="?android:attr/progressBarStyleHorizontal"
                 android:layout_width="match_parent" android:layout_height="match_parent"
                 android:progress="629" android:max="1000" android:progressDrawable="@drawable/w_s_seg_d"/>
@@ -39,9 +38,8 @@
                 android:progress="191" android:max="1000" android:progressDrawable="@drawable/w_s_seg_b"/>
         </FrameLayout>
 
-        <FrameLayout android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1" android:minHeight="6dp"/>
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:orientation="horizontal">
+            android:layout_marginTop="10dp" android:orientation="horizontal">
             <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
                 <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical"><TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="●" android:textColor="#FFD9B8" android:textSize="10sp"/><TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="3dp" android:text="Breakfast" android:textColor="#D5E3F2" android:textSize="12sp"/></LinearLayout>
                 <TextView android:id="@+id/mB" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:textSize="18sp" android:text="420" android:textColor="#FFFFFF" android:textStyle="bold"/>
@@ -59,6 +57,7 @@
                 <TextView android:id="@+id/mD" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:textSize="18sp" android:text="–" android:textColor="#FFFFFF" android:textStyle="bold"/>
             </LinearLayout>
         </LinearLayout>
+        <FrameLayout android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1"/>
     </LinearLayout>
 
     <FrameLayout android:layout_width="match_parent" android:layout_height="10dp"/>

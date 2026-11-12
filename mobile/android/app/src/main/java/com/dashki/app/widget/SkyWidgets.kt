@@ -51,9 +51,11 @@ object SkyWidgets {
         val p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         // Each widget: draw it with the bars where they were last time, then let them run to the new values.
         val runs = ArrayList<Triple<Int, Map<Int, Int>, Map<Int, Int>>>()
+        val layouts = HashMap<Int, Int>()
         for ((id, name) in ids) {
             val kind = Kind.valueOf(name)
-            val v = RemoteViews(ctx.packageName, kind.layout)
+            val layout = layoutFor(m, id, kind)
+            val v = RemoteViews(ctx.packageName, layout)
             val target = fill(ctx, kind, v, d)
             val from = HashMap<Int, Int>()
             for ((bar, value) in target) {
@@ -63,6 +65,7 @@ object SkyWidgets {
             }
             m.updateAppWidget(id, v)
             if (target.any { (bar, value) -> from[bar] != value }) runs.add(Triple(id, from, target))
+            layouts[id] = layout
             p.edit().apply { for ((bar, value) in target) putInt("$id.$bar", value) }.apply()
         }
         if (runs.isEmpty()) return
@@ -71,7 +74,7 @@ object SkyWidgets {
             val t = f.toDouble() / FRAMES
             val e = 1 - Math.pow(1 - t, 3.0)              // ease out
             for ((id, from, to) in runs) {
-                val v = RemoteViews(ctx.packageName, Kind.valueOf(ids[id]!!).layout)
+                val v = RemoteViews(ctx.packageName, layouts[id]!!)
                 for ((bar, end) in to) {
                     val start = from[bar] ?: end
                     val max = if (bar in PCT) 100 else 1000
@@ -102,6 +105,16 @@ object SkyWidgets {
         return mapOf(
             R.id.calRing to (eaten / goal * 100).toInt().coerceIn(0, 100),
             R.id.stepsRing to (steps / sGoal * 100).toInt().coerceIn(0, 100))
+    }
+
+    /** By meal has a compact layout for short widgets (the roomy one doesn't fit 2 short rows). The launcher tells us the
+     *  size; resizing calls onAppWidgetOptionsChanged, which redraws. */
+    private fun layoutFor(m: AppWidgetManager, id: Int, kind: Kind): Int {
+        if (kind != Kind.MEALS) return kind.layout
+        val o = m.getAppWidgetOptions(id)
+        val h = maxOf(o.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT), o.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT))
+        android.util.Log.d("SkyWidgets", "By meal $id height ${h}dp")
+        return if (h in 1 until 190) R.layout.w_s_meals_compact else kind.layout
     }
 
     /** Fills texts, colours and taps; returns each bar's value (the caller animates them). */

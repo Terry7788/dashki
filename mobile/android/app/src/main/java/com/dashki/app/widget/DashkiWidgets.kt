@@ -334,6 +334,10 @@ abstract class DashkiProvider : AppWidgetProvider() {
         DashkiWidgets.schedule(ctx)
         work { DashkiWidgets.refreshAll(ctx) }
     }
+    /** Resized: redraw (By meal switches between its compact and roomy layouts). */
+    override fun onAppWidgetOptionsChanged(ctx: Context, m: AppWidgetManager, id: Int, options: android.os.Bundle) {
+        work { DashkiWidgets.refreshAll(ctx) }
+    }
 }
 class TodayWidget : DashkiProvider()
 class StepsWidget : DashkiProvider()
