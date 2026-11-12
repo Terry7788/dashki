@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Lock-screen widget (calories): white text on a light navy tint so it reads over the sky wallpaper. No buttons (the phone is locked). -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@android:id/background"
+    android:id="@+id/wroot"
     android:layout_width="match_parent" android:layout_height="match_parent"
     android:orientation="horizontal" android:gravity="center_vertical" android:background="@drawable/w_s_lock_bg"
     android:paddingStart="14dp" android:paddingEnd="12dp" android:layoutAnimation="@anim/w_s_layout">

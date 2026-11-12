@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Preview in the widget picker (sample numbers). Widget 7 · This week (frosted white): calorie ring + Food button, steps Mon–Sun with the goal line. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@android:id/background"
+    android:id="@+id/wroot"
     android:layout_width="match_parent" android:layout_height="match_parent"
     android:orientation="horizontal" android:background="@drawable/w_s_glass_blue"
     android:paddingStart="14dp" android:paddingEnd="16dp" android:paddingTop="14dp" android:paddingBottom="14dp"

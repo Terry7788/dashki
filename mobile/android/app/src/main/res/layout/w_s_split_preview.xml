@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Preview in the widget picker (sample numbers). Widget 2 · Split in half (frosted white for the sky wallpaper). Ids shared with w_s_glass.xml. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@android:id/background"
+    android:id="@+id/wroot"
     android:layout_width="match_parent" android:layout_height="match_parent"
     android:orientation="vertical" android:background="@drawable/w_s_glass_blue"
     android:padding="14dp">

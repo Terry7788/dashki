@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Widget 8 · Deep-blue glass. Same ids as w_s_split.xml, filled by the same code. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@android:id/background"
+    android:id="@+id/wroot"
     android:layout_width="match_parent" android:layout_height="match_parent"
     android:orientation="vertical" android:background="@drawable/w_s_glass_blue"
     android:padding="14dp" android:layoutAnimation="@anim/w_s_layout">

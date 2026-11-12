@@ -2,7 +2,7 @@
 <!-- (Deep-blue glass look since 1.27.) Widget 5 · By meal (frosted white). The meal bar is four bars stacked on top of each other:
      dinner (with the track) underneath, then snack, lunch, breakfast, each filled to its running total. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@android:id/background"
+    android:id="@+id/wroot"
     android:layout_width="match_parent" android:layout_height="match_parent"
     android:orientation="vertical" android:background="@drawable/w_s_glass_blue"
     android:paddingStart="16dp" android:paddingEnd="16dp" android:paddingTop="14dp" android:paddingBottom="14dp"

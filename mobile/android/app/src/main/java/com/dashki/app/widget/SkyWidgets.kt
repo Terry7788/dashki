@@ -122,7 +122,7 @@ object SkyWidgets {
 
     /** Fills texts, colours and taps; returns each bar's value (the caller animates them). */
     private fun fill(ctx: Context, kind: Kind, v: RemoteViews, d: JSONObject?): Map<Int, Int> {
-        v.setOnClickPendingIntent(android.R.id.background, DashkiWidgets.open(ctx, "/"))
+        v.setOnClickPendingIntent(R.id.wroot, DashkiWidgets.open(ctx, "/"))
         if (kind.lock) return fillLock(ctx, v, d)
         v.setOnClickPendingIntent(R.id.calCol, DashkiWidgets.open(ctx, "/journal"))
         v.setOnClickPendingIntent(R.id.stepsCol, DashkiWidgets.open(ctx, "/steps"))
