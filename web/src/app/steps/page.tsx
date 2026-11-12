@@ -195,6 +195,15 @@ function StepsChart({
 
   const p = useMemo(() => period(range, off, byDay, first, today, hours), [range, off, byDay, first, today, hours]);
 
+  // Opens with today's bar picked, so the big number is today's steps (Terry, 2026-11-12). Once only:
+  // after that, taps and paging decide.
+  const openedOnToday = useRef(false);
+  useEffect(() => {
+    if (openedOnToday.current) return;
+    const i = p.bars.findIndex((b) => b.date && iso(b.date) === iso(today));
+    if (i >= 0) { openedOnToday.current = true; setSel(i); }
+  }, [p.bars, today]);
+
   // The entries list follows the day on screen: the D view's day, or a day bar tapped in W / M.
   const selDay = sel !== null ? p.bars[sel]?.date : undefined;
   useEffect(() => {
