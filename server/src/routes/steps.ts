@@ -186,6 +186,22 @@ function emitAggregateForDate(date: string) {
   }
 }
 
+// The phone keeps ONE "Samsung Health" entry a day, but two syncs at the same moment
+// (hourly job + app coming to the front) could each find none and both POST.
+const HEALTH_NOTE = 'Samsung Health';
+
+/** Remove extra "Samsung Health" entries for a date, keeping keepId. */
+function dropDuplicateHealth(date: string, keepId: number, done: () => void) {
+  db.run(
+    `DELETE FROM StepLogEntries WHERE date = ? AND note = ? AND id != ?`,
+    [date, HEALTH_NOTE, keepId],
+    (err) => {
+      if (err) console.error('[error] drop duplicate Samsung Health entries', err);
+      done();
+    }
+  );
+}
+
 // GET /logs?date=YYYY-MM-DD — list entries for a single day (ordered oldest→newest)
 router.get('/logs', (req: Request, res: Response) => {
   const date = req.query.date as string | undefined;
@@ -222,6 +238,53 @@ router.post('/logs', (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Invalid steps value (must be a positive integer)' });
   }
   const noteVal = typeof note === 'string' && note.trim() !== '' ? note.trim() : null;
+
+  if (noteVal === HEALTH_NOTE) {
+    // Update today's Samsung Health entry if there is one, else insert — one statement each,
+    // so two syncs at once can't both insert.
+    const now = nowLocalISO();
+    return db.run(
+      `UPDATE StepLogEntries SET steps = ?, logged_at = ?
+       WHERE id = (SELECT MIN(id) FROM StepLogEntries WHERE date = ? AND note = ?)`,
+      [stepsNum, now, date, HEALTH_NOTE],
+      function (err) {
+        if (err) {
+          console.error('[error] POST /api/steps/logs (health)', err);
+          return res.status(500).json({ error: 'Failed to save step log entry' });
+        }
+        const finish = () =>
+          db.get(
+            `SELECT id, date, steps, note, logged_at, created_at FROM StepLogEntries
+             WHERE date = ? AND note = ? ORDER BY id ASC LIMIT 1`,
+            [date, HEALTH_NOTE],
+            (err2, entry: StepLogRow | undefined) => {
+              if (err2 || !entry) {
+                console.error('[error] POST /api/steps/logs (health) fetch', err2);
+                return res.status(500).json({ error: 'Saved but failed to fetch' });
+              }
+              dropDuplicateHealth(date, entry.id, () => {
+                emitAggregateForDate(entry.date);
+                res.status(201).json(entry);
+              });
+            }
+          );
+        if (this.changes > 0) return finish();
+        db.run(
+          `INSERT INTO StepLogEntries (date, steps, note, logged_at)
+           SELECT ?, ?, ?, ? WHERE NOT EXISTS
+             (SELECT 1 FROM StepLogEntries WHERE date = ? AND note = ?)`,
+          [date, stepsNum, HEALTH_NOTE, now, date, HEALTH_NOTE],
+          (err3) => {
+            if (err3) {
+              console.error('[error] POST /api/steps/logs (health) insert', err3);
+              return res.status(500).json({ error: 'Failed to create step log entry' });
+            }
+            finish();
+          }
+        );
+      }
+    );
+  }
 
   db.run(
     `INSERT INTO StepLogEntries (date, steps, note, logged_at) VALUES (?, ?, ?, ?)`,
@@ -316,8 +379,10 @@ router.put('/logs/:id', (req: Request, res: Response) => {
             console.error('[error] PUT /api/steps/logs/:id fetch', err2);
             return res.status(500).json({ error: 'Updated but failed to fetch' });
           }
-          emitAggregateForDate(entry.date);
-          res.json(entry);
+          const send = () => { emitAggregateForDate(entry.date); res.json(entry); };
+          // Clears a duplicate left by an earlier double sync on the phone's next update.
+          if (entry.note === HEALTH_NOTE) dropDuplicateHealth(entry.date, entry.id, send);
+          else send();
         }
       );
     }
