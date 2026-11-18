@@ -583,6 +583,8 @@ export default function WeightPage() {
   }
 
   async function handleDelete(id: number) {
+    // Same guard as the Steps page: the bin is easy to hit by accident on a phone.
+    if (!window.confirm('Delete this weight entry?')) return;
     try {
       await deleteWeightEntry(id);
       setEntries((prev) => prev.filter((e) => e.id !== id));
@@ -705,7 +707,7 @@ export default function WeightPage() {
             )}
           </div>
         </div>
-        <GlassButton variant="primary" size="sm" onClick={() => setLogOpen(true)}>
+        <GlassButton variant="primary" size="sm" className="tap40 whitespace-nowrap flex-none" onClick={() => setLogOpen(true)}>
           <Plus style={{ width: 14, height: 14, strokeWidth: 2.25 }} />
           Log weight
         </GlassButton>
@@ -1009,7 +1011,12 @@ export default function WeightPage() {
                         background: 'transparent',
                         border: 0,
                         color: 'var(--color-muted-foreground)',
-                        padding: 4,
+                        width: 44,
+                        height: 44,
+                        margin: '-12px -12px -12px -8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
                         borderRadius: 4,
                       }}
                       aria-label="Delete entry"

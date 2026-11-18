@@ -98,10 +98,12 @@ function NumInput({
     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
       <input
         type="number"
+        inputMode="decimal"
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
         style={{
           width,
+          height: 44,
           textAlign: 'right',
           padding: '6px 10px',
           background: 'var(--color-surface)',
@@ -109,7 +111,7 @@ function NumInput({
           borderRadius: 4,
           color: 'var(--color-foreground)',
           fontFamily: 'inherit',
-          fontSize: 14,
+          fontSize: 16, // under 16 px an iPhone zooms the page on focus
         }}
       />
       <span style={{ fontSize: 12, color: 'var(--color-muted-foreground)' }}>
@@ -178,6 +180,8 @@ export default function SettingsPage() {
   const [notif, setNotif] = useState(true);
   const [voice, setVoice] = useState(false);
   const [savingDisplayName, setSavingDisplayName] = useState(false);
+  // Goals save on every change; this says so, so nobody hunts for a Save button.
+  const [goalsSaved, setGoalsSaved] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   // Which optional tiles render on the home dashboard. Calories is always on.
   const [homeMetrics, setHomeMetrics] = useState<HomeMetric[]>([
     'protein',
@@ -215,9 +219,10 @@ export default function SettingsPage() {
     setGoals(next);
     // updateGoals only accepts a Partial of the editable fields; cast to its
     // parameter type.
-    updateGoals({ [key]: value } as Parameters<typeof updateGoals>[0]).catch(
-      () => {}
-    );
+    setGoalsSaved('saving');
+    updateGoals({ [key]: value } as Parameters<typeof updateGoals>[0])
+      .then(() => setGoalsSaved('saved'))
+      .catch(() => setGoalsSaved('error'));
   }
 
   async function saveDisplayName() {
@@ -348,12 +353,28 @@ export default function SettingsPage() {
           icon={<Target style={{ width: 14, height: 14, strokeWidth: 2.25 }} />}
           hint={
             <span
+              role="status"
               style={{
-                fontSize: 12,
-                color: 'var(--color-muted-foreground)',
+                fontSize: goalsSaved === 'saved' ? 11 : 12,
+                fontWeight: goalsSaved === 'saved' ? 600 : 400,
+                padding: goalsSaved === 'saved' ? '3px 8px' : 0,
+                borderRadius: 9999,
+                background: goalsSaved === 'saved' ? 'rgba(26,174,57,0.15)' : 'transparent',
+                color:
+                  goalsSaved === 'saved'
+                    ? 'var(--color-success)'
+                    : goalsSaved === 'error'
+                    ? 'var(--color-critical)'
+                    : 'var(--color-muted-foreground)',
               }}
             >
-              Used across the dashboard.
+              {goalsSaved === 'saved'
+                ? '✓ Saved'
+                : goalsSaved === 'error'
+                ? 'Could not save'
+                : goalsSaved === 'saving'
+                ? 'Saving…'
+                : 'Changes save by themselves.'}
             </span>
           }
         >
