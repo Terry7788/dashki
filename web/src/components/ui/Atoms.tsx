@@ -243,7 +243,7 @@ export function CardShell({
           )
         ) : null}
       </div>
-      <div style={{ marginTop: 12 }}>{children}</div>
+      {children != null && children !== false && <div style={{ marginTop: 12 }}>{children}</div>}
     </div>
   );
 }

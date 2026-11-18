@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import { ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Loader2, Clock, Search, Copy, MoreHorizontal, Move, Sunrise, Sun, Cookie, Moon, X, Sparkles, BookOpen, Check } from 'lucide-react';
 import Link from 'next/link';
 import { FoodSheet, Seg, MealBar, SearchBox, Chips, NumBox, TextBox, Stepper, FoodAmount, foodTotals, defaultAmount, useIsWide } from '@/components/food/FoodSheet';
-import { GlassCard, GlassButton, GlassInput, GlassModal, CalorieRing, MacroBar, MicroLabel, MonoNum, EmptyState, CardShell } from '@/components/ui';
+import { GlassCard, GlassButton, GlassInput, GlassModal, CalorieRing, MacroBar, MicroLabel, MonoNum, EmptyState, CardShell, ProgressBar } from '@/components/ui';
 import {
   FOOD_TAGS,
   inferTag,
@@ -1432,7 +1432,7 @@ function EntryRow({
         display: 'grid',
         gridTemplateColumns: 'minmax(0, 1fr) auto auto auto',
         alignItems: 'center',
-        gap: 14,
+        columnGap: 10,
         padding: '8px 12px',
         margin: '0 -12px',
         borderBottom: '1px solid var(--color-border)',
@@ -1445,11 +1445,14 @@ function EntryRow({
       <div style={{ minWidth: 0 }}>
         <div
           style={{
+            // Up to two lines, so long names are readable on phones
             fontSize: 14,
             fontWeight: 500,
+            lineHeight: '19px',
             overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
           }}
         >
           {entry.food_name_snapshot}
@@ -1502,7 +1505,12 @@ function EntryRow({
           background: 'transparent',
           border: 0,
           color: 'var(--color-muted-foreground)',
-          padding: 4,
+          width: 44,
+          height: 44,
+          margin: '-8px -12px -8px -8px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
           borderRadius: 4,
         }}
         aria-label="More actions"
@@ -1510,7 +1518,7 @@ function EntryRow({
         {deleting ? (
           <Loader2 style={{ width: 14, height: 14 }} className="animate-spin" />
         ) : (
-          <MoreHorizontal style={{ width: 14, height: 14, strokeWidth: 1.75 }} />
+          <MoreHorizontal style={{ width: 16, height: 16, strokeWidth: 1.75 }} />
         )}
       </button>
 
@@ -1648,10 +1656,15 @@ function MealSection({
             style={{
               display: 'flex',
               gap: 10,
-              alignItems: 'baseline',
+              alignItems: 'center',
               flexShrink: 0,
             }}
           >
+            {entries.length === 0 && (
+              <span style={{ fontSize: 12, color: 'var(--color-muted-foreground)', whiteSpace: 'nowrap' }}>
+                {dragOver ? 'Drop to move here' : 'Nothing logged'}
+              </span>
+            )}
             {entries.length > 0 && (
               <span
                 style={{
@@ -1689,9 +1702,11 @@ function MealSection({
                 background: 'transparent',
                 border: 0,
                 color: 'var(--color-link)',
-                fontSize: 12,
+                fontSize: 13,
                 fontWeight: 600,
-                padding: 0,
+                minHeight: 44,
+                padding: '0 12px',
+                margin: '-12px -12px -12px -8px',
               }}
             >
               + Add
@@ -1699,13 +1714,7 @@ function MealSection({
           </div>
         }
       >
-        {entries.length === 0 ? (
-          <EmptyState>
-            {dragOver
-              ? 'Drop to move here'
-              : `No ${MEAL_LABELS[type].toLowerCase()} logged.`}
-          </EmptyState>
-        ) : (
+        {entries.length === 0 ? null : (
           <ul
             style={{
               listStyle: 'none',
@@ -1729,6 +1738,57 @@ function MealSection({
           </ul>
         )}
       </CardShell>
+    </div>
+  );
+}
+
+// ─── Day summary bar (one-column layout: sits above the meals) ────────────────
+
+function JournalSummaryBar({
+  calories,
+  protein,
+  goals,
+}: {
+  calories: number;
+  protein: number;
+  goals: { calories: number; protein: number };
+}) {
+  const left = Math.round(goals.calories - calories);
+  const over = left < 0;
+  return (
+    <div
+      style={{
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 12,
+        boxShadow: 'var(--shadow-card)',
+        padding: '14px 20px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+        <span>
+          <MonoNum size={23}>{Math.round(calories).toLocaleString()}</MonoNum>
+          <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--color-muted-foreground)' }}>
+            of {goals.calories.toLocaleString()} kcal
+          </span>
+        </span>
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 600,
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            color: over ? 'var(--color-critical)' : 'var(--color-success)',
+          }}
+        >
+          {over ? `${Math.abs(left).toLocaleString()} over` : `${left.toLocaleString()} left`}
+        </span>
+      </div>
+      <ProgressBar value={calories} max={goals.calories} tone={over ? 'critical' : 'primary'} />
+      <MacroBar label="Protein" value={Math.round(protein)} target={goals.protein} />
     </div>
   );
 }
@@ -1961,15 +2021,17 @@ function QuickAddPanel({
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Find a food…"
+          aria-label="Find a food"
           style={{
             width: '100%',
+            height: 44,
             padding: '8px 10px 8px 32px',
             background: 'var(--color-surface)',
             border: '1px solid var(--color-border)',
             borderRadius: 4,
             color: 'var(--color-foreground)',
             fontFamily: 'inherit',
-            fontSize: 14,
+            fontSize: 16, // under 16 px an iPhone zooms the page on focus
           }}
         />
       </div>
@@ -2016,7 +2078,8 @@ function QuickAddPanel({
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
-                padding: '6px 8px',
+                minHeight: 44,
+                padding: '0 0 0 8px',
                 borderRadius: 4,
                 fontSize: 13,
               }}
@@ -2044,17 +2107,32 @@ function QuickAddPanel({
                 onClick={() => addOne(f)}
                 disabled={adding === f.id}
                 className="cursor-pointer"
+                aria-label={`Add ${f.name}`}
                 style={{
-                  background: 'var(--color-soft)',
+                  // 44 px target around the same small soft button
+                  background: 'transparent',
                   border: 0,
-                  borderRadius: 4,
-                  padding: '3px 6px',
+                  width: 44,
+                  height: 44,
+                  padding: 0,
                   display: 'flex',
                   alignItems: 'center',
+                  justifyContent: 'center',
                   color: 'var(--color-foreground)',
                   opacity: adding === f.id ? 0.5 : 1,
                 }}
               >
+                <span
+                  style={{
+                    background: 'var(--color-soft)',
+                    borderRadius: 4,
+                    width: 32,
+                    height: 28,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
                 {adding === f.id ? (
                   <Loader2
                     style={{ width: 12, height: 12 }}
@@ -2065,6 +2143,7 @@ function QuickAddPanel({
                     style={{ width: 12, height: 12, strokeWidth: 2.25 }}
                   />
                 )}
+                </span>
               </button>
             </li>
           );
@@ -2285,7 +2364,7 @@ export default function JournalPage() {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <GlassButton variant="outline" size="sm" onClick={handlePrevDay}>
+          <GlassButton variant="outline" size="sm" onClick={handlePrevDay} className="tap40" title="Previous day">
             <ChevronLeft style={{ width: 14, height: 14 }} />
           </GlassButton>
           <GlassButton
@@ -2293,6 +2372,8 @@ export default function JournalPage() {
             size="sm"
             onClick={handleNextDay}
             disabled={isToday}
+            className="tap40"
+            title="Next day"
           >
             <ChevronRight style={{ width: 14, height: 14 }} />
           </GlassButton>
@@ -2344,6 +2425,7 @@ export default function JournalPage() {
         <GlassButton
           variant="primary"
           size="sm"
+          className="hidden md:inline-flex"
           onClick={() => setAddMealType(defaultMealForNow())}
         >
           <Plus style={{ width: 14, height: 14, strokeWidth: 2.25 }} />
@@ -2351,6 +2433,7 @@ export default function JournalPage() {
         </GlassButton>
       </div>
       <div
+        className="journal-wide-only"
         style={{
           color: 'var(--color-muted-foreground)',
           marginTop: 4,
@@ -2358,6 +2441,11 @@ export default function JournalPage() {
         }}
       >
         Logged across the day. Tap any entry to edit.
+      </div>
+
+      {/* One column (under 900 px): the day's total comes first, as a slim bar. */}
+      <div className="journal-sumbar">
+        <JournalSummaryBar calories={totalCalories} protein={totalProtein} goals={goals} />
       </div>
 
       {error && (
@@ -2417,6 +2505,7 @@ export default function JournalPage() {
         <div
           style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
         >
+          <div className="journal-wide-only">
           <JournalSummaryCard
             calories={totalCalories}
             protein={totalProtein}
@@ -2424,6 +2513,7 @@ export default function JournalPage() {
             entries={entries.length}
             goals={goals}
           />
+          </div>
           <QuickAddPanel
             date={dateStr}
             defaultMeal={defaultMealForNow()}
@@ -2454,9 +2544,20 @@ export default function JournalPage() {
       </div>
 
       <style jsx>{`
+        :global(.journal-sumbar) {
+          display: none;
+        }
         @media (max-width: 900px) {
           :global(.journal-grid) {
             grid-template-columns: minmax(0, 1fr) !important;
+            margin-top: 12px !important;
+          }
+          :global(.journal-wide-only) {
+            display: none;
+          }
+          :global(.journal-sumbar) {
+            display: block;
+            margin-top: 14px;
           }
         }
       `}</style>
