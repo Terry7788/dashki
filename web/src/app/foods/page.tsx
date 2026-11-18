@@ -45,7 +45,7 @@ import { getFoods, createFood, updateFood, deleteFood, addJournalEntry, estimate
 import type { Food, MealType } from '@/lib/types';
 import { useSocketEvent } from '@/lib/useSocketEvent';
 import { useIsNarrow } from '@/lib/useIsNarrow';
-import { FoodSheet, Seg, NumBox, Toggle, Stepper, useIsWide } from '@/components/food/FoodSheet';
+import { FoodSheet, Seg, MealBar, NumBox, Toggle, Stepper, useIsWide } from '@/components/food/FoodSheet';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -980,11 +980,14 @@ function FoodRow({
           <div style={{ minWidth: 0, flex: 1 }}>
             <div
               style={{
+                // Up to two lines, so long names are readable on phones
                 fontSize: 14,
                 fontWeight: 500,
+                lineHeight: '19px',
                 overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
               }}
             >
               {food.name}
@@ -1062,21 +1065,25 @@ function FoodDetail({
   onEdit,
   onDelete,
   onQuickLog,
+  inSheet = false,
 }: {
   food: Food | null;
   onAddToJournal: (food: Food) => void;
   onEdit: (food: Food) => void;
   onDelete: (food: Food) => void;
-  onQuickLog: (food: Food, servings: number) => Promise<void>;
+  onQuickLog: (food: Food, servings: number, meal: MealType) => Promise<void>;
+  /** Phones: shown inside the bottom sheet, so no card chrome of its own. */
+  inSheet?: boolean;
 }) {
   const [logging, setLogging] = useState<number | null>(null);
   const [justLogged, setJustLogged] = useState<number | null>(null);
+  const [meal, setMeal] = useState<MealType>(defaultMealForNow);
 
   async function handleQuickServing(s: number) {
     if (!food) return;
     setLogging(s);
     try {
-      await onQuickLog(food, s);
+      await onQuickLog(food, s, meal);
       setJustLogged(s);
       setTimeout(() => setJustLogged(null), 1400);
     } finally {
@@ -1112,15 +1119,19 @@ function FoodDetail({
 
   return (
     <div
-      style={{
-        background: 'var(--color-surface)',
-        border: '1px solid var(--color-border)',
-        borderRadius: 12,
-        boxShadow: 'var(--shadow-card)',
-        padding: 24,
-        position: 'sticky',
-        top: 32,
-      }}
+      style={
+        inSheet
+          ? { padding: '4px 16px 20px' }
+          : {
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 12,
+              boxShadow: 'var(--shadow-card)',
+              padding: 24,
+              position: 'sticky',
+              top: 32,
+            }
+      }
     >
       <div
         style={{
@@ -1128,6 +1139,7 @@ function FoodDetail({
           alignItems: 'center',
           gap: 12,
           marginBottom: 16,
+          paddingRight: inSheet ? 44 : 0, // room for the sheet's close button
         }}
       >
         <div
@@ -1198,10 +1210,12 @@ function FoodDetail({
           paddingTop: 16,
         }}
       >
-        <MicroLabel style={{ marginBottom: 8 }}>
-          Quick serving · logs to {MEAL_LABELS[defaultMealForNow()]}
+        <MicroLabel style={{ marginBottom: 8 }}>Log to</MicroLabel>
+        <div className="fd-seg"><MealBar value={meal} onChange={setMeal} /></div>
+        <MicroLabel style={{ margin: '14px 0 8px' }}>
+          Quick serving · one tap logs to {MEAL_LABELS[meal].toLowerCase()}
         </MicroLabel>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6 }}>
           {[0.5, 1, 1.5, 2].map((s) => {
             const isLogging = logging === s;
             const isSuccess = justLogged === s;
@@ -1213,9 +1227,11 @@ function FoodDetail({
                 disabled={logging !== null}
                 className="cursor-pointer"
                 style={{
-                  padding: '6px 12px',
+                  minHeight: 44,
+                  padding: '6px 4px',
                   fontSize: 13,
                   fontWeight: 600,
+                  whiteSpace: 'nowrap',
                   background: isSuccess
                     ? 'var(--color-success)'
                     : isLogging
@@ -1260,22 +1276,24 @@ function FoodDetail({
           marginTop: 16,
           paddingTop: 16,
           display: 'flex',
+          flexWrap: 'wrap',
           gap: 8,
         }}
       >
         <GlassButton
           variant="primary"
           size="sm"
+          className="tap44 grow"
           onClick={() => onAddToJournal(food)}
         >
           <Plus style={{ width: 14, height: 14, strokeWidth: 2.25 }} />
           Add to journal
         </GlassButton>
-        <GlassButton variant="outline" size="sm" onClick={() => onEdit(food)}>
+        <GlassButton variant="outline" size="sm" className="tap44 half" onClick={() => onEdit(food)}>
           <Pencil style={{ width: 14, height: 14, strokeWidth: 2 }} />
           Edit
         </GlassButton>
-        <GlassButton variant="danger" size="sm" onClick={() => onDelete(food)}>
+        <GlassButton variant="danger" size="sm" className="tap44 half" onClick={() => onDelete(food)}>
           <Trash2 style={{ width: 14, height: 14, strokeWidth: 2 }} />
           Delete
         </GlassButton>
@@ -1333,6 +1351,9 @@ export default function FoodsPage() {
   const [deletingFood, setDeletingFood] = useState<Food | null>(null);
   const [journalFood, setJournalFood] = useState<Food | null>(null);
   const [debouncedQuery, setDebouncedQuery] = useState('');
+  // Under 900 px the list fills the page and a tapped food opens in a bottom sheet.
+  const oneCol = useIsNarrow(900);
+  const [detailOpen, setDetailOpen] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchFoods = useCallback(() => {
@@ -1406,6 +1427,17 @@ export default function FoodsPage() {
     setFoods((prev) => prev.filter((f) => f.id !== id));
     if (selected === id) setSelected(foods[0]?.id ?? null);
   }
+  async function quickLog(f: Food, servings: number, meal: MealType) {
+    const today = new Date().toLocaleString('en-CA').split(',')[0];
+    await addJournalEntry({
+      date: today,
+      meal_type: meal,
+      food_id: f.id,
+      food_name_snapshot: f.name,
+      quantity: servings,
+      unit: 'serving',
+    });
+  }
   function handleAddToJournal(food: Food, mealType: MealType, servings: number) {
     const today = new Date().toLocaleString('en-CA').split(',')[0];
     addJournalEntry({
@@ -1446,7 +1478,7 @@ export default function FoodsPage() {
         >
           Foods
         </h1>
-        <GlassButton variant="primary" size="sm" onClick={handleOpenAdd}>
+        <GlassButton variant="primary" size="sm" className="tap40" onClick={handleOpenAdd}>
           <Plus style={{ width: 14, height: 14, strokeWidth: 2.25 }} />
           New food
         </GlassButton>
@@ -1486,7 +1518,7 @@ export default function FoodsPage() {
         className="foods-grid"
         style={{
           display: 'grid',
-          gridTemplateColumns: '1.7fr 1fr',
+          gridTemplateColumns: 'minmax(0, 1.5fr) minmax(340px, 1fr)',
           gap: 16,
           marginTop: 24,
         }}
@@ -1527,15 +1559,17 @@ export default function FoodsPage() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search foods…"
+                aria-label="Search foods"
                 style={{
                   width: '100%',
+                  height: 44,
                   padding: '8px 10px 8px 32px',
                   background: 'var(--color-surface)',
                   border: '1px solid var(--color-border)',
                   borderRadius: 4,
                   color: 'var(--color-foreground)',
                   fontFamily: 'inherit',
-                  fontSize: 14,
+                  fontSize: 16, // under 16 px an iPhone zooms the page on focus
                 }}
               />
             </div>
@@ -1544,7 +1578,9 @@ export default function FoodsPage() {
               onChange={(e) =>
                 setSort(e.target.value as 'name' | 'calories' | 'protein')
               }
+              aria-label="Sort"
               style={{
+                height: 44,
                 padding: '8px 10px',
                 background: 'var(--color-surface)',
                 border: '1px solid var(--color-border)',
@@ -1575,7 +1611,8 @@ export default function FoodsPage() {
                 onClick={() => setTag(t)}
                 className="cursor-pointer"
                 style={{
-                  padding: '4px 10px',
+                  minHeight: 32,
+                  padding: '4px 12px',
                   borderRadius: 9999,
                   fontSize: 12,
                   fontWeight: 600,
@@ -1599,12 +1636,17 @@ export default function FoodsPage() {
           </div>
 
           <div
-            style={{
-              height: 'calc(100vh - 280px)',
-              minHeight: 480,
-              overflowY: 'auto',
-              overflowX: 'hidden',
-            }}
+            style={
+              oneCol
+                ? undefined
+                : {
+                    // Wide screens: the list scrolls inside its own panel
+                    height: 'calc(100vh - 290px)',
+                    minHeight: 240,
+                    overflowY: 'auto',
+                    overflowX: 'hidden',
+                  }
+            }
           >
             {loading ? (
               <div style={{ padding: 16 }}>
@@ -1647,7 +1689,7 @@ export default function FoodsPage() {
                 </colgroup>
                 <thead
                   style={{
-                    position: 'sticky',
+                    position: oneCol ? 'static' : 'sticky',
                     top: 0,
                     background: 'var(--color-surface)',
                     zIndex: 1,
@@ -1665,8 +1707,11 @@ export default function FoodsPage() {
                     <FoodRow
                       key={f.id}
                       food={f}
-                      selected={f.id === selected}
-                      onSelect={() => setSelected(f.id)}
+                      selected={!oneCol && f.id === selected}
+                      onSelect={() => {
+                        setSelected(f.id);
+                        if (oneCol) setDetailOpen(true);
+                      }}
                       showTag={!isNarrow}
                     />
                   ))}
@@ -1676,25 +1721,38 @@ export default function FoodsPage() {
           </div>
         </div>
 
-        {/* RIGHT — detail panel */}
-        <FoodDetail
-          food={selectedFood}
-          onAddToJournal={(f) => setJournalFood(f)}
-          onEdit={(f) => handleEdit(f)}
-          onDelete={(f) => setDeletingFood(f)}
-          onQuickLog={async (f, servings) => {
-            const today = new Date().toLocaleString('en-CA').split(',')[0];
-            await addJournalEntry({
-              date: today,
-              meal_type: defaultMealForNow(),
-              food_id: f.id,
-              food_name_snapshot: f.name,
-              quantity: servings,
-              unit: 'serving',
-            });
-          }}
-        />
+        {/* RIGHT — detail panel (wide screens) */}
+        {!oneCol && (
+          <FoodDetail
+            food={selectedFood}
+            onAddToJournal={(f) => setJournalFood(f)}
+            onEdit={(f) => handleEdit(f)}
+            onDelete={(f) => setDeletingFood(f)}
+            onQuickLog={quickLog}
+          />
+        )}
       </div>
+
+      {/* Phones: the same detail, as a sheet over the list */}
+      {oneCol && detailOpen && selectedFood && (
+        <div className="fs-wrap" role="dialog" aria-modal="true" aria-label={selectedFood.name}>
+          <div className="fs-back" onClick={() => setDetailOpen(false)} aria-hidden="true" />
+          <div className="fd-panel">
+            <div className="fs-grab" />
+            <button type="button" className="fs-x fd-x" onClick={() => setDetailOpen(false)} aria-label="Close">
+              <X style={{ width: 18, height: 18 }} />
+            </button>
+            <FoodDetail
+              inSheet
+              food={selectedFood}
+              onAddToJournal={(f) => { setDetailOpen(false); setJournalFood(f); }}
+              onEdit={(f) => { setDetailOpen(false); handleEdit(f); }}
+              onDelete={(f) => { setDetailOpen(false); setDeletingFood(f); }}
+              onQuickLog={quickLog}
+            />
+          </div>
+        </div>
+      )}
 
       <style jsx>{`
         @media (max-width: 900px) {

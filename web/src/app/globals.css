@@ -619,3 +619,15 @@ i[data-lucide] > svg { width: var(--icon-size, 16px); height: var(--icon-size, 1
   .cal-sub { display: none; }
   .cal-key { display: flex; gap: 14px; margin: 4px 0 0; padding: 0; list-style: none; }
 }
+
+.tap44 { min-height: 44px; }
+.tap44.grow { flex: 1 1 100%; }
+.tap44.half { flex: 1 1 0; }
+.fd-seg .fs-seg > button { padding: 8px 2px; }
+
+/* Foods on phones: the food detail as a bottom sheet over the full-page list */
+.fd-panel { position: relative; width: 100%; max-height: calc(100svh - 24px); overflow-y: auto; overscroll-behavior: contain;
+  background: var(--color-surface); color: var(--color-foreground); border-radius: 22px 22px 0 0; box-shadow: var(--shadow-deep);
+  padding-bottom: env(safe-area-inset-bottom); animation: fsUp .26s cubic-bezier(.2,.8,.2,1) both; scrollbar-width: none; }
+.fd-panel::-webkit-scrollbar { display: none; }
+.fd-x { position: absolute; right: 14px; top: 14px; z-index: 1; }
