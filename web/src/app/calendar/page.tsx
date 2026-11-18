@@ -209,6 +209,7 @@ export default function CalendarPage() {
             Calendar
           </h1>
           <div
+            className="cal-sub"
             style={{
               color: 'var(--color-muted-foreground)',
               marginTop: 4,
@@ -217,6 +218,12 @@ export default function CalendarPage() {
           >
             Your meals, weigh-ins, and movement at a glance.
           </div>
+          {/* Phones: the colour key sits here, because the chips drop their units to fit. */}
+          <ul className="cal-key">
+            <LegendItem color="var(--color-warning)" label="Calories" />
+            <LegendItem color="var(--color-primary)" label="Steps" />
+            <LegendItem color="var(--color-teal)" label="Weight" />
+          </ul>
         </div>
       </div>
 
@@ -245,7 +252,7 @@ export default function CalendarPage() {
               padding: '14px 16px',
               borderBottom: '1px solid var(--color-border)',
               display: 'flex',
-              alignItems: 'baseline',
+              alignItems: 'center',
               justifyContent: 'space-between',
               gap: 12,
             }}
@@ -261,13 +268,13 @@ export default function CalendarPage() {
               {MONTHS[month]} {year}
             </h2>
             <div style={{ display: 'flex', gap: 4 }}>
-              <GlassButton variant="outline" size="sm" onClick={prevMonth}>
+              <GlassButton variant="outline" size="sm" onClick={prevMonth} className="tap40" title="Previous month">
                 <ChevronLeft style={{ width: 14, height: 14 }} />
               </GlassButton>
-              <GlassButton variant="outline" size="sm" onClick={goToday}>
+              <GlassButton variant="outline" size="sm" onClick={goToday} className="tap40">
                 Today
               </GlassButton>
-              <GlassButton variant="outline" size="sm" onClick={nextMonth}>
+              <GlassButton variant="outline" size="sm" onClick={nextMonth} className="tap40" title="Next month">
                 <ChevronRight style={{ width: 14, height: 14 }} />
               </GlassButton>
             </div>
@@ -277,7 +284,7 @@ export default function CalendarPage() {
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(7, 1fr)',
+              gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
               borderBottom: '1px solid var(--color-border)',
             }}
           >
@@ -285,13 +292,13 @@ export default function CalendarPage() {
               <div
                 key={d}
                 style={{
-                  padding: '8px 10px',
+                  padding: '8px 0',
                   fontSize: 10,
                   fontWeight: 600,
                   textTransform: 'uppercase',
                   letterSpacing: '0.06em',
                   color: 'var(--color-muted-foreground)',
-                  textAlign: 'left',
+                  textAlign: 'center',
                   borderLeft: '1px solid var(--color-border)',
                 }}
               >
@@ -310,7 +317,7 @@ export default function CalendarPage() {
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(7, 1fr)',
+                gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
               }}
             >
               {cells.map(({ date, isCurrentMonth }, idx) => {
@@ -326,12 +333,12 @@ export default function CalendarPage() {
                   <button
                     key={idx}
                     onClick={() => setSelectedDay(date)}
-                    className="cursor-pointer"
+                    className="cursor-pointer cal-cell"
                     style={{
                       minHeight: 92,
                       borderLeft: '1px solid var(--color-border)',
                       borderBottom: '1px solid var(--color-border)',
-                      padding: '6px 8px',
+                      minWidth: 0,
                       textAlign: 'left',
                       background:
                         !isCurrentMonth
@@ -380,9 +387,9 @@ export default function CalendarPage() {
                       >
                         {cal != null && (
                           <div
+                            className="cal-chip"
                             style={{
                               fontSize: 10,
-                              padding: '2px 5px',
                               borderRadius: 3,
                               background: 'var(--color-surface-warm)',
                               borderLeft: '2px solid var(--color-warning)',
@@ -393,14 +400,14 @@ export default function CalendarPage() {
                               whiteSpace: 'nowrap',
                             }}
                           >
-                            {Math.round(cal)} kcal
+                            {Math.round(cal)}<span className="cal-unit"> kcal</span>
                           </div>
                         )}
                         {steps != null && (
                           <div
+                            className="cal-chip"
                             style={{
                               fontSize: 10,
-                              padding: '2px 5px',
                               borderRadius: 3,
                               background: 'var(--color-surface-warm)',
                               borderLeft: '2px solid var(--color-primary)',
@@ -411,14 +418,14 @@ export default function CalendarPage() {
                               whiteSpace: 'nowrap',
                             }}
                           >
-                            {(steps / 1000).toFixed(1)}k steps
+                            {(steps / 1000).toFixed(1)}k<span className="cal-unit"> steps</span>
                           </div>
                         )}
                         {weight != null && (
                           <div
+                            className="cal-chip"
                             style={{
                               fontSize: 10,
-                              padding: '2px 5px',
                               borderRadius: 3,
                               background: 'var(--color-surface-warm)',
                               borderLeft: '2px solid var(--color-teal)',
@@ -429,7 +436,7 @@ export default function CalendarPage() {
                               whiteSpace: 'nowrap',
                             }}
                           >
-                            {weight.toFixed(1)} kg
+                            {weight.toFixed(1)}<span className="cal-unit"> kg</span>
                           </div>
                         )}
                       </div>

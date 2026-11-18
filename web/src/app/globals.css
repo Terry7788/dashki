@@ -603,3 +603,19 @@ i[data-lucide] > svg { width: var(--icon-size, 16px); height: var(--icon-size, 1
 /* Home: the four meal rows. One column on small phones, two from 440 px (Fold cover and up). */
 .home-meals { display: grid; grid-template-columns: minmax(0, 1fr); gap: 9px; }
 @media (min-width: 440px) { .home-meals { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } }
+
+/* Buttons that need a finger-sized target (40 px high, at least 44 px wide) */
+.tap40 { min-height: 40px; min-width: 44px; }
+
+/* Calendar month grid. Seven equal columns at every width; on phones the chips
+   drop their units ("1401" not "1401 kcal") and the colour key moves under the title. */
+.cal-cell { padding: 6px 8px; }
+.cal-chip { padding: 2px 5px; }
+.cal-key { display: none; }
+@media (max-width: 640px) {
+  .cal-cell { padding: 5px 3px 4px; min-height: 84px !important; }
+  .cal-chip { padding: 1px 3px; }
+  .cal-unit { display: none; }
+  .cal-sub { display: none; }
+  .cal-key { display: flex; gap: 14px; margin: 4px 0 0; padding: 0; list-style: none; }
+}
