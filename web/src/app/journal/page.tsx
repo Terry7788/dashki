@@ -708,15 +708,35 @@ function AddFoodModal({ isOpen, onClose, mealType: initialMealType, date, onAdde
     top = <>{tabs}</>;
     const canAdd = !!quickName.trim() && !!quickCalories && !saving;
     body = (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: wide ? 560 : undefined, paddingTop: 4 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: wide ? 12 : 10, maxWidth: wide ? 560 : undefined, paddingTop: wide ? 4 : 0 }}>
         {errorBox}
-        <TextBox label="What did you eat?" value={quickName} placeholder="e.g. 2 slices of pepperoni pizza"
-          onChange={(v) => { setQuickName(v); if (aiResult) setAiResult(null); if (aiError) setAiError(''); }} />
-        <button type="button" className="fs-btn2 ai" onClick={handleAiGuess} disabled={!quickName.trim() || aiEstimating}>
-          {aiEstimating
-            ? <><Loader2 className="animate-spin" style={{ width: 16, height: 16 }} /> AI is guessing…</>
-            : <><Sparkles style={{ width: 16, height: 16 }} /> Let AI guess calories and protein</>}
-        </button>
+        {wide ? (
+          <>
+            <TextBox label="What did you eat?" value={quickName} placeholder="e.g. 2 slices of pepperoni pizza"
+              onChange={(v) => { setQuickName(v); if (aiResult) setAiResult(null); if (aiError) setAiError(''); }} />
+            <button type="button" className="fs-btn2 ai" onClick={handleAiGuess} disabled={!quickName.trim() || aiEstimating}>
+              {aiEstimating
+                ? <><Loader2 className="animate-spin" style={{ width: 16, height: 16 }} /> AI is guessing…</>
+                : <><Sparkles style={{ width: 16, height: 16 }} /> Let AI guess calories and protein</>}
+            </button>
+          </>
+        ) : (
+          // Phones: everything has to fit above the keyboard, so the AI button sits beside the
+          // name and the Add buttons sit right under the numbers (not pinned to the bottom,
+          // where they used to cover the number boxes once the keyboard opened).
+          <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <TextBox value={quickName} placeholder="What did you eat?" ariaLabel="What did you eat?"
+                onChange={(v) => { setQuickName(v); if (aiResult) setAiResult(null); if (aiError) setAiError(''); }} />
+            </div>
+            <button type="button" className="fs-btn2 ai" style={{ width: 'auto', flex: 'none', padding: '0 14px' }}
+              onClick={handleAiGuess} disabled={!quickName.trim() || aiEstimating} aria-label="Let AI guess calories and protein">
+              {aiEstimating
+                ? <Loader2 className="animate-spin" style={{ width: 16, height: 16 }} />
+                : <><Sparkles style={{ width: 16, height: 16 }} /> AI guess</>}
+            </button>
+          </div>
+        )}
         {aiError && <div className="fs-err">{aiError}</div>}
         {aiResult && !aiError && (
           <div className="fs-ai fs-flash">
@@ -730,7 +750,18 @@ function AddFoodModal({ isOpen, onClose, mealType: initialMealType, date, onAdde
           <NumBox big label="Calories" value={quickCalories} onChange={setQuickCalories} unit="kcal" />
           <NumBox big label="Protein" value={quickProtein} onChange={setQuickProtein} unit="g" step="0.1" />
         </div>
-        <div className="fs-meta" style={{ whiteSpace: 'normal' }}>Only logs it to this day. “Add and save” also keeps it in your foods.</div>
+        {wide && <div className="fs-meta" style={{ whiteSpace: 'normal' }}>Only logs it to this day. “Add and save” also keeps it in your foods.</div>}
+        {!wide && (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" className="fs-btn2" style={{ height: 52, width: 'auto', flex: 'none', padding: '0 14px' }}
+              onClick={handleQuickAddAndSave} disabled={!canAdd} title="Also keeps it in your foods">
+              <BookOpen style={{ width: 16, height: 16 }} /> {saving ? 'Saving…' : 'Add and save'}
+            </button>
+            <button type="button" className="fs-btn" style={{ flex: 1, width: 'auto' }} onClick={handleQuickAdd} disabled={!canAdd}>
+              {saving ? 'Adding…' : `Add to ${mealLabel}`}
+            </button>
+          </div>
+        )}
         {wide && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 4 }}>
             <button type="button" className="fs-btn2" style={{ height: 52 }} onClick={handleQuickAddAndSave} disabled={!canAdd}>
@@ -741,16 +772,6 @@ function AddFoodModal({ isOpen, onClose, mealType: initialMealType, date, onAdde
         )}
       </div>
     );
-    if (!wide) {
-      foot = (
-        <>
-          <button type="button" className="fs-btn" onClick={handleQuickAdd} disabled={!canAdd}>{saving ? 'Adding…' : `Add to ${mealLabel}`}</button>
-          <button type="button" className="fs-btn2" onClick={handleQuickAddAndSave} disabled={!canAdd}>
-            <BookOpen style={{ width: 16, height: 16 }} /> Add and save to my foods
-          </button>
-        </>
-      );
-    }
   }
 
   return (

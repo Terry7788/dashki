@@ -197,12 +197,12 @@ export function NumBox({
 }
 
 export function TextBox({
-  label, value, onChange, placeholder, autoFocus,
-}: { label?: ReactNode; value: string; onChange: (v: string) => void; placeholder?: string; autoFocus?: boolean }) {
+  label, value, onChange, placeholder, autoFocus, ariaLabel,
+}: { label?: ReactNode; value: string; onChange: (v: string) => void; placeholder?: string; autoFocus?: boolean; ariaLabel?: string }) {
   return (
     <label className="fs-field">
       {label && <span className="fs-label">{label}</span>}
-      <input className="fs-input" type="text" value={value} placeholder={placeholder} autoFocus={autoFocus}
+      <input className="fs-input" type="text" value={value} placeholder={placeholder} autoFocus={autoFocus} aria-label={ariaLabel}
         onChange={(e) => onChange(e.target.value)} />
     </label>
   );
