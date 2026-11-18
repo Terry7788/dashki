@@ -631,3 +631,7 @@ i[data-lucide] > svg { width: var(--icon-size, 16px); height: var(--icon-size, 1
   padding-bottom: env(safe-area-inset-bottom); animation: fsUp .26s cubic-bezier(.2,.8,.2,1) both; scrollbar-width: none; }
 .fd-panel::-webkit-scrollbar { display: none; }
 .fd-x { position: absolute; right: 14px; top: 14px; z-index: 1; }
+
+/* Small sheets (Log weight): as tall as their content */
+.fs-panel.compact { height: auto; max-height: calc(100svh - max(10px, env(safe-area-inset-top))); }
+@media (min-width: 700px) { .fs-panel.compact { width: min(440px, 100%); height: auto; max-height: calc(100svh - 24px); } }

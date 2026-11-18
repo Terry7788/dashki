@@ -345,11 +345,16 @@ function AddStepsSheet({
       <section role="dialog" aria-modal="true" aria-labelledby="stp-sheet-title" className="stp-sheet">
         <div className="stp-grab" aria-hidden="true" />
         <AddStepsForm startTab={tab} byDay={byDay} goal={goal} today={today} onSaved={onClose}
-          header={(save, canAdd) => (
-            <header className="stp-sheet-head">
-              <button type="button" className="stp-link" onClick={onClose}>Cancel</button>
-              <h2 id="stp-sheet-title">Add steps</h2>
-              <button type="button" className="stp-link strong" disabled={!canAdd} onClick={save}>Add</button>
+          header={() => (
+            // Same header as the Add food sheet: title on the left, round close button.
+            // The one Add button is the green one at the bottom of the form.
+            <header className="fs-head">
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <h2 id="stp-sheet-title" className="fs-title">Add steps</h2>
+              </div>
+              <button type="button" className="fs-x" onClick={onClose} aria-label="Close">
+                <X style={{ width: 18, height: 18 }} />
+              </button>
             </header>
           )} />
       </section>
@@ -517,6 +522,8 @@ export default function StepsPage() {
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [today, setToday] = useState(startOfToday);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   useEffect(() => {
     getGoals().then((g) => { if (g.steps) setGoal(g.steps); }).catch(() => {});
@@ -588,6 +595,10 @@ export default function StepsPage() {
     if (!window.confirm('Delete this entry?')) return;
     try { await deleteStepLog(id); reload(); } catch (e) { setError(e instanceof Error ? e.message : 'Could not delete'); }
   }
+
+  // "Today" depends on this device's clock, so nothing is drawn until the page is
+  // in the browser. Drawing it on the server (UTC) gave a React hydration error.
+  if (!mounted) return <main className="page-mount stp" style={{ minHeight: '60vh' }} />;
 
   return (
     <main className="page-mount stp">
@@ -805,7 +816,7 @@ export default function StepsPage() {
         .stp-error { padding: 10px 12px; border-radius: 10px; font-size: 13px; color: var(--color-critical, #e5484d); border: 1px solid currentColor; }
 
         .stp-sheet-wrap { position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, 0.55); display: flex; align-items: flex-end; justify-content: center; animation: stpFade 0.2s ease; }
-        .stp-sheet { width: 100%; max-height: 92vh; overflow-y: auto; background: var(--color-background); color: var(--color-foreground); border-radius: 18px 18px 0 0; border-top: 1px solid var(--color-border);
+        .stp-sheet { width: 100%; max-height: 92vh; overflow-y: auto; background: var(--color-background); color: var(--color-foreground); border-radius: 22px 22px 0 0; border-top: 1px solid var(--color-border);
           animation: stpUp 0.32s cubic-bezier(0.2, 0.9, 0.25, 1); padding-bottom: env(safe-area-inset-bottom); }
         @media (min-width: 700px) {
           .stp-sheet-wrap { align-items: center; }

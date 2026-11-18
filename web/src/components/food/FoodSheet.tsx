@@ -56,10 +56,12 @@ interface FoodSheetProps {
   sideWidth?: number;
   /** Pad the scrolling content (forms). Lists leave it off. */
   padded?: boolean;
+  /** Small forms (Log weight): only as tall as the content, and a narrow panel on wide screens. */
+  compact?: boolean;
 }
 
 export function FoodSheet({
-  isOpen, onClose, title, subtitle, headerCenter, top, children, side, sideFoot, tray, foot, sideWidth = 320, padded,
+  isOpen, onClose, title, subtitle, headerCenter, top, children, side, sideFoot, tray, foot, sideWidth = 320, padded, compact,
 }: FoodSheetProps) {
   const wide = useIsWide();
   useScrollLock(isOpen);
@@ -75,7 +77,7 @@ export function FoodSheet({
   return (
     <div className="fs-wrap" role="dialog" aria-modal="true" aria-labelledby="fs-title">
       <div className="fs-back" onClick={onClose} aria-hidden="true" />
-      <div className="fs-panel" style={{ ['--fs-side' as string]: `${sideWidth}px` }}>
+      <div className={`fs-panel${compact ? ' compact' : ''}`} style={{ ['--fs-side' as string]: `${sideWidth}px` }}>
         <div className="fs-grab" />
         <div className="fs-head">
           <div style={{ minWidth: 0, flex: wide ? 'none' : 1 }}>

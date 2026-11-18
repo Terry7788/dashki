@@ -29,6 +29,7 @@ import {
 } from '@/lib/api';
 import type { WeightEntry, WeightJourney } from '@/lib/types';
 import { JourneyCard } from '@/components/JourneyCard';
+import { FoodSheet } from '@/components/food/FoodSheet';
 import { useSocketEvent } from '@/lib/useSocketEvent';
 import {
   TrendingDown,
@@ -253,34 +254,23 @@ function LogWeightModal({
   });
 
   return (
-    <GlassModal
+    // The same sheet as Add food: title and round close button on top, one big button at the bottom.
+    <FoodSheet
       isOpen={isOpen}
       onClose={onClose}
       title="Log weight"
       subtitle={subtitle}
-      size="sm"
-      footer={
-        <>
-          <GlassButton variant="ghost" size="sm" onClick={onClose} disabled={saving}>
-            Cancel
-          </GlassButton>
-          <GlassButton
-            variant="primary"
-            size="sm"
-            onClick={handleLog}
-            disabled={saving || !weight}
-          >
-            {saving ? 'Saving…' : 'Save'}
-          </GlassButton>
-        </>
+      compact
+      padded
+      foot={
+        <button type="button" className="fs-btn" onClick={handleLog} disabled={saving || !weight}>
+          {saving ? 'Saving…' : 'Save weight'}
+        </button>
       }
     >
       <div
         style={{
-          padding: 4,
-          /* Lock total body height so toggling the date picker / showing
-             the diff hint doesn't shift the modal vertically. */
-          minHeight: 320,
+          padding: '4px 2px',
           display: 'flex',
           flexDirection: 'column',
         }}
@@ -520,7 +510,7 @@ function LogWeightModal({
           </p>
         )}
       </div>
-    </GlassModal>
+    </FoodSheet>
   );
 }
 
