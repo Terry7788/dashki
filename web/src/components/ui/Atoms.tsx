@@ -404,8 +404,11 @@ export function MacroBar({
       <div
         style={{
           display: 'flex',
+          flexWrap: 'wrap',
           justifyContent: 'space-between',
           alignItems: 'baseline',
+          columnGap: 8,
+          rowGap: 2,
           marginBottom: 4,
         }}
       >
@@ -415,14 +418,15 @@ export function MacroBar({
             fontFamily: 'var(--font-mono)',
             fontSize: 11,
             color: 'var(--color-muted-foreground)',
+            whiteSpace: 'nowrap',
           }}
         >
           <span style={{ color: 'var(--color-foreground)', fontWeight: 600 }}>
-            {value}
+            {value.toLocaleString('en-AU')}
           </span>
           <span>
             {' '}
-            / {target}
+            / {target.toLocaleString('en-AU')}
             {unit}
           </span>
         </span>

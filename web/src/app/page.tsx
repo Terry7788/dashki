@@ -116,7 +116,6 @@ function StreakBadge({ streak }: { streak: { days: number; today: boolean } | nu
   return (
     <div
       style={{
-        marginTop: 10,
         display: 'inline-flex',
         alignItems: 'center',
         gap: 6,
@@ -380,22 +379,21 @@ export default function DashboardPage() {
         padding: '24px 16px 80px',
       }}
     >
-      <GreetingHeader
-        name={displayName ?? 'Terry'}
-        onLogFood={() => {
-          // Hand off to journal page with a flag — the journal page's
-          // mount effect reads ?addFood=1 and opens the Add Food modal
-          // automatically. Saves a click vs. landing on the page and
-          // then having to hit "+ Add".
-          window.location.href = '/journal?addFood=1';
+      {/* Logging food and weight is on the "+" button (tab bar / sidebar). */}
+      <GreetingHeader name={displayName ?? 'Terry'}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 12,
+          marginTop: 5,
         }}
-        onWeighIn={() => setWeightModal(true)}
-      />
-
+      >
+      <StreakBadge streak={streak} />
       {/* Variant switcher */}
       <div
         style={{
-          marginTop: 18,
           display: 'flex',
           alignItems: 'center',
           gap: 8,
@@ -427,7 +425,8 @@ export default function DashboardPage() {
               onClick={() => chooseVariant(v)}
               className="cursor-pointer"
               style={{
-                padding: '4px 12px',
+                padding: '4px 14px',
+                minHeight: 36,
                 fontSize: 12,
                 fontWeight: 600,
                 background: variant === v ? 'var(--color-surface)' : 'transparent',
@@ -447,8 +446,8 @@ export default function DashboardPage() {
           ))}
         </div>
       </div>
-
-      <StreakBadge streak={streak} />
+      </div>
+      </GreetingHeader>
 
       {variant === 'today' ? (
         <TodayVariant
@@ -546,15 +545,11 @@ export default function DashboardPage() {
 
 // ─── Greeting header ────────────────────────────────────────────────────────
 
-function GreetingHeader({
-  name,
-  onLogFood,
-  onWeighIn,
-}: {
-  name: string;
-  onLogFood: () => void;
-  onWeighIn: () => void;
-}) {
+function GreetingHeader({ name, children }: { name: string; children?: React.ReactNode }) {
+  // Greeting and date come from this device's clock, after load. Rendering them
+  // on the server (UTC) gave a different text and a React hydration error.
+  const [now, setNow] = useState<{ greeting: string; date: string } | null>(null);
+  useEffect(() => setNow({ greeting: getGreeting(), date: formatToday() }), []);
   return (
     <div
       style={{
@@ -575,7 +570,7 @@ function GreetingHeader({
             color: 'var(--color-foreground)',
           }}
         >
-          {getGreeting()}, {name}
+          {now ? `${now.greeting}, ${name}` : '\u00a0'}
         </h1>
         <div
           style={{
@@ -584,19 +579,10 @@ function GreetingHeader({
             fontSize: 14,
           }}
         >
-          {formatToday()}
+          {now ? now.date : '\u00a0'}
         </div>
       </div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <GlassButton variant="primary" size="sm" onClick={onLogFood}>
-          <Plus style={{ width: 14, height: 14, strokeWidth: 2.25 }} />
-          Log food
-        </GlassButton>
-        <GlassButton variant="soft" size="sm" onClick={onWeighIn}>
-          <Scale style={{ width: 14, height: 14, strokeWidth: 2.25 }} />
-          Weigh in
-        </GlassButton>
-      </div>
+      {children}
     </div>
   );
 }
@@ -691,7 +677,7 @@ function TodayVariant({
             Today&rsquo;s nutrition
           </h2>
           <span style={{ color: 'var(--color-muted-foreground)', fontSize: 12 }}>
-            {summary ? `${entries.length} entries` : ''}
+            {summary ? `${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}` : ''}
           </span>
         </div>
 
@@ -748,9 +734,9 @@ function TodayVariant({
           }}
         >
           <MicroLabel style={{ marginBottom: 10 }}>
-            Meals · {entries.length} entries
+            Meals · {entries.length} {entries.length === 1 ? 'entry' : 'entries'}
           </MicroLabel>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div className="home-meals">
             {groups.map((g) => (
               <MealStrip key={g.type} name={g.name} entries={g.entries} />
             ))}
@@ -966,7 +952,8 @@ function MealStrip({ name, entries }: { name: string; entries: JournalEntry[] })
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          padding: '8px 12px',
+          minHeight: 44,
+          padding: '0 4px 0 12px',
           borderRadius: 8,
           background: 'var(--color-surface-warm)',
         }}
@@ -981,10 +968,14 @@ function MealStrip({ name, entries }: { name: string; entries: JournalEntry[] })
           {name}
         </span>
         <a
-          href="/journal"
+          href={`/journal?addFood=${name.toLowerCase()}`}
           style={{
+            display: 'flex',
+            alignItems: 'center',
+            minHeight: 44,
+            padding: '0 8px',
             color: 'var(--color-link)',
-            fontSize: 12,
+            fontSize: 13,
             fontWeight: 600,
             textDecoration: 'none',
           }}

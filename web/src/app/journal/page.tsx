@@ -2110,10 +2110,13 @@ export default function JournalPage() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
-    if (params.get('addFood') === '1') {
+    const want = params.get('addFood');
+    if (want) {
+      // ?addFood=1 picks the meal by the time of day; ?addFood=lunch (Home's "Log lunch") names it.
       const h = new Date().getHours();
+      const named = (['breakfast', 'lunch', 'snack', 'dinner'] as MealType[]).find((m) => m === want);
       const meal: MealType =
-        h < 11 ? 'breakfast' : h < 15 ? 'lunch' : h < 17 ? 'snack' : 'dinner';
+        named ?? (h < 11 ? 'breakfast' : h < 15 ? 'lunch' : h < 17 ? 'snack' : 'dinner');
       setAddMealType(meal);
       params.delete('addFood');
       const newSearch = params.toString();
