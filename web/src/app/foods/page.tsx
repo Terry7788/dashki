@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useOpenParam } from '@/lib/useOpenParam';
 import {
   Plus,
   Pencil,
@@ -1327,6 +1328,7 @@ export default function FoodsPage() {
   const [sort, setSort] = useState<'name' | 'calories' | 'protein'>('name');
   const [selected, setSelected] = useState<number | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  useOpenParam('new', () => setModalOpen(true)); // the "+" menu's New food
   const [editingFood, setEditingFood] = useState<Food | null>(null);
   const [deletingFood, setDeletingFood] = useState<Food | null>(null);
   const [journalFood, setJournalFood] = useState<Food | null>(null);

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useOpenParam } from '@/lib/useOpenParam';
 import {
   LineChart,
   Line,
@@ -533,6 +534,7 @@ export default function WeightPage() {
   const [goalWeight, setGoalWeight] = useState<number | null>(null);
   const [journey, setJourney] = useState<WeightJourney | null>(null);
   const [logOpen, setLogOpen] = useState(false);
+  useOpenParam('log', () => setLogOpen(true)); // the "+" menu's Weigh in
 
   const loadEntries = useCallback(async () => {
     setLoading(true);

@@ -3,22 +3,13 @@
 import { useState, useEffect } from 'react';
 import Sidebar from '@/components/Sidebar';
 import MobileHeader from '@/components/MobileHeader';
-import { getPreferences, updatePreferences } from '@/lib/api';
+import BottomTabs from '@/components/BottomTabs';
+import { THEME_EVENT, THEME_KEY, applyTheme, toggleTheme as flipTheme } from '@/lib/theme';
+import { getPreferences } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 
-const THEME_KEY = 'dashki-theme';
-
 export default function AppShell({ children }: { children: React.ReactNode }) {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(true);
-
-  function applyTheme(isDark: boolean) {
-    if (isDark) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }
 
   useEffect(() => {
     const stored = localStorage.getItem(THEME_KEY);
@@ -32,7 +23,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         if (dbIsDark !== isDark) {
           setDarkMode(dbIsDark);
           applyTheme(dbIsDark);
-          localStorage.setItem(THEME_KEY, prefs.theme);
         }
       })
       .catch(() => {});
@@ -42,22 +32,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       const incoming = theme !== 'light';
       setDarkMode(incoming);
       applyTheme(incoming);
-      localStorage.setItem(THEME_KEY, theme);
     };
     socket.on('preferences-updated', onPreferencesUpdated);
 
+    // The More page has its own theme button: keep this copy in step.
+    const onThemeEvent = (e: Event) => setDarkMode(!!(e as CustomEvent<boolean>).detail);
+    window.addEventListener(THEME_EVENT, onThemeEvent);
+
     return () => {
       socket.off('preferences-updated', onPreferencesUpdated);
+      window.removeEventListener(THEME_EVENT, onThemeEvent);
     };
   }, []);
 
   function toggleTheme() {
-    const next = !darkMode;
-    setDarkMode(next);
-    const themeVal: 'dark' | 'light' = next ? 'dark' : 'light';
-    localStorage.setItem(THEME_KEY, themeVal);
-    applyTheme(next);
-    updatePreferences({ theme: themeVal }).catch(() => {});
+    setDarkMode(flipTheme());
   }
 
   return (
@@ -69,22 +58,22 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         fontFamily: 'var(--font-sans)',
       }}
     >
-      <MobileHeader onMenuToggle={() => setSidebarOpen(true)} />
+      <MobileHeader />
 
       <div className="flex min-h-screen">
         <Sidebar
-          isOpen={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
           darkMode={darkMode}
           onToggleTheme={toggleTheme}
         />
 
         <main className="flex-1 sidebar-offset min-h-screen min-w-0">
-          <div className="w-full max-w-full pt-14 md:pt-0 overflow-x-hidden">
+          <div className="w-full max-w-full pt-14 md:pt-0 overflow-x-hidden has-tabs">
             {children}
           </div>
         </main>
       </div>
+
+      <BottomTabs />
     </body>
   );
 }

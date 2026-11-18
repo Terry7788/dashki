@@ -17,8 +17,10 @@ import {
   ChevronRight,
   Sun,
   Moon,
+  Plus,
   X,
 } from 'lucide-react';
+import AddMenu from '@/components/AddMenu';
 
 interface NavItem {
   label: string;
@@ -46,8 +48,6 @@ const NAV_SECONDARY: NavItem[] = [
 const STORAGE_KEY = 'dashki-sidebar-collapsed';
 
 interface SidebarProps {
-  isOpen: boolean;
-  onClose: () => void;
   darkMode: boolean;
   onToggleTheme: () => void;
 }
@@ -99,12 +99,13 @@ function SidebarLink({
       onClick={onClick}
       className={clsx(
         'flex items-center transition-colors duration-150',
-        collapsed ? 'justify-center px-0 py-2' : 'gap-2.5 px-2.5 py-2',
+        collapsed ? 'justify-center px-0' : 'gap-2.5 px-2.5',
         active ? 'font-semibold' : 'font-medium'
       )}
       style={{
         borderRadius: 4,
         fontSize: 14,
+        minHeight: 40,
         background: active ? 'var(--color-surface-warm)' : 'transparent',
         color: active
           ? 'var(--color-foreground)'
@@ -181,11 +182,15 @@ function DesktopSidebarContent({
   onToggle,
   darkMode,
   onToggleTheme,
+  onAdd,
+  addOpen,
 }: {
   collapsed: boolean;
   onToggle: () => void;
   darkMode: boolean;
   onToggleTheme: () => void;
+  onAdd: () => void;
+  addOpen: boolean;
 }) {
   const pathname = usePathname();
 
@@ -221,10 +226,36 @@ function DesktopSidebarContent({
         )}
       </Link>
 
+      {/* Add: opens the "+" menu (Log food, Weigh in, Add steps, New food) */}
+      <div style={{ padding: collapsed ? '0 6px 10px' : '0 12px 12px' }}>
+        <button
+          type="button"
+          onClick={onAdd}
+          title="Add"
+          aria-label={addOpen ? 'Close the add menu' : 'Add'}
+          aria-expanded={addOpen}
+          className="flex items-center justify-center cursor-pointer"
+          style={{
+            width: '100%',
+            height: collapsed ? 44 : 40,
+            gap: 6,
+            borderRadius: collapsed ? 8 : 4,
+            border: addOpen ? '1px solid var(--color-border)' : '1px solid transparent',
+            background: addOpen ? 'var(--color-surface-warm)' : 'var(--color-primary)',
+            color: addOpen ? 'var(--color-foreground)' : 'var(--color-primary-foreground)',
+            fontSize: 13,
+            fontWeight: 600,
+          }}
+        >
+          {addOpen ? <X style={{ width: 20, height: 20 }} /> : <Plus style={{ width: 20, height: 20 }} />}
+          {!collapsed && <span>{addOpen ? 'Close' : 'Add'}</span>}
+        </button>
+      </div>
+
       {/* Nav */}
       <nav
         className="flex-1 overflow-y-auto overflow-x-hidden"
-        style={{ padding: collapsed ? '0 8px 16px' : '0 12px 16px' }}
+        style={{ padding: collapsed ? '0 6px 16px' : '0 12px 16px' }}
       >
         <NavSection
           label="Food"
@@ -232,8 +263,7 @@ function DesktopSidebarContent({
           items={NAV_FOOD}
           active={pathname}
         />
-        {collapsed && <div style={{ height: 12 }} />}
-        <div style={{ height: 16 }} />
+        <div style={{ height: collapsed ? 10 : 16 }} />
         <NavSection
           label="Track"
           collapsed={collapsed}
@@ -341,147 +371,13 @@ function DesktopSidebarContent({
   );
 }
 
-// ─── Mobile drawer ──────────────────────────────────────────────────────────
-
-function MobileSidebarContent({
-  onClose,
-  darkMode,
-  onToggleTheme,
-}: {
-  onClose: () => void;
-  darkMode: boolean;
-  onToggleTheme: () => void;
-}) {
-  const pathname = usePathname();
-
-  return (
-    <div
-      className="flex flex-col h-full"
-      style={{
-        background: 'var(--color-surface)',
-        borderRight: '1px solid var(--color-border)',
-      }}
-    >
-      <div
-        className="flex items-center justify-between"
-        style={{ padding: '18px 16px' }}
-      >
-        <Link
-          href="/"
-          onClick={onClose}
-          className="flex items-center gap-2.5 no-underline"
-        >
-          <DashkiGlyph size={28} radius={6} />
-          <span
-            style={{
-              fontSize: 15,
-              fontWeight: 700,
-              letterSpacing: '-0.3px',
-              color: 'var(--color-foreground)',
-            }}
-          >
-            Dashki
-          </span>
-        </Link>
-        <button
-          onClick={onClose}
-          className="cursor-pointer flex items-center justify-center"
-          style={{
-            width: 32,
-            height: 32,
-            background: 'transparent',
-            border: 0,
-            color: 'var(--color-muted-foreground)',
-            borderRadius: 4,
-          }}
-          aria-label="Close menu"
-        >
-          <X style={{ width: 18, height: 18 }} />
-        </button>
-      </div>
-
-      <nav
-        className="flex-1 overflow-y-auto"
-        style={{ padding: '0 12px 16px' }}
-      >
-        <NavSection
-          label="Food"
-          collapsed={false}
-          items={NAV_FOOD}
-          active={pathname}
-          onClickItem={onClose}
-        />
-        <div style={{ height: 16 }} />
-        <NavSection
-          label="Track"
-          collapsed={false}
-          items={NAV_TRACK}
-          active={pathname}
-          onClickItem={onClose}
-        />
-        <div
-          style={{
-            borderTop: '1px solid var(--color-border)',
-            margin: '16px 0',
-          }}
-        />
-        <NavSection
-          collapsed={false}
-          items={NAV_SECONDARY}
-          active={pathname}
-          onClickItem={onClose}
-        />
-      </nav>
-
-      <div
-        className="flex items-center justify-between"
-        style={{
-          padding: '12px 16px',
-          borderTop: '1px solid var(--color-border)',
-        }}
-      >
-        <div
-          style={{
-            fontSize: 11,
-            color: 'var(--color-muted-foreground)',
-          }}
-        >
-          Dashki v0.1.0
-        </div>
-        <button
-          type="button"
-          onClick={onToggleTheme}
-          className="flex items-center justify-center cursor-pointer"
-          style={{
-            width: 28,
-            height: 28,
-            background: 'transparent',
-            border: '1px solid var(--color-border)',
-            borderRadius: 4,
-            color: 'var(--color-muted-foreground)',
-          }}
-          aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-        >
-          {darkMode ? (
-            <Sun style={{ width: 14, height: 14 }} />
-          ) : (
-            <Moon style={{ width: 14, height: 14 }} />
-          )}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ─── Main Sidebar export ────────────────────────────────────────────────────
 
-export default function Sidebar({
-  isOpen,
-  onClose,
-  darkMode,
-  onToggleTheme,
-}: SidebarProps) {
+export default function Sidebar({ darkMode, onToggleTheme }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(true);
+  const [addOpen, setAddOpen] = useState(false);
+  const pathname = usePathname();
+  useEffect(() => setAddOpen(false), [pathname]);
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -507,14 +403,13 @@ export default function Sidebar({
 
   return (
     <>
-      {/* Desktop */}
+      {/* Phones use the tab bar (BottomTabs); this rail is for 768 px and up. */}
       <aside
-        className={clsx(
-          'hidden md:flex flex-col fixed left-0 top-0 h-full z-40'
-        )}
+        className="hidden md:flex flex-col fixed left-0 top-0 h-full"
         style={{
           width: collapsed ? 56 : 220,
           transition: 'width 150ms ease-out',
+          zIndex: addOpen ? 61 : 40,
         }}
       >
         <DesktopSidebarContent
@@ -522,32 +417,12 @@ export default function Sidebar({
           onToggle={handleToggle}
           darkMode={darkMode}
           onToggleTheme={onToggleTheme}
+          onAdd={() => setAddOpen((o) => !o)}
+          addOpen={addOpen}
         />
       </aside>
-
-      {/* Mobile drawer */}
-      <div className="md:hidden">
-        {isOpen && (
-          <div
-            className="fixed inset-0 z-40"
-            style={{ background: 'rgba(0,0,0,0.4)' }}
-            onClick={onClose}
-            aria-hidden="true"
-          />
-        )}
-        <aside
-          className={clsx(
-            'fixed left-0 top-0 h-full w-72 z-50 flex flex-col',
-            'transition-transform duration-300 ease-out',
-            isOpen ? 'translate-x-0' : '-translate-x-full'
-          )}
-        >
-          <MobileSidebarContent
-            onClose={onClose}
-            darkMode={darkMode}
-            onToggleTheme={onToggleTheme}
-          />
-        </aside>
+      <div className="hidden md:block" style={{ ['--am-left' as string]: `${collapsed ? 56 : 220}px` }}>
+        <AddMenu open={addOpen} onClose={() => setAddOpen(false)} variant="side" />
       </div>
     </>
   );

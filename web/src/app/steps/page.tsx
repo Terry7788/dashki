@@ -6,6 +6,7 @@
 // "Add steps" sheet with two tabs: type a number, or the walk calculator.
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useOpenParam } from '@/lib/useOpenParam';
 import { ChevronLeft, ChevronRight, Pencil, Trash2, Check, X, Plus, TrendingUp, Target, Star } from 'lucide-react';
 import { getSteps, getGoals, getStepLogs, createStepLog, updateStepLog, deleteStepLog } from '@/lib/api';
 import type { StepEntry, StepLogEntry } from '@/lib/types';
@@ -511,6 +512,7 @@ export default function StepsPage() {
   const [logsByDay, setLogsByDay] = useState<Record<string, StepLogEntry[]>>({});
   const [dayView, setDayView] = useState<Date | null>(null);
   const [sheet, setSheet] = useState<'steps' | 'calc' | null>(null);
+  useOpenParam('add', () => setSheet('calc')); // the "+" menu's Add steps
   const [editing, setEditing] = useState<number | null>(null);
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
