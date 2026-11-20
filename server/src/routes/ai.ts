@@ -1,12 +1,8 @@
 import { Router, Request, Response } from 'express';
-import OpenAI from 'openai';
+import { askJson, claude, CLAUDE_NOT_CONFIGURED, parseImage } from '../claude';
 import { logger } from '../logger';
 
 const router = Router();
-
-const openai = process.env.OPENAI_API_KEY
-  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
-  : null;
 
 interface EstimateResponse {
   calories: number;
@@ -112,8 +108,8 @@ Rules:
 Return JSON only.`;
 
 router.post('/scan-label', async (req: Request, res: Response) => {
-  if (!openai) {
-    return res.status(500).json({ error: 'OpenAI API key not configured' });
+  if (!claude) {
+    return res.status(500).json({ error: CLAUDE_NOT_CONFIGURED });
   }
 
   const { image } = req.body || {};
@@ -122,33 +118,21 @@ router.post('/scan-label', async (req: Request, res: Response) => {
   }
 
   // Accept either a full data URL ("data:image/jpeg;base64,...") or the bare
-  // base64 payload — normalise to a data URL since that's what the OpenAI
-  // vision API expects in image_url.url.
-  const dataUrl = image.startsWith('data:') ? image : `data:image/jpeg;base64,${image}`;
+  // base64 payload.
+  let labelImage: ReturnType<typeof parseImage>;
+  try {
+    labelImage = parseImage(image);
+  } catch {
+    return res.status(400).json({ error: 'Unsupported image type (use JPEG, PNG, GIF or WebP)' });
+  }
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content:
-            'You read packaged-food nutrition labels from images and return their macros as JSON. Output JSON only — no prose, no markdown.',
-        },
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: SCAN_LABEL_PROMPT },
-            { type: 'image_url', image_url: { url: dataUrl, detail: 'high' } },
-          ],
-        },
-      ],
-      temperature: 0.1,
-      max_tokens: 600,
-      response_format: { type: 'json_object' },
+    const raw = await askJson({
+      system:
+        'You read packaged-food nutrition labels from images and return their macros as JSON. Output JSON only — no prose, no markdown.',
+      prompt: SCAN_LABEL_PROMPT,
+      image: labelImage,
     });
-
-    const raw = completion.choices[0]?.message?.content ?? '{}';
     const parsed = JSON.parse(raw) as Partial<ScanLabelResponse>;
 
     const kjRaw = Number(parsed.kj);
@@ -196,8 +180,8 @@ router.post('/scan-label', async (req: Request, res: Response) => {
 });
 
 router.post('/estimate-food', async (req: Request, res: Response) => {
-  if (!openai) {
-    return res.status(500).json({ error: 'OpenAI API key not configured' });
+  if (!claude) {
+    return res.status(500).json({ error: CLAUDE_NOT_CONFIGURED });
   }
 
   const { name } = req.body || {};
@@ -206,22 +190,10 @@ router.post('/estimate-food', async (req: Request, res: Response) => {
   }
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content:
-            'You estimate macros for one-off food entries. Output JSON only — no prose, no markdown.',
-        },
-        { role: 'user', content: `${ESTIMATE_FOOD_PROMPT}\n\nFood: "${name.trim()}"` },
-      ],
-      temperature: 0.2,
-      max_tokens: 500,
-      response_format: { type: 'json_object' },
+    const raw = await askJson({
+      system: 'You estimate macros for one-off food entries. Output JSON only — no prose, no markdown.',
+      prompt: `${ESTIMATE_FOOD_PROMPT}\n\nFood: "${name.trim()}"`,
     });
-
-    const raw = completion.choices[0]?.message?.content ?? '{}';
     const parsed = JSON.parse(raw) as Partial<EstimateResponse>;
 
     const calories = Number.isFinite(parsed.calories) ? Math.max(0, Math.round(Number(parsed.calories))) : 0;

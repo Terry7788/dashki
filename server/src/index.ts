@@ -3,7 +3,6 @@ import express from 'express';
 import cors from 'cors';
 import http from 'http';
 import { Server as SocketIOServer } from 'socket.io';
-import OpenAI from 'openai';
 import { logger } from './logger';
 
 import { initDb, db } from './db';
@@ -19,8 +18,8 @@ import calendarRouter from './routes/calendar';
 import goalsRouter from './routes/goals';
 import preferencesRouter from './routes/preferences';
 import migrationRouter from './routes/migration';
-import botRouter from './routes/bot';
 import aiRouter from './routes/ai';
+import { askJson, claude, CLAUDE_NOT_CONFIGURED } from './claude';
 import authRouter from './routes/auth';
 import userGoalsRouter from './routes/userGoals';
 
@@ -120,12 +119,6 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
-// ─── OpenAI ───────────────────────────────────────────────────────────────────
-
-const openai = process.env.OPENAI_API_KEY
-  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
-  : null;
-
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
 // Auth routes take precedence on /api/auth. The legacy alias of /api/auth →
@@ -146,15 +139,14 @@ app.use('/api/calendar', calendarRouter);
 app.use('/api/goals', goalsRouter);
 app.use('/api/preferences', preferencesRouter);
 app.use('/api/migration', migrationRouter);
-app.use('/api/bot', botRouter);
 app.use('/api/ai', aiRouter);
 
 // ─── Voice Parsing ────────────────────────────────────────────────────────────
 
 app.post('/api/parse-voice-food', async (req: express.Request, res: express.Response) => {
   try {
-    if (!openai) {
-      return res.status(500).json({ error: 'OpenAI API key not configured' });
+    if (!claude) {
+      return res.status(500).json({ error: CLAUDE_NOT_CONFIGURED });
     }
 
     const { text } = req.body || {};
@@ -185,23 +177,10 @@ RULES:
 
 Return JSON only.`;
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: 'You are a helpful assistant that parses food information from spoken text. Always return valid JSON only, no additional text.' },
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.3,
-      max_tokens: 500,
+    const jsonText = await askJson({
+      system: 'You are a helpful assistant that parses food information from spoken text. Always return valid JSON only, no additional text.',
+      prompt,
     });
-
-    const responseText = completion.choices[0]?.message?.content?.trim() || '{}';
-
-    let jsonText = responseText;
-    const arrayMatch = responseText.match(/\[[\s\S]*\]/);
-    const objectMatch = responseText.match(/\{[\s\S]*\}/);
-    if (arrayMatch) jsonText = arrayMatch[0];
-    else if (objectMatch) jsonText = objectMatch[0];
 
     const parsed = JSON.parse(jsonText);
 

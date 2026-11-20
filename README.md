@@ -54,7 +54,7 @@ Runs on `http://localhost:3000`
 PORT=4000
 DATABASE_PATH=./dashki.db
 FRONTEND_ORIGIN=http://localhost:3000
-OPENAI_API_KEY=          # optional — for voice parsing
+ANTHROPIC_API_KEY=       # optional — for label scanning, AI food estimates and voice parsing
 ```
 
 ### `web/.env.local`

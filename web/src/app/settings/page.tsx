@@ -545,18 +545,13 @@ export default function SettingsPage() {
           icon={<Plug style={{ width: 14, height: 14, strokeWidth: 2.25 }} />}
         >
           <IntegrationRow
-            name="Discord bot"
-            desc="Log meals from Discord with AI parsing."
-            status="on"
-          />
-          <IntegrationRow
             name="Google Calendar"
             desc="Pull events for the calendar view."
             status="off"
           />
           <IntegrationRow
-            name="OpenAI"
-            desc="Powers AI fuzzy food matching."
+            name="Claude"
+            desc="Powers label scanning and AI food estimates."
             status="on"
           />
         </CardShell>

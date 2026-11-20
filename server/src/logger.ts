@@ -2,7 +2,7 @@
  * logger.ts — Safe logging with automatic redaction of sensitive values.
  *
  * Redacts:
- *  - API keys (OpenAI, generic sk-... patterns)
+ *  - API keys (generic sk-... patterns)
  *  - Authorization headers / Bearer tokens
  *  - Passwords / secrets / tokens in objects
  *  - Any string that looks like a key (long hex/base64 strings > 32 chars)
@@ -15,7 +15,7 @@ const SENSITIVE_KEYS = /^(api[_-]?key|apikey|secret|password|passwd|token|auth|a
 
 // Patterns that match sensitive string values regardless of key name
 const SENSITIVE_VALUE_PATTERNS = [
-  /sk-[A-Za-z0-9\-_]{20,}/,          // OpenAI-style keys
+  /sk-[A-Za-z0-9\-_]{20,}/,          // sk-... API keys    
   /Bearer\s+[A-Za-z0-9\-_\.]+/i,     // Bearer tokens
   /^[A-Za-z0-9+/]{40,}={0,2}$/,      // Long base64 strings (≥40 chars)
   /^[a-f0-9]{32,}$/i,                 // Long hex strings (e.g. MD5/SHA hashes used as secrets)

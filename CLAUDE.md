@@ -48,7 +48,7 @@ npm start        # Run compiled dist/index.js
 | Real-time | Socket.io-client / socket.io |
 | Backend | Express 4 + TypeScript |
 | Database | SQLite (via sqlite3) |
-| AI integration | OpenAI SDK |
+| AI integration | Anthropic SDK (Claude Haiku 5.5, `server/src/claude.ts`) |
 
 ---
 
